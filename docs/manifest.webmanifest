@@ -1,0 +1,24 @@
+{
+  "name": "Library Listen",
+  "short_name": "Listen",
+  "description": "Offline audiobook player for your shared iCloud Library folder.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#100e0b",
+  "theme_color": "#1a1712",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "./apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

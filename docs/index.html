@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#1a1712" />
+    <meta
+      name="description"
+      content="Library Listen — offline audiobook player. Pick your iCloud Library folder and play."
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Library Listen" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <link rel="stylesheet" href="./styles.css" />
+    <title>Library Listen</title>
+  </head>
+  <body>
+    <div id="app">
+      <header class="top">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <h1>Library Listen</h1>
+        </div>
+        <div class="top-actions">
+          <button type="button" id="btn-sort" class="ghost" title="Sort shelf">
+            Sort
+          </button>
+          <button type="button" id="btn-pick" class="primary">
+            Choose folder
+          </button>
+        </div>
+      </header>
+
+      <main>
+        <section id="onboarding" class="panel onboarding">
+          <h2>Listen from your shared Library</h2>
+          <p>
+            Open the folder you already have in <strong>Files → iCloud Drive</strong>
+            (the shared <code>Library</code>, or a collection like
+            <code>門羅-WhatIf</code>). This page never uploads your books.
+          </p>
+          <ol>
+            <li>Accept the iCloud share and tap <strong>Download Now</strong> on <code>listen/</code>.</li>
+            <li>Tap <strong>Choose folder</strong> (or Choose files on iPhone).</li>
+            <li>Pick books on the shelf — progress stays on this device.</li>
+          </ol>
+          <div class="cta-row">
+            <button type="button" id="btn-pick-main" class="primary large">
+              Choose Library folder
+            </button>
+            <button type="button" id="btn-pick-files" class="ghost large">
+              Choose audio files
+            </button>
+          </div>
+          <p class="hint" id="capability-hint"></p>
+        </section>
+
+        <section id="shelf" class="shelf hidden" aria-live="polite"></section>
+
+        <section id="book" class="book-screen hidden">
+          <button type="button" id="btn-back" class="ghost back">← Shelf</button>
+          <div class="book-hero">
+            <div id="book-cover" class="cover large"></div>
+            <div class="book-meta">
+              <p class="collection" id="book-collection"></p>
+              <h2 id="book-title"></h2>
+              <p class="author" id="book-author"></p>
+              <p class="subtitle" id="book-subtitle"></p>
+            </div>
+          </div>
+          <ul id="chapter-list" class="chapter-list"></ul>
+        </section>
+      </main>
+
+      <footer id="player-bar" class="player-bar hidden">
+        <div class="player-cover" id="player-cover"></div>
+        <div class="player-text">
+          <div id="player-title" class="player-title">—</div>
+          <div id="player-chapter" class="player-chapter">—</div>
+        </div>
+        <div class="player-controls">
+          <button type="button" id="btn-prev" class="icon" aria-label="Previous chapter">
+            ‹‹
+          </button>
+          <button type="button" id="btn-play" class="icon play" aria-label="Play or pause">
+            ▶
+          </button>
+          <button type="button" id="btn-next" class="icon" aria-label="Next chapter">
+            ››
+          </button>
+        </div>
+        <div class="player-time">
+          <span id="player-pos">0:00</span>
+          <input
+            id="player-seek"
+            type="range"
+            min="0"
+            max="1000"
+            value="0"
+            aria-label="Seek"
+          />
+          <span id="player-dur">0:00</span>
+        </div>
+      </footer>
+    </div>
+
+    <input
+      id="file-input-dir"
+      type="file"
+      webkitdirectory
+      directory
+      multiple
+      hidden
+    />
+    <input
+      id="file-input-files"
+      type="file"
+      accept="audio/*,image/jpeg,image/png,image/webp,.mp3,.m4a,.m4b,.aac,.jpg,.jpeg,.png,.webp"
+      multiple
+      hidden
+    />
+    <audio id="audio" preload="metadata" playsinline></audio>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
