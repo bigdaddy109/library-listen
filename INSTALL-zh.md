@@ -72,7 +72,7 @@ cd <資料夾名稱>
 真機通勤聽書（Main Hub 已在 iCloud Drive）：
 
 1. 若音檔還有雲朵圖示：先到 **檔案 App → iCloud Drive**，進入  
-   `Main Hub / Personal / Daryl Stuff / IIS-義大國際小學 / Library`  
+   `Main Hub / Personal / Daryl Stuff / Library`  
    對資料夾或書按一下 **下載**（Download Now），等它進手機。
 2. 回到 **Library Listen**，點 **選擇 Hub 資料夾**（或 Choose a Hub folder）。
 3. 在 Files 選取上面的 **Library** 資料夾（不要選錯層）。

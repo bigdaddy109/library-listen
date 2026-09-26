@@ -15,7 +15,7 @@ struct OnboardingView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             VStack(alignment: .leading, spacing: 10) {
-                step("1", "In Files, open iCloud Drive → Main Hub → … → IIS-義大國際小學 → Library.")
+                step("1", "In Files, open iCloud Drive → Main Hub → … → Daryl Stuff → Library.")
                 step("2", "Download Now on any cloud-only files you need for the commute.")
                 step("3", "Pick that Library folder once (or add 門羅-WhatIf and Immune). The app remembers it.")
             }

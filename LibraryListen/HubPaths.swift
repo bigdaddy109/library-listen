@@ -4,13 +4,13 @@ import Foundation
 /// Main Hub is already on iCloud Drive; the user picks those folders once.
 enum HubPaths {
     static let macLibraryRoot =
-        "/Users/jeffwu/Documents/Main Hub/Personal/Daryl Stuff/IIS-義大國際小學/Library"
+        "/Users/jeffwu/Documents/Main Hub/Personal/Daryl Stuff/Library"
 
     static let macMunroeListen =
-        "/Users/jeffwu/Documents/Main Hub/Personal/Daryl Stuff/IIS-義大國際小學/Library/門羅-WhatIf/listen"
+        "/Users/jeffwu/Documents/Main Hub/Personal/Daryl Stuff/Library/門羅-WhatIf/listen"
 
     static let macImmuneListen =
-        "/Users/jeffwu/Documents/Main Hub/Personal/Daryl Stuff/IIS-義大國際小學/Library/Immune/listen"
+        "/Users/jeffwu/Documents/Main Hub/Personal/Daryl Stuff/Library/Immune/listen"
 
     static let munroeFolder = "門羅-WhatIf"
     static let immuneFolder = "Immune"
