@@ -14,7 +14,7 @@
   --safe-r: env(safe-area-inset-right, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-l: env(safe-area-inset-left, 0px);
-  --player-h: 7.5rem;
+  --player-h: 8.25rem;
   font-synthesis: none;
 }
 
@@ -486,12 +486,24 @@ button.icon.play:not(.is-paused) .icon-pause {
 .player-time {
   grid-area: time;
   display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 0.5rem;
+  grid-template-columns: auto auto 1fr auto auto;
+  gap: 0.45rem;
   align-items: center;
   font-variant-numeric: tabular-nums;
   font-size: 0.82rem;
   color: var(--muted);
+}
+
+button.skip {
+  min-width: 2.55rem;
+  height: 1.85rem;
+  padding: 0 0.4rem;
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--ink);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
 }
 
 .player-time input[type="range"] {

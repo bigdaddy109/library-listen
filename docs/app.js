@@ -55,6 +55,10 @@ const els = {
 /** @type {{ bookId: string, chapterIndex: number } | null} */
 let playback = null;
 let seekDragging = false;
+let playToken = 0;
+let ignoreSeekInput = 0;
+let detachChapterMeta = null;
+const SKIP_SECONDS = 30;
 const objectUrls = new Set();
 
 function extOf(name) {
@@ -586,6 +590,126 @@ function findBook(id) {
   return state.books.find((b) => b.id === id);
 }
 
+function resumeTarget(seconds) {
+  const dur = Number.isFinite(audio.duration) ? audio.duration : 0;
+  if (dur > 0) return Math.min(seconds, Math.max(0, dur - 0.25));
+  return Math.max(0, seconds);
+}
+
+function applyPlaybackPosition(seconds) {
+  try {
+    audio.currentTime = seconds;
+  } catch {
+    /* not seekable yet */
+  }
+}
+
+function clampTime(seconds) {
+  const dur = Number.isFinite(audio.duration) ? audio.duration : null;
+  let next = Math.max(0, seconds);
+  if (dur != null && dur > 0) next = Math.min(next, dur);
+  return next;
+}
+
+function seekWithin(seconds) {
+  if (!playback) return;
+  applyPlaybackPosition(clampTime(seconds));
+  persistCurrent();
+  updatePlayerBar();
+}
+
+function seekBy(delta) {
+  seekWithin((audio.currentTime || 0) + delta);
+}
+
+function skipToPrevious() {
+  if (!playback) return;
+  if ((audio.currentTime || 0) > 3) {
+    seekWithin(0);
+    return;
+  }
+  if (playback.chapterIndex <= 0) return;
+  playChapter(playback.bookId, playback.chapterIndex - 1, { forceStart: true });
+}
+
+function skipToNext() {
+  if (!playback) return;
+  const book = findBook(playback.bookId);
+  if (!book || playback.chapterIndex >= book.chapters.length - 1) return;
+  playChapter(playback.bookId, playback.chapterIndex + 1, { forceStart: true });
+}
+
+function coverMime(file) {
+  if (file?.type) return file.type;
+  const ext = extOf(file?.name || "");
+  if (ext === "png") return "image/png";
+  if (ext === "webp") return "image/webp";
+  return "image/jpeg";
+}
+
+function updatePositionState() {
+  if (!("mediaSession" in navigator)) return;
+  if (typeof navigator.mediaSession.setPositionState !== "function") return;
+  if (!playback) return;
+  const dur = audio.duration;
+  if (!Number.isFinite(dur) || dur <= 0) return;
+  const pos = Math.min(Math.max(0, audio.currentTime || 0), dur);
+  try {
+    navigator.mediaSession.setPositionState({
+      duration: dur,
+      playbackRate: audio.playbackRate || 1,
+      position: pos,
+    });
+  } catch {
+    /* some browsers reject the state while metadata is in flux */
+  }
+}
+
+function updateMediaSession() {
+  if (!("mediaSession" in navigator) || !playback) return;
+  const book = findBook(playback.bookId);
+  const chapter = book?.chapters[playback.chapterIndex];
+  if (!book || !chapter) return;
+  const base = {
+    title: chapter.title,
+    artist: book.author,
+    album: book.title,
+  };
+  const assign = (metadata) => {
+    navigator.mediaSession.metadata = metadata;
+  };
+  try {
+    if (book.coverUrl) {
+      assign(
+        new MediaMetadata({
+          ...base,
+          artwork: [
+            {
+              src: book.coverUrl,
+              sizes: "512x512",
+              type: coverMime(book.coverFile),
+            },
+          ],
+        })
+      );
+    } else {
+      assign(new MediaMetadata(base));
+    }
+  } catch {
+    try {
+      assign(new MediaMetadata(base));
+    } catch {
+      /* ignore */
+    }
+  }
+  try {
+    navigator.mediaSession.playbackState = audio.paused ? "paused" : "playing";
+  } catch {
+    /* ignore */
+  }
+  updatePositionState();
+}
+
 async function playChapter(bookId, chapterIndex, { resumeIfSame = false, forceStart = false } = {}) {
   const book = findBook(bookId);
   if (!book) return;
@@ -597,39 +721,64 @@ async function playChapter(bookId, chapterIndex, { resumeIfSame = false, forceSt
   if (same && resumeIfSame && !forceStart) {
     if (audio.paused) await audio.play().catch(() => {});
     updatePlayerBar();
+    updateMediaSession();
     return;
   }
 
+  const token = ++playToken;
   playback = { bookId, chapterIndex };
-  audio.src = chapter.url;
+  detachChapterMeta?.();
 
   const progress = loadProgress()[bookId];
   const shouldResume =
     !forceStart &&
     progress?.chapterId === chapter.id &&
     Number.isFinite(progress.positionSeconds);
+  const resumeAt = shouldResume ? progress.positionSeconds : 0;
 
-  const onMeta = () => {
-    if (shouldResume) {
-      audio.currentTime = Math.min(
-        progress.positionSeconds,
-        Math.max(0, (audio.duration || 0) - 0.25)
-      );
-    } else {
-      audio.currentTime = 0;
-    }
-    audio.removeEventListener("loadedmetadata", onMeta);
+  const applyPosition = () => {
+    if (token !== playToken) return;
+    applyPlaybackPosition(shouldResume ? resumeTarget(resumeAt) : 0);
   };
+
+  // Listener before src so a cached file cannot miss loadedmetadata.
+  const onMeta = () => {
+    detach();
+    applyPosition();
+  };
+  const detach = () => {
+    audio.removeEventListener("loadedmetadata", onMeta);
+    if (detachChapterMeta === detach) detachChapterMeta = null;
+  };
+  detachChapterMeta = detach;
   audio.addEventListener("loadedmetadata", onMeta);
+  audio.src = chapter.url;
+  if (audio.readyState >= 1) applyPosition();
+
+  const onPlaying = () => {
+    audio.removeEventListener("playing", onPlaying);
+    if (token !== playToken || !shouldResume || resumeAt <= 0.5) return;
+    if ((audio.currentTime || 0) < 0.35) applyPosition();
+  };
+  audio.addEventListener("playing", onPlaying);
 
   try {
-    await audio.play();
+    // No await before play(): iOS drops the user-gesture if we wait.
+    const pending = audio.play();
+    if (pending) await pending;
   } catch (err) {
     console.warn("play blocked", err);
+  }
+  if (token !== playToken) return;
+
+  // play() on iOS sometimes snaps back to 0 after a pre-seek.
+  if (shouldResume && audio.readyState >= 1 && resumeAt > 0.5 && (audio.currentTime || 0) < 0.35) {
+    applyPosition();
   }
 
   els.playerBar.classList.remove("hidden");
   updatePlayerBar();
+  updateMediaSession();
   if (state.activeBookId === bookId) renderBook();
 }
 
@@ -644,6 +793,19 @@ function persistCurrent() {
     audio.currentTime || 0,
     Number.isFinite(audio.duration) ? audio.duration : null
   );
+}
+
+function writeSeekBar(pos, dur) {
+  const seek = document.getElementById("player-seek");
+  ignoreSeekInput += 1;
+  if (dur > 0) {
+    seek.max = String(Math.round(dur * 1000));
+    seek.value = String(Math.round(pos * 1000));
+  } else {
+    seek.max = "1000";
+    seek.value = "0";
+  }
+  ignoreSeekInput -= 1;
 }
 
 function updatePlayerBar() {
@@ -667,14 +829,13 @@ function updatePlayerBar() {
   const dur = Number.isFinite(audio.duration) ? audio.duration : 0;
   document.getElementById("player-pos").textContent = formatClock(pos);
   document.getElementById("player-dur").textContent = formatClock(dur);
-  if (!seekDragging) {
-    const seek = document.getElementById("player-seek");
-    seek.value = String(dur > 0 ? Math.round((pos / dur) * 1000) : 0);
-  }
+  if (!seekDragging) writeSeekBar(pos, dur);
 
-  document.getElementById("btn-prev").disabled = playback.chapterIndex <= 0;
+  const atStart = (audio.currentTime || 0) <= 3;
+  document.getElementById("btn-prev").disabled = playback.chapterIndex <= 0 && atStart;
   document.getElementById("btn-next").disabled =
     playback.chapterIndex >= book.chapters.length - 1;
+  updatePositionState();
 }
 
 function cycleSort() {
@@ -709,6 +870,34 @@ function updateChangeButtonLabel() {
   btn.title = "Pick a different Library folder";
 }
 
+function bindMediaSession() {
+  if (!("mediaSession" in navigator)) return;
+  const setHandler = (name, fn) => {
+    try {
+      navigator.mediaSession.setActionHandler(name, fn);
+    } catch {
+      /* this action is not supported */
+    }
+  };
+  setHandler("play", () => {
+    audio.play().catch(() => {});
+  });
+  setHandler("pause", () => audio.pause());
+  setHandler("previoustrack", () => skipToPrevious());
+  setHandler("nexttrack", () => skipToNext());
+  setHandler("seekbackward", (details) => {
+    seekBy(-(details?.seekOffset || SKIP_SECONDS));
+  });
+  setHandler("seekforward", (details) => {
+    seekBy(details?.seekOffset || SKIP_SECONDS);
+  });
+  setHandler("seekto", (details) => {
+    if (typeof details?.seekTime === "number" && Number.isFinite(details.seekTime)) {
+      seekWithin(details.seekTime);
+    }
+  });
+}
+
 function bind() {
   const pickDirectory = () => loadLibrary("directory");
   const pickFiles = () => loadLibrary("files");
@@ -739,16 +928,10 @@ function bind() {
     else audio.pause();
     updatePlayerBar();
   });
-  document.getElementById("btn-prev").addEventListener("click", () => {
-    if (!playback || playback.chapterIndex <= 0) return;
-    playChapter(playback.bookId, playback.chapterIndex - 1, { forceStart: true });
-  });
-  document.getElementById("btn-next").addEventListener("click", () => {
-    if (!playback) return;
-    const book = findBook(playback.bookId);
-    if (!book || playback.chapterIndex >= book.chapters.length - 1) return;
-    playChapter(playback.bookId, playback.chapterIndex + 1, { forceStart: true });
-  });
+  document.getElementById("btn-prev").addEventListener("click", () => skipToPrevious());
+  document.getElementById("btn-next").addEventListener("click", () => skipToNext());
+  document.getElementById("btn-back30").addEventListener("click", () => seekBy(-SKIP_SECONDS));
+  document.getElementById("btn-fwd30").addEventListener("click", () => seekBy(SKIP_SECONDS));
 
   const seek = document.getElementById("player-seek");
   seek.addEventListener("pointerdown", () => {
@@ -758,8 +941,12 @@ function bind() {
     seekDragging = false;
   });
   seek.addEventListener("input", () => {
-    if (!Number.isFinite(audio.duration) || audio.duration <= 0) return;
-    audio.currentTime = (Number(seek.value) / 1000) * audio.duration;
+    if (ignoreSeekInput) return;
+    const dur = audio.duration;
+    if (!Number.isFinite(dur) || dur <= 0) return;
+    const max = Number(seek.max);
+    if (!Number.isFinite(max) || Math.abs(max - dur * 1000) > 50) return;
+    audio.currentTime = Number(seek.value) / 1000;
     updatePlayerBar();
   });
   seek.addEventListener("change", () => {
@@ -784,8 +971,13 @@ function bind() {
   audio.addEventListener("pause", () => {
     persistCurrent();
     updatePlayerBar();
+    updateMediaSession();
   });
-  audio.addEventListener("play", updatePlayerBar);
+  audio.addEventListener("play", () => {
+    updatePlayerBar();
+    updateMediaSession();
+  });
+  audio.addEventListener("durationchange", updatePlayerBar);
   audio.addEventListener("ended", () => {
     persistCurrent();
     if (!playback) return;
@@ -803,27 +995,7 @@ function bind() {
     if (document.visibilityState === "hidden") persistCurrent();
   });
 
-  if ("mediaSession" in navigator) {
-    audio.addEventListener("play", () => {
-      if (!playback) return;
-      const book = findBook(playback.bookId);
-      const chapter = book?.chapters[playback.chapterIndex];
-      if (!book || !chapter) return;
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: chapter.title,
-        artist: book.author,
-        album: book.title,
-      });
-      navigator.mediaSession.setActionHandler("previoustrack", () => {
-        document.getElementById("btn-prev").click();
-      });
-      navigator.mediaSession.setActionHandler("nexttrack", () => {
-        document.getElementById("btn-next").click();
-      });
-      navigator.mediaSession.setActionHandler("play", () => audio.play());
-      navigator.mediaSession.setActionHandler("pause", () => audio.pause());
-    });
-  }
+  bindMediaSession();
 }
 
 function registerSW() {
