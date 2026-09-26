@@ -1,5 +1,5 @@
 /* Shell-only cache. Audiobook files are never cached here — they come from the device picker. */
-const CACHE = "library-listen-shell-v1";
+const CACHE = "library-listen-shell-v2";
 const ASSETS = [
   "./",
   "./index.html",
