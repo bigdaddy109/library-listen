@@ -536,9 +536,7 @@ function render() {
   els.shelf.classList.toggle("hidden", !hasBooks || !!state.activeBookId);
   els.book.classList.toggle("hidden", !state.activeBookId);
   document.getElementById("btn-sort").classList.toggle("hidden", !hasBooks);
-  document.getElementById("btn-pick").textContent = hasBooks
-    ? "Change folder"
-    : "Choose folder";
+  document.getElementById("btn-change").classList.toggle("hidden", !hasBooks);
 
   if (hasBooks && !state.activeBookId) renderShelf();
   if (state.activeBookId) renderBook();
@@ -655,17 +653,16 @@ function setupCapabilityHint() {
 }
 
 function bind() {
-  document.getElementById("btn-pick").addEventListener("click", () => {
-    if (typeof window.showDirectoryPicker === "function") loadLibrary("directory");
-    else loadLibrary("files");
+  const pickDirectory = () => loadLibrary("directory");
+  const pickFiles = () => loadLibrary("files");
+
+  document.getElementById("btn-change").addEventListener("click", () => {
+    // Prefer folder; on iPhone-class browsers fall back to multi-file pick.
+    if (typeof window.showDirectoryPicker === "function") pickDirectory();
+    else pickFiles();
   });
-  document.getElementById("btn-pick-main").addEventListener("click", () => {
-    if (typeof window.showDirectoryPicker === "function") loadLibrary("directory");
-    else loadLibrary("directory"); // webkitdirectory fallback
-  });
-  document
-    .getElementById("btn-pick-files")
-    .addEventListener("click", () => loadLibrary("files"));
+  document.getElementById("btn-pick-main").addEventListener("click", pickDirectory);
+  document.getElementById("btn-pick-files").addEventListener("click", pickFiles);
   document.getElementById("btn-back").addEventListener("click", () => {
     state.activeBookId = null;
     render();
