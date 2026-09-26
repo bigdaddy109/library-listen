@@ -8,7 +8,12 @@
   --amber-dim: #b8842a;
   --line: rgba(245, 240, 225, 0.08);
   --radius: 14px;
+  /* Home-screen / standalone PWAs draw under the status bar when
+     apple-mobile-web-app-status-bar-style is black-translucent. */
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
   --player-h: 7.5rem;
   font-synthesis: none;
 }
@@ -32,12 +37,17 @@ body {
 
 body {
   min-height: 100dvh;
+  min-height: 100svh;
 }
 
 #app {
   max-width: 720px;
   margin: 0 auto;
-  padding: 1rem 1rem calc(var(--player-h) + var(--safe-b) + 1rem);
+  padding:
+    0
+    calc(1rem + var(--safe-r))
+    calc(var(--player-h) + var(--safe-b) + 1rem)
+    calc(1rem + var(--safe-l));
 }
 
 .top {
@@ -45,11 +55,17 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: 0.25rem 0 1rem;
+  /* Keep title/buttons below notch / status bar, including when sticky. */
+  padding: calc(0.65rem + var(--safe-t)) 0 0.85rem;
   position: sticky;
   top: 0;
   z-index: 5;
-  background: linear-gradient(to bottom, var(--bg-deep) 70%, transparent);
+  background: linear-gradient(
+    to bottom,
+    var(--bg-deep) 0%,
+    var(--bg-deep) 72%,
+    transparent 100%
+  );
 }
 
 .brand {
