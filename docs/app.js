@@ -686,85 +686,36 @@ function cycleSort() {
   if (!state.activeBookId) renderShelf();
 }
 
-function canUseDirectoryPicker() {
-  return typeof window.showDirectoryPicker === "function";
-}
-
-/** iPhone / iPad Safari: no real folder pick. Desktop Safari still has webkitdirectory. */
-function isAppleTouchBrowser() {
-  const ua = navigator.userAgent || "";
-  if (/iPad|iPhone|iPod/.test(ua)) return true;
-  // iPadOS desktop-class UA
-  return navigator.platform === "MacIntel" && (navigator.maxTouchPoints || 0) > 1;
-}
-
-/** Folder pick: File System Access API, else webkitdirectory (desktop). Not iOS. */
-function canPickFolder() {
-  return canUseDirectoryPicker() || !isAppleTouchBrowser();
-}
-
 function setupCapabilityHint() {
-  const ios = isAppleTouchBrowser();
   const pickMain = document.getElementById("btn-pick-main");
   const pickFilesBtn = document.getElementById("btn-pick-files");
-
   pickMain?.classList.remove("hidden");
   pickFilesBtn?.classList.remove("primary");
   pickFilesBtn?.classList.add("ghost");
 
-  if (ios) {
-    // Only touch Safari cannot pick folders — lead with files.
-    pickMain?.classList.add("hidden");
-    pickFilesBtn?.classList.remove("ghost");
-    pickFilesBtn?.classList.add("primary");
+  if (typeof window.showDirectoryPicker === "function") {
     els.capabilityHint.textContent =
-      "iPhone / iPad Safari cannot choose a folder. Tap Choose audio files → open your shared Library (or listen/) → Select → Select All (include cover.jpg). Download Now in Files first.";
-    return;
-  }
-
-  if (canUseDirectoryPicker()) {
-    els.capabilityHint.textContent =
-      "Choose Library folder, then pick Library or a collection (門羅-WhatIf / Immune).";
+      "Choose Library folder, then pick Library or a collection (門羅-WhatIf / Immune). On iPhone/iPad, pick the folder in Files after Download Now.";
   } else {
     els.capabilityHint.textContent =
-      "Choose Library folder to open a folder (desktop Safari/Chrome). Or Choose audio files if you prefer picking files.";
+      "Choose Library folder to select a folder (works in Files on iPhone/iPad and desktop). Or use Choose audio files to pick files one by one.";
   }
 }
 
 function updateChangeButtonLabel() {
   const btn = document.getElementById("btn-change");
   if (!btn) return;
-  if (canPickFolder()) {
-    btn.textContent = "Change folder";
-    btn.title = "Pick a different Library folder";
-  } else {
-    btn.textContent = "Reselect files";
-    btn.title =
-      "iPhone/iPad cannot pick a folder — select audio (and covers) again from Files";
-  }
+  btn.textContent = "Change folder";
+  btn.title = "Pick a different Library folder";
 }
 
 function bind() {
   const pickDirectory = () => loadLibrary("directory");
   const pickFiles = () => loadLibrary("files");
 
-  document.getElementById("btn-change").addEventListener("click", () => {
-    if (canPickFolder()) {
-      // Chrome: showDirectoryPicker. Desktop Safari: webkitdirectory input.
-      pickDirectory();
-      return;
-    }
-    const key = "librarylisten.iosFolderTip";
-    if (!sessionStorage.getItem(key)) {
-      sessionStorage.setItem(key, "1");
-      alert(
-        "This iPhone/iPad cannot select a folder in Safari.\n\n" +
-          "In the next screen: open your iCloud Library (or listen/), tap Select, then Select All.\n" +
-          "Include cover.jpg if you want covers. Files must already be Downloaded."
-      );
-    }
-    pickFiles();
-  });
+  // Always try a real folder chooser first (showDirectoryPicker or webkitdirectory).
+  // Do not special-case iPhone/iPad — folder pick works there via Files.
+  document.getElementById("btn-change").addEventListener("click", pickDirectory);
   document.getElementById("btn-pick-main").addEventListener("click", pickDirectory);
   document.getElementById("btn-pick-files").addEventListener("click", pickFiles);
   document.getElementById("btn-back").addEventListener("click", () => {
