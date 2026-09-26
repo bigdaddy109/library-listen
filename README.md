@@ -1,98 +1,69 @@
 # Library Listen
 
-Offline **iPhone and iPad** player for audiobooks that already live in Jeff’s Main Hub **Library** folder on iCloud Drive. SwiftUI, local files only. No TTS. No extra cloud account. The Mac does not need to be on for a commute.
+Offline audiobook player for files that already live in a shared **iCloud Drive Library** folder. Local files only. No TTS. No upload of your books.
 
-## Library folder (only this tree)
+## Web player (any device with a link)
 
-On the Mac:
+**Live:** https://bigdaddy109.github.io/library-listen/
+
+Share that URL. Each listener:
+
+1. Accepts your **iCloud** share of `Library` (or `門羅-WhatIf` / `Immune`).
+2. In **Files**, taps **Download Now** on `listen/` so chapters are on-device.
+3. Opens the link → **Choose Library folder** (desktop Chrome) or **Choose audio files** (iPhone Safari) → play.
+
+Progress is stored in that browser’s localStorage. Reloading the page requires picking the folder/files again (browsers do not keep durable folder access the way the native app does).
+
+Source: [`docs/`](docs/) (GitHub Pages from `/docs` on `main`).
+
+## Library folder layout
+
+On the Mac (example Hub path):
 
 ```
-/Users/jeffwu/Documents/Main Hub/Personal/Daryl Stuff/IIS-義大國際小學/Library/
+…/Library/
+  門羅-WhatIf/listen/
+    what-if-1/   # chapter mp3s
+    how-to/      # chapter mp3s
+    what-if-2/   # single m4b
+  Immune/listen/
+    Immune-Part01.mp3 … Immune-Part09.mp3
 ```
-
-The app scans `listen/` under that folder (or you can pick a single collection):
-
-```
-Library/門羅-WhatIf/listen/
-  what-if-1/   # chapter mp3s
-  how-to/      # chapter mp3s
-  what-if-2/   # single m4b
-
-Library/Immune/listen/
-  Immune-Part01.mp3 … Immune-Part09.mp3
-```
-
-Immune’s nine parts sit **directly in `Library/Immune/listen/`**. Same play / auto-advance / progress as How To.
-
-Main Hub is already iCloud Drive. On iPhone/iPad: **Files → iCloud Drive → … → Main Hub → … → Library**. Pick that **Library** folder once. The app saves a security-scoped bookmark. There is no separate copy step.
 
 `ebooks/` and `_source/` are ignored.
 
-## What the app does
+## How to share audio (iCloud)
 
-1. Choose the iCloud Drive **Library** folder (or add `門羅-WhatIf` / `Immune`). Bookmarks persist.
-2. Scan `門羅-WhatIf/listen/` and `Immune/listen/` for mp3 / m4b / m4a.
-3. Book → chapter list → play / pause / resume → auto-advance. What If 2 uses m4b chapter markers when they are readable; otherwise one item.
-4. Remember per-book last chapter + position in app-local JSON.
-5. Ask iCloud to download cloud-only files. For a commute: in **Files**, tap **Download Now** on `Library/` so chapters are on-device.
+1. On Mac: share `Library` (or a single collection) via iCloud to the listener’s Apple ID.
+2. Listener: **Files → Shared** → open folder → **Download Now** on `listen/`.
+3. Open the web player link and pick that folder / those files.
 
-Thing Explainer has no audio and is not synthesized.
+## Native iOS app (optional)
 
-First-time Mac install (Traditional Chinese, includes installing Xcode.app): see **[INSTALL-zh.md](INSTALL-zh.md)**. Command Line Tools alone are not enough.
-
-## Install and run (Xcode on Jeff’s Mac)
-
-Needs **Xcode.app** from the Mac App Store (not only Command Line Tools) and the iOS 17 SDK.
+SwiftUI app in this repo for sideload via Xcode. Bookmarks persist across launches. See **[INSTALL-zh.md](INSTALL-zh.md)**.
 
 ```bash
-cd /path/to/this-repo
 ./start.sh
 ```
 
-`start.sh` regenerates silent fixture stubs and opens `LibraryListen.xcodeproj`.
+## What the player does
 
-In Xcode:
+- Shelf of books from scanned `listen/` trees
+- Chapter list, play / pause / resume, auto-advance
+- Cover images when present next to the audio
+- Per-book progress (chapter + position)
+- Media Session lock-screen controls in supporting browsers
 
-1. Scheme **LibraryListen**.
-2. Destination: iPhone or iPad simulator, or a signed-in device (Signing & Capabilities → your Team).
-3. Run (⌘R).
+Thing Explainer has no audio and is not synthesized.
 
-- **Simulator:** **Use bundled sample** (silent Munroe chapters + Immune-Part01…09).
-- **Device / commute:** **Choose a Hub folder** → Files → iCloud Drive → navigate to **Library** → Open. Later, **Folders** can add `門羅-WhatIf` or `Immune` if you picked a single collection.
+## Fixtures (native app only)
 
-No App Store listing is required for v1 (Xcode run / sideload / TestFlight later).
-
-## Offline commute
-
-- The Mac can be asleep. Playback is from files on the phone.
-- Cloud icon in Files means it is not local yet. Download on Wi‑Fi before you leave.
-- Lock-screen play/pause and next/previous chapter work via Now Playing.
-
-## Acceptance checklist
-
-**Munroe**
-
-- [ ] Open iCloud Drive `Library/` (or `Library/門羅-WhatIf`); app remembers it after relaunch.
-- [ ] Shelf lists What If, How To, What If 2 from scanned files.
-- [ ] What If and How To: full sorted chapter lists; tap any chapter.
-- [ ] What If 2: play the m4b; pause/resume; chapter markers if present, else one item.
-- [ ] Multi-file books auto-advance; progress ±2s survives relaunch.
-
-**Immune**
-
-- [ ] Same `Library/` pick also shows Immune as one book from `Library/Immune/listen/`.
-- [ ] Nine parts (`Immune-Part01` … `Part09`) listed, playable, auto-advance, progress saved.
-- [ ] No TTS.
-
-**Shared**
-
-- [ ] Works on iPhone; usable on iPad.
-- [ ] Git contains only silent fixture audio.
-
-## Fixtures
-
-`LibraryListen/Fixtures/` is a **Library-shaped** tree (silent files only):
+Silent stubs only — never commit copyrighted Hub audio:
 
 ```bash
 bash scripts/generate-fixtures.sh
 ```
+
+## Method notes
+
+See **[SHARE-library-listen.md](SHARE-library-listen.md)** for a shareable description without personal paths.
