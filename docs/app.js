@@ -426,15 +426,53 @@ function progressLine(book) {
   return { line, fraction };
 }
 
+const COVER_PALETTES = [
+  ["#6b3f1f", "#1c1410"],
+  ["#2f4f4f", "#121c1c"],
+  ["#4a3b6b", "#16121f"],
+  ["#3d4f2f", "#12180f"],
+  ["#6b2f3a", "#1c1014"],
+  ["#2f456b", "#10161f"],
+];
+
+function coverPalette(bookId) {
+  let h = 0;
+  for (const ch of bookId || "") h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return COVER_PALETTES[h % COVER_PALETTES.length];
+}
+
+function coverInitials(book) {
+  const title = (book?.title || "?").trim();
+  const words = title.split(/\s+/).filter(Boolean);
+  if (words.length >= 2) {
+    return (words[0][0] + words[1][0]).toUpperCase();
+  }
+  return title.slice(0, 2).toUpperCase();
+}
+
 function setCover(el, book) {
   if (!el) return;
+  el.querySelector(".cover-initials")?.remove();
+  el.style.removeProperty("--cover-a");
+  el.style.removeProperty("--cover-b");
+
   if (book?.coverUrl) {
     el.style.backgroundImage = `url("${book.coverUrl}")`;
     el.classList.add("has-image");
-  } else {
-    el.style.backgroundImage = "";
-    el.classList.remove("has-image");
+    el.classList.remove("placeholder");
+    return;
   }
+
+  el.style.backgroundImage = "";
+  el.classList.remove("has-image");
+  el.classList.add("placeholder");
+  const [a, b] = coverPalette(book?.id);
+  el.style.setProperty("--cover-a", a);
+  el.style.setProperty("--cover-b", b);
+  const mark = document.createElement("span");
+  mark.className = "cover-initials";
+  mark.textContent = coverInitials(book);
+  el.appendChild(mark);
 }
 
 function renderShelf() {
