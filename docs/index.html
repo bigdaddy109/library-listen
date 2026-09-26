@@ -16,9 +16,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Library Listen" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" href="./icon.svg?v=5" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=5" />
-    <link rel="stylesheet" href="./styles.css?v=5" />
+    <link rel="icon" href="./icon.svg?v=6" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=6" />
+    <link rel="stylesheet" href="./styles.css?v=6" />
     <title>Library Listen</title>
   </head>
   <body>
@@ -93,13 +93,27 @@
         </div>
         <div class="player-controls">
           <button type="button" id="btn-prev" class="icon" aria-label="Previous chapter">
-            ‹‹
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 6h2.2v12H6V6zm3.2 6 8.8 6.2V5.8L9.2 12z" />
+            </svg>
           </button>
-          <button type="button" id="btn-play" class="icon play" aria-label="Play or pause">
-            ▶
+          <button
+            type="button"
+            id="btn-play"
+            class="icon play is-paused"
+            aria-label="Play or pause"
+          >
+            <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M8 5.5v13l11-6.5-11-6.5z" />
+            </svg>
+            <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 5h3.5v14H7V5zm6.5 0H17v14h-3.5V5z" />
+            </svg>
           </button>
           <button type="button" id="btn-next" class="icon" aria-label="Next chapter">
-            ››
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M15.8 6H18v12h-2.2V6zM6 5.8v12.4L14.8 12 6 5.8z" />
+            </svg>
           </button>
         </div>
         <div class="player-time">
@@ -133,6 +147,6 @@
       hidden
     />
     <audio id="audio" preload="metadata" playsinline></audio>
-    <script type="module" src="./app.js?v=5"></script>
+    <script type="module" src="./app.js?v=6"></script>
   </body>
 </html>

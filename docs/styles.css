@@ -141,17 +141,52 @@ button.icon {
   padding: 0;
   border-radius: 50%;
   border-color: var(--line);
-  font-size: 1.1rem;
-  line-height: 1;
+  display: inline-grid;
+  place-items: center;
+  color: var(--ink);
+}
+
+button.icon svg {
+  width: 1.15rem;
+  height: 1.15rem;
+  fill: currentColor;
+  display: block;
 }
 
 button.icon.play {
-  width: 3rem;
-  height: 3rem;
-  background: var(--amber);
+  width: 3.15rem;
+  height: 3.15rem;
+  background: linear-gradient(180deg, #f0c36a, var(--amber-dim));
   color: #1a1208;
   border: none;
-  font-weight: 700;
+  box-shadow: 0 1px 0 rgba(255, 230, 170, 0.25) inset;
+}
+
+button.icon.play svg {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+button.icon.play .icon-pause {
+  display: none;
+}
+
+button.icon.play.is-paused .icon-play {
+  display: block;
+  /* optical center: triangles read left-heavy */
+  transform: translateX(1px);
+}
+
+button.icon.play.is-paused .icon-pause {
+  display: none;
+}
+
+button.icon.play:not(.is-paused) .icon-play {
+  display: none;
+}
+
+button.icon.play:not(.is-paused) .icon-pause {
+  display: block;
 }
 
 .panel {

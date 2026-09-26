@@ -658,7 +658,9 @@ function updatePlayerBar() {
   setCover(document.getElementById("player-cover"), book);
   document.getElementById("player-title").textContent = book.title;
   document.getElementById("player-chapter").textContent = chapter.title;
-  document.getElementById("btn-play").textContent = audio.paused ? "▶" : "❚❚";
+  document
+    .getElementById("btn-play")
+    .classList.toggle("is-paused", audio.paused);
 
   const pos = audio.currentTime || 0;
   const dur = Number.isFinite(audio.duration) ? audio.duration : 0;
