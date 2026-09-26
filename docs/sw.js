@@ -1,13 +1,13 @@
-/* Shell-only cache. Audiobook files are never cached here — they come from the device picker. */
-const CACHE = "library-listen-shell-v3";
+/* Shell-only cache. Audiobook files are never cached here. */
+const CACHE = "library-listen-shell-v4";
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css",
-  "./app.js",
+  "./styles.css?v=4",
+  "./app.js?v=4",
   "./manifest.webmanifest",
-  "./icon.svg",
-  "./apple-touch-icon.png",
+  "./icon.svg?v=4",
+  "./apple-touch-icon.png?v=4",
 ];
 
 self.addEventListener("install", (event) => {
@@ -29,11 +29,26 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+
+  // Always network-first for HTML so logo/UI updates show up.
+  if (request.mode === "navigate" || url.pathname.endsWith(".html") || url.pathname.endsWith("/")) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE).then((cache) => cache.put(request, copy));
+          return response;
+        })
+        .catch(() => caches.match(request))
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(request).then((cached) => {
       const fetched = fetch(request)
         .then((response) => {
-          if (response.ok && url.pathname.includes("/docs") === false) {
+          if (response.ok) {
             const copy = response.clone();
             caches.open(CACHE).then((cache) => cache.put(request, copy));
           }

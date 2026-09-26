@@ -15,16 +15,22 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Library Listen" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="icon" href="./icon.svg?v=4" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=4" />
+    <link rel="stylesheet" href="./styles.css?v=4" />
     <title>Library Listen</title>
   </head>
   <body>
     <div id="app">
       <header class="top">
         <div class="brand">
-          <img class="brand-mark" src="./icon.svg" width="28" height="28" alt="" />
+          <img
+            class="brand-mark"
+            src="./icon.svg?v=4"
+            width="36"
+            height="36"
+            alt="Library Listen"
+          />
           <h1>Library Listen</h1>
         </div>
         <div class="top-actions">
@@ -126,6 +132,6 @@
       hidden
     />
     <audio id="audio" preload="metadata" playsinline></audio>
-    <script type="module" src="./app.js"></script>
+    <script type="module" src="./app.js?v=4"></script>
   </body>
 </html>

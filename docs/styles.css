@@ -60,12 +60,14 @@ body {
 }
 
 .brand-mark {
-  width: 1.75rem;
-  height: 1.75rem;
-  border-radius: 0.45rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.55rem;
   flex: 0 0 auto;
   display: block;
-  box-shadow: 0 0 0 1px rgba(245, 240, 225, 0.12);
+  object-fit: cover;
+  background: #100e0b;
+  box-shadow: 0 0 0 1px rgba(245, 240, 225, 0.14);
 }
 
 .brand h1 {
