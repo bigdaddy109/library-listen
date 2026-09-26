@@ -575,6 +575,7 @@ function render() {
   els.book.classList.toggle("hidden", !state.activeBookId);
   document.getElementById("btn-sort").classList.toggle("hidden", !hasBooks);
   document.getElementById("btn-change").classList.toggle("hidden", !hasBooks);
+  updateChangeButtonLabel();
 
   if (hasBooks && !state.activeBookId) renderShelf();
   if (state.activeBookId) renderBook();
@@ -685,11 +686,57 @@ function cycleSort() {
   if (!state.activeBookId) renderShelf();
 }
 
+function canUseDirectoryPicker() {
+  return typeof window.showDirectoryPicker === "function";
+}
+
+/** iPhone / iPad Safari cannot pick a real folder; only multi-file select. */
+function isAppleTouchBrowser() {
+  const ua = navigator.userAgent || "";
+  if (/iPad|iPhone|iPod/.test(ua)) return true;
+  // iPadOS desktop UA
+  return navigator.platform === "MacIntel" && (navigator.maxTouchPoints || 0) > 1;
+}
+
 function setupCapabilityHint() {
-  const hasDirPicker = typeof window.showDirectoryPicker === "function";
-  els.capabilityHint.textContent = hasDirPicker
-    ? "This browser can open a whole folder. On iPhone Safari, use “Choose audio files” and select the files inside listen/ (Download Now in Files first)."
-    : "This browser needs the file picker. On iPhone: Files → download listen/ → Choose audio files → select the chapter files.";
+  const dirOk = canUseDirectoryPicker();
+  const ios = isAppleTouchBrowser();
+  const pickMain = document.getElementById("btn-pick-main");
+  const pickFiles = document.getElementById("btn-pick-files");
+
+  if (dirOk) {
+    els.capabilityHint.textContent =
+      "This browser can open a whole Library folder. Choose Library folder, then pick Library or a collection.";
+    pickMain?.classList.remove("hidden");
+    pickFiles?.classList.remove("primary");
+    pickFiles?.classList.add("ghost");
+    return;
+  }
+
+  // iPhone / iPad: folder APIs are unavailable — lead with file select.
+  if (ios) {
+    pickMain?.classList.add("hidden");
+    pickFiles?.classList.remove("ghost");
+    pickFiles?.classList.add("primary");
+    els.capabilityHint.textContent =
+      "iPhone / iPad Safari cannot choose a folder. Tap Choose audio files → open your shared Library (or listen/) → Select → Select All (include cover.jpg). Download Now in Files first.";
+  } else {
+    els.capabilityHint.textContent =
+      "This browser cannot use the modern folder picker. Try Choose Library folder (may work), or Choose audio files and select everything under listen/.";
+  }
+}
+
+function updateChangeButtonLabel() {
+  const btn = document.getElementById("btn-change");
+  if (!btn) return;
+  if (canUseDirectoryPicker()) {
+    btn.textContent = "Change folder";
+    btn.title = "Pick a different Library folder";
+  } else {
+    btn.textContent = "Reselect files";
+    btn.title =
+      "iPhone/iPad cannot pick a folder — select audio (and covers) again from Files";
+  }
 }
 
 function bind() {
@@ -697,11 +744,28 @@ function bind() {
   const pickFiles = () => loadLibrary("files");
 
   document.getElementById("btn-change").addEventListener("click", () => {
-    // Prefer folder; on iPhone-class browsers fall back to multi-file pick.
-    if (typeof window.showDirectoryPicker === "function") pickDirectory();
-    else pickFiles();
+    if (canUseDirectoryPicker()) {
+      pickDirectory();
+      return;
+    }
+    // Be honest: Safari on iOS has no folder picker.
+    if (isAppleTouchBrowser()) {
+      const key = "librarylisten.iosFolderTip";
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, "1");
+        alert(
+          "This iPhone/iPad cannot select a folder in Safari.\n\n" +
+            "In the next screen: open your iCloud Library (or listen/), tap Select, then Select All.\n" +
+            "Include cover.jpg if you want covers. Files must already be Downloaded."
+        );
+      }
+    }
+    pickFiles();
   });
-  document.getElementById("btn-pick-main").addEventListener("click", pickDirectory);
+  document.getElementById("btn-pick-main").addEventListener("click", () => {
+    if (canUseDirectoryPicker()) pickDirectory();
+    else pickFiles(); // webkitdirectory is unreliable on iOS — don't pretend
+  });
   document.getElementById("btn-pick-files").addEventListener("click", pickFiles);
   document.getElementById("btn-back").addEventListener("click", () => {
     state.activeBookId = null;
