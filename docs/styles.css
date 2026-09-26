@@ -399,7 +399,11 @@ button.icon.play {
     "time time time";
   gap: 0.55rem 0.75rem;
   align-items: center;
-  padding: 0.7rem 1rem calc(0.7rem + var(--safe-b));
+  padding:
+    0.7rem
+    calc(1rem + var(--safe-r))
+    calc(0.7rem + var(--safe-b))
+    calc(1rem + var(--safe-l));
   background: rgba(16, 14, 11, 0.92);
   border-top: 1px solid var(--line);
   backdrop-filter: blur(14px);
