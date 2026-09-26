@@ -60,12 +60,12 @@ body {
 }
 
 .brand-mark {
-  width: 1.65rem;
-  height: 1.65rem;
+  width: 1.75rem;
+  height: 1.75rem;
   border-radius: 0.45rem;
-  background: linear-gradient(145deg, var(--amber), #7a4e14);
-  box-shadow: 0 0 0 1px rgba(232, 173, 71, 0.35);
   flex: 0 0 auto;
+  display: block;
+  box-shadow: 0 0 0 1px rgba(245, 240, 225, 0.12);
 }
 
 .brand h1 {
@@ -244,11 +244,13 @@ button.icon.play {
   width: 4.5rem;
   height: 4.5rem;
   border-radius: 0.55rem;
-  background:
-    linear-gradient(160deg, #5a4324, #2a2118 55%, #1a1712);
+  background: #221c16;
   background-size: cover;
   background-position: center;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  position: relative;
+  overflow: hidden;
+  flex: 0 0 auto;
 }
 
 .cover.large {
@@ -258,6 +260,37 @@ button.icon.play {
 
 .cover.has-image {
   background-color: #111;
+}
+
+.cover.placeholder {
+  display: grid;
+  place-items: center;
+  padding: 0.35rem;
+  text-align: center;
+}
+
+.cover.placeholder::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(160deg, var(--cover-a, #5a4324), var(--cover-b, #1a1712));
+  opacity: 1;
+}
+
+.cover.placeholder .cover-initials {
+  position: relative;
+  z-index: 1;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+  line-height: 1.15;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+.cover.large.placeholder .cover-initials {
+  font-size: 1.55rem;
 }
 
 .book-screen .back {
