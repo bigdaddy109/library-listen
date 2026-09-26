@@ -1,0 +1,334 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10100000000000000000016 /* FolderPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000016 /* FolderPicker.swift */; };
+		A10100000000000000000001 /* LibraryListenApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000001 /* LibraryListenApp.swift */; };
+		A10100000000000000000002 /* HubPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000002 /* HubPaths.swift */; };
+		A10100000000000000000003 /* LibraryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000003 /* LibraryModels.swift */; };
+		A10100000000000000000004 /* LibraryScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000004 /* LibraryScanner.swift */; };
+		A10100000000000000000005 /* BookmarkStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000005 /* BookmarkStore.swift */; };
+		A10100000000000000000006 /* ProgressStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000006 /* ProgressStore.swift */; };
+		A10100000000000000000007 /* LibrarySession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000007 /* LibrarySession.swift */; };
+		A10100000000000000000008 /* PlayerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000008 /* PlayerController.swift */; };
+		A10100000000000000000009 /* ICloudFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000009 /* ICloudFiles.swift */; };
+		A1010000000000000000000A /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000A /* Theme.swift */; };
+		A1010000000000000000000B /* BookCoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000B /* BookCoverView.swift */; };
+		A1010000000000000000000C /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000C /* OnboardingView.swift */; };
+		A1010000000000000000000D /* ShelfView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000D /* ShelfView.swift */; };
+		A1010000000000000000000E /* BookView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000E /* BookView.swift */; };
+		A1010000000000000000000F /* PlayerBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000F /* PlayerBar.swift */; };
+		A10100000000000000000010 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000010 /* SettingsView.swift */; };
+		A10100000000000000000011 /* AppRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000011 /* AppRootView.swift */; };
+		A10100000000000000000012 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000012 /* Assets.xcassets */; };
+		A10100000000000000000013 /* Fixtures in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000013 /* Fixtures */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A10000000000000000000016 /* FolderPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderPicker.swift; sourceTree = "<group>"; };
+		A10000000000000000000001 /* LibraryListenApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryListenApp.swift; sourceTree = "<group>"; };
+		A10000000000000000000002 /* HubPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HubPaths.swift; sourceTree = "<group>"; };
+		A10000000000000000000003 /* LibraryModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryModels.swift; sourceTree = "<group>"; };
+		A10000000000000000000004 /* LibraryScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryScanner.swift; sourceTree = "<group>"; };
+		A10000000000000000000005 /* BookmarkStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarkStore.swift; sourceTree = "<group>"; };
+		A10000000000000000000006 /* ProgressStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressStore.swift; sourceTree = "<group>"; };
+		A10000000000000000000007 /* LibrarySession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySession.swift; sourceTree = "<group>"; };
+		A10000000000000000000008 /* PlayerController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerController.swift; sourceTree = "<group>"; };
+		A10000000000000000000009 /* ICloudFiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICloudFiles.swift; sourceTree = "<group>"; };
+		A1000000000000000000000A /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		A1000000000000000000000B /* BookCoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookCoverView.swift; sourceTree = "<group>"; };
+		A1000000000000000000000C /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		A1000000000000000000000D /* ShelfView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfView.swift; sourceTree = "<group>"; };
+		A1000000000000000000000E /* BookView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookView.swift; sourceTree = "<group>"; };
+		A1000000000000000000000F /* PlayerBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerBar.swift; sourceTree = "<group>"; };
+		A10000000000000000000010 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		A10000000000000000000011 /* AppRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRootView.swift; sourceTree = "<group>"; };
+		A10000000000000000000012 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A10000000000000000000013 /* Fixtures */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Fixtures; sourceTree = "<group>"; };
+		A10000000000000000000014 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A10000000000000000000015 /* LibraryListen.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LibraryListen.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A10200000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A10300000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				A10300000000000000000002 /* LibraryListen */,
+				A10300000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A10300000000000000000002 /* LibraryListen */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000001 /* LibraryListenApp.swift */,
+				A10000000000000000000016 /* FolderPicker.swift */,
+				A10000000000000000000011 /* AppRootView.swift */,
+				A10000000000000000000002 /* HubPaths.swift */,
+				A10000000000000000000003 /* LibraryModels.swift */,
+				A10000000000000000000004 /* LibraryScanner.swift */,
+				A10000000000000000000005 /* BookmarkStore.swift */,
+				A10000000000000000000006 /* ProgressStore.swift */,
+				A10000000000000000000007 /* LibrarySession.swift */,
+				A10000000000000000000008 /* PlayerController.swift */,
+				A10000000000000000000009 /* ICloudFiles.swift */,
+				A1000000000000000000000A /* Theme.swift */,
+				A1000000000000000000000B /* BookCoverView.swift */,
+				A1000000000000000000000C /* OnboardingView.swift */,
+				A1000000000000000000000D /* ShelfView.swift */,
+				A1000000000000000000000E /* BookView.swift */,
+				A1000000000000000000000F /* PlayerBar.swift */,
+				A10000000000000000000010 /* SettingsView.swift */,
+				A10000000000000000000012 /* Assets.xcassets */,
+				A10000000000000000000013 /* Fixtures */,
+				A10000000000000000000014 /* Info.plist */,
+			);
+			path = LibraryListen;
+			sourceTree = "<group>";
+		};
+		A10300000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000015 /* LibraryListen.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A10400000000000000000001 /* LibraryListen */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10600000000000000000002 /* Build configuration list for PBXNativeTarget "LibraryListen" */;
+			buildPhases = (
+				A10500000000000000000001 /* Sources */,
+				A10200000000000000000001 /* Frameworks */,
+				A10500000000000000000002 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = LibraryListen;
+			productName = LibraryListen;
+			productReference = A10000000000000000000015 /* LibraryListen.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A10400000000000000000002 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					A10400000000000000000001 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+				};
+			};
+			buildConfigurationList = A10600000000000000000001 /* Build configuration list for PBXProject "LibraryListen" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A10300000000000000000001;
+			productRefGroup = A10300000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A10400000000000000000001 /* LibraryListen */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A10500000000000000000002 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10100000000000000000012 /* Assets.xcassets in Resources */,
+				A10100000000000000000013 /* Fixtures in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A10500000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10100000000000000000001 /* LibraryListenApp.swift in Sources */,
+				A10100000000000000000016 /* FolderPicker.swift in Sources */,
+				A10100000000000000000011 /* AppRootView.swift in Sources */,
+				A10100000000000000000002 /* HubPaths.swift in Sources */,
+				A10100000000000000000003 /* LibraryModels.swift in Sources */,
+				A10100000000000000000004 /* LibraryScanner.swift in Sources */,
+				A10100000000000000000005 /* BookmarkStore.swift in Sources */,
+				A10100000000000000000006 /* ProgressStore.swift in Sources */,
+				A10100000000000000000007 /* LibrarySession.swift in Sources */,
+				A10100000000000000000008 /* PlayerController.swift in Sources */,
+				A10100000000000000000009 /* ICloudFiles.swift in Sources */,
+				A1010000000000000000000A /* Theme.swift in Sources */,
+				A1010000000000000000000B /* BookCoverView.swift in Sources */,
+				A1010000000000000000000C /* OnboardingView.swift in Sources */,
+				A1010000000000000000000D /* ShelfView.swift in Sources */,
+				A1010000000000000000000E /* BookView.swift in Sources */,
+				A1010000000000000000000F /* PlayerBar.swift in Sources */,
+				A10100000000000000000010 /* SettingsView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A10700000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		A10700000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		A10700000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 36V44B3RTF;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = LibraryListen/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Library Listen";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jeffwu.librarylisten;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A10700000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 36V44B3RTF;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = LibraryListen/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Library Listen";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jeffwu.librarylisten;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A10600000000000000000001 /* Build configuration list for PBXProject "LibraryListen" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10700000000000000000001 /* Debug */,
+				A10700000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A10600000000000000000002 /* Build configuration list for PBXNativeTarget "LibraryListen" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10700000000000000000003 /* Debug */,
+				A10700000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A10400000000000000000002 /* Project object */;
+}

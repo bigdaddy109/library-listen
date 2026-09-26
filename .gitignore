@@ -1,0 +1,27 @@
+# Xcode
+xcuserdata/
+DerivedData/
+*.moved-aside
+*.xccheckout
+*.xcscmblueprint
+*.hmap
+*.ipa
+*.dSYM
+*.dSYM.zip
+.build/
+
+# App local state (never commit Jeff's real library path config)
+/data/
+
+# macOS
+.DS_Store
+
+# Do not commit real audiobooks
+/Library/
+**/*.m4b.bak
+
+# Editor / cloud leftovers
+/node_modules/
+/.next/
+/agent-tools/
+.env*
