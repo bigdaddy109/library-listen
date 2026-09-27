@@ -60,6 +60,8 @@ let seekDragging = false;
 let playToken = 0;
 let ignoreSeekInput = 0;
 let detachChapterMeta = null;
+/** @type {{ token: number, resumeAt: number, until: number } | null} */
+let resumeGuard = null;
 const SKIP_SECONDS = 30;
 let playbackRate = loadRate();
 const objectUrls = new Set();
@@ -646,6 +648,42 @@ function applyPlaybackPosition(seconds) {
   }
 }
 
+function beginResumeGuard(token, resumeAt) {
+  if (!(resumeAt > 0.5)) {
+    resumeGuard = null;
+    return;
+  }
+  resumeGuard = {
+    token,
+    resumeAt,
+    until: performance.now() + 3000,
+  };
+}
+
+function clearResumeGuard() {
+  resumeGuard = null;
+}
+
+/** Re-seek when the engine snaps near 0 after a resume (common with blob/Safari). */
+function maybeFixResumeSnap() {
+  if (!resumeGuard || resumeGuard.token !== playToken) {
+    clearResumeGuard();
+    return;
+  }
+  if (performance.now() > resumeGuard.until) {
+    clearResumeGuard();
+    return;
+  }
+  const target = resumeGuard.resumeAt;
+  const t = audio.currentTime || 0;
+  if (t + 1.0 < target) {
+    applyPlaybackPosition(resumeTarget(target));
+    return;
+  }
+  // Close enough — stop guarding so normal progress saves resume.
+  if (t >= target - 0.75) clearResumeGuard();
+}
+
 function clampTime(seconds) {
   const dur = Number.isFinite(audio.duration) ? audio.duration : null;
   let next = Math.max(0, seconds);
@@ -783,10 +821,14 @@ async function playChapter(bookId, chapterIndex, { resumeIfSame = false, forceSt
     applyPlaybackPosition(shouldResume ? resumeTarget(resumeAt) : 0);
   };
 
+  if (shouldResume) beginResumeGuard(token, resumeAt);
+  else clearResumeGuard();
+
   // Listener before src so a cached file cannot miss loadedmetadata.
   const onMeta = () => {
     detach();
     applyPosition();
+    maybeFixResumeSnap();
   };
   const detach = () => {
     audio.removeEventListener("loadedmetadata", onMeta);
@@ -800,8 +842,8 @@ async function playChapter(bookId, chapterIndex, { resumeIfSame = false, forceSt
 
   const onPlaying = () => {
     audio.removeEventListener("playing", onPlaying);
-    if (token !== playToken || !shouldResume || resumeAt <= 0.5) return;
-    if ((audio.currentTime || 0) < 0.35) applyPosition();
+    if (token !== playToken) return;
+    maybeFixResumeSnap();
   };
   audio.addEventListener("playing", onPlaying);
 
@@ -814,9 +856,15 @@ async function playChapter(bookId, chapterIndex, { resumeIfSame = false, forceSt
   }
   if (token !== playToken) return;
 
-  // play() on iOS sometimes snaps back to 0 after a pre-seek.
-  if (shouldResume && audio.readyState >= 1 && resumeAt > 0.5 && (audio.currentTime || 0) < 0.35) {
-    applyPosition();
+  maybeFixResumeSnap();
+  // One more pass shortly after play — engines often snap after the first frame.
+  if (shouldResume) {
+    window.setTimeout(() => {
+      if (token === playToken) maybeFixResumeSnap();
+    }, 120);
+    window.setTimeout(() => {
+      if (token === playToken) maybeFixResumeSnap();
+    }, 400);
   }
 
   els.playerBar.classList.remove("hidden");
@@ -827,6 +875,11 @@ async function playChapter(bookId, chapterIndex, { resumeIfSame = false, forceSt
 
 function persistCurrent() {
   if (!playback) return;
+  // While correcting a resume snap, do not overwrite the good saved position.
+  if (resumeGuard && resumeGuard.token === playToken) {
+    const t = audio.currentTime || 0;
+    if (t + 1.0 < resumeGuard.resumeAt) return;
+  }
   const book = findBook(playback.bookId);
   const chapter = book?.chapters[playback.chapterIndex];
   if (!chapter) return;
@@ -999,6 +1052,7 @@ function bind() {
   });
 
   audio.addEventListener("timeupdate", () => {
+    maybeFixResumeSnap();
     updatePlayerBar();
     if (!audio.paused) {
       // throttle-ish via seconds bucket
@@ -1006,9 +1060,6 @@ function bind() {
       if (audio._lastSavedSec !== t) {
         audio._lastSavedSec = t;
         persistCurrent();
-        if (state.activeBookId && !state.activeBookId) {
-          /* noop */
-        }
       }
     }
   });
