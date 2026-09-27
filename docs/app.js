@@ -32,6 +32,8 @@ const KNOWN_BOOKS = {
 
 const PROGRESS_KEY = "librarylisten.progress.v1";
 const SORT_KEY = "librarylisten.shelfSort";
+const RATE_KEY = "librarylisten.rate";
+const RATES = [1, 1.25, 1.5];
 
 /** @type {{ books: any[], activeBookId: string|null, sort: string }} */
 const state = {
@@ -59,7 +61,47 @@ let playToken = 0;
 let ignoreSeekInput = 0;
 let detachChapterMeta = null;
 const SKIP_SECONDS = 30;
+let playbackRate = loadRate();
 const objectUrls = new Set();
+
+function loadRate() {
+  try {
+    const n = Number(localStorage.getItem(RATE_KEY));
+    if (RATES.includes(n)) return n;
+  } catch {
+    /* private mode */
+  }
+  return 1;
+}
+
+function rateLabel(rate) {
+  if (rate === 1) return "1.0×";
+  if (rate === 1.25) return "1.25×";
+  return "1.5×";
+}
+
+function applyPlaybackRate() {
+  audio.preservesPitch = true;
+  audio.webkitPreservesPitch = true;
+  if (audio.playbackRate !== playbackRate) audio.playbackRate = playbackRate;
+  const btn = document.getElementById("btn-rate");
+  if (!btn) return;
+  const label = rateLabel(playbackRate);
+  btn.textContent = label;
+  btn.setAttribute("aria-label", `Playback speed ${label}`);
+}
+
+function cycleRate() {
+  const index = RATES.indexOf(playbackRate);
+  playbackRate = RATES[(index + 1) % RATES.length];
+  try {
+    localStorage.setItem(RATE_KEY, String(playbackRate));
+  } catch {
+    /* private mode */
+  }
+  applyPlaybackRate();
+  updatePositionState();
+}
 
 function extOf(name) {
   const i = name.lastIndexOf(".");
@@ -753,6 +795,7 @@ async function playChapter(bookId, chapterIndex, { resumeIfSame = false, forceSt
   detachChapterMeta = detach;
   audio.addEventListener("loadedmetadata", onMeta);
   audio.src = chapter.url;
+  applyPlaybackRate();
   if (audio.readyState >= 1) applyPosition();
 
   const onPlaying = () => {
@@ -932,6 +975,7 @@ function bind() {
   document.getElementById("btn-next").addEventListener("click", () => skipToNext());
   document.getElementById("btn-back30").addEventListener("click", () => seekBy(-SKIP_SECONDS));
   document.getElementById("btn-fwd30").addEventListener("click", () => seekBy(SKIP_SECONDS));
+  document.getElementById("btn-rate").addEventListener("click", () => cycleRate());
 
   const seek = document.getElementById("player-seek");
   seek.addEventListener("pointerdown", () => {
@@ -974,6 +1018,7 @@ function bind() {
     updateMediaSession();
   });
   audio.addEventListener("play", () => {
+    applyPlaybackRate();
     updatePlayerBar();
     updateMediaSession();
   });
@@ -996,6 +1041,7 @@ function bind() {
   });
 
   bindMediaSession();
+  applyPlaybackRate();
 }
 
 function registerSW() {

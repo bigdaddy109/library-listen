@@ -1,13 +1,13 @@
 /* Shell-only cache. Audiobook files are never cached here. */
-const CACHE = "library-listen-shell-v10";
+const CACHE = "library-listen-shell-v11";
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=10",
-  "./app.js?v=10",
+  "./styles.css?v=11",
+  "./app.js?v=11",
   "./manifest.webmanifest",
-  "./icon.svg?v=10",
-  "./apple-touch-icon.png?v=10",
+  "./icon.svg?v=11",
+  "./apple-touch-icon.png?v=11",
 ];
 
 self.addEventListener("install", (event) => {
