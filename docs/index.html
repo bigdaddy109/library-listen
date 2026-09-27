@@ -16,9 +16,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Library Listen" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" href="./icon.svg?v=10" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=10" />
-    <link rel="stylesheet" href="./styles.css?v=10" />
+    <link rel="icon" href="./icon.svg?v=11" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=11" />
+    <link rel="stylesheet" href="./styles.css?v=11" />
     <title>Library Listen</title>
   </head>
   <body>
@@ -27,7 +27,7 @@
         <div class="brand">
           <img
             class="brand-mark"
-            src="./icon.svg?v=10"
+            src="./icon.svg?v=11"
             width="36"
             height="36"
             alt="Library Listen"
@@ -89,7 +89,12 @@
         <div class="player-cover" id="player-cover"></div>
         <div class="player-text">
           <div id="player-title" class="player-title">—</div>
-          <div id="player-chapter" class="player-chapter">—</div>
+          <div class="player-sub">
+            <div id="player-chapter" class="player-chapter">—</div>
+            <button type="button" id="btn-rate" class="skip rate" aria-label="Playback speed 1.0×">
+              1.0×
+            </button>
+          </div>
         </div>
         <div class="player-controls">
           <button type="button" id="btn-prev" class="icon" aria-label="Back to start or previous part">
@@ -154,6 +159,6 @@
       hidden
     />
     <audio id="audio" preload="metadata" playsinline></audio>
-    <script type="module" src="./app.js?v=10"></script>
+    <script type="module" src="./app.js?v=11"></script>
   </body>
 </html>

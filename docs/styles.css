@@ -471,9 +471,26 @@ button.icon.play:not(.is-paused) .icon-pause {
   font-weight: 700;
 }
 
+.player-sub {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.player-sub .player-chapter {
+  flex: 1;
+  min-width: 0;
+}
+
 .player-chapter {
   color: var(--muted);
   font-size: 0.88rem;
+}
+
+button.skip.rate {
+  flex: 0 0 auto;
+  min-width: 3.15rem;
 }
 
 .player-controls {
