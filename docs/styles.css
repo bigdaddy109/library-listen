@@ -230,6 +230,23 @@ button.icon.play:not(.is-paused) .icon-pause {
   font-size: 0.9rem;
 }
 
+body.is-scanning {
+  cursor: progress;
+}
+
+body.is-scanning .primary,
+body.is-scanning #btn-change,
+body.is-scanning #btn-pick-main,
+body.is-scanning #btn-pick-files {
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+body.is-scanning #capability-hint,
+body.is-scanning .hint {
+  color: var(--amber);
+}
+
 .hidden {
   display: none !important;
 }

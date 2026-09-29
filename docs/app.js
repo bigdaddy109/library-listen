@@ -234,24 +234,64 @@ function shouldSkipPath(parts) {
 
 /**
  * Walk a directory handle (File System Access API).
+ * Skip unreadable / not-downloaded iCloud files instead of failing the whole scan.
  * @param {FileSystemDirectoryHandle} dir
  * @param {string[]} prefix
  */
 async function walkDirectory(dir, prefix = []) {
   /** @type {{ path: string, file: File }[]} */
   const out = [];
+  let skipped = 0;
   for await (const [name, handle] of dir.entries()) {
     if (name.startsWith(".")) continue;
     const next = [...prefix, name];
     if (handle.kind === "directory") {
       if (SKIP_FOLDERS.has(name.toLowerCase()) || name.startsWith("_")) continue;
-      out.push(...(await walkDirectory(handle, next)));
+      try {
+        const nested = await walkDirectory(handle, next);
+        out.push(...nested.entries);
+        skipped += nested.skipped;
+      } catch {
+        skipped += 1;
+      }
     } else if (handle.kind === "file") {
-      const file = await handle.getFile();
-      out.push({ path: next.join("/"), file });
+      try {
+        const file = await handle.getFile();
+        // Cloud-only placeholders often come through as empty.
+        if (!file || (AUDIO_EXT.has(extOf(file.name)) && file.size === 0)) {
+          skipped += 1;
+          continue;
+        }
+        out.push({ path: next.join("/"), file });
+      } catch {
+        skipped += 1;
+      }
     }
   }
-  return out;
+  return { entries: out, skipped };
+}
+
+/**
+ * Guess collection/book folders from a relative path.
+ * Supports Library/Collection/listen/Book/file and shorter picks.
+ */
+function locateBookPath(parts) {
+  const listenIdx = parts.map((p) => p.toLowerCase()).lastIndexOf("listen");
+  if (listenIdx >= 0) {
+    const collectionFolder = listenIdx > 0 ? parts[listenIdx - 1] : "Library";
+    const rest = parts.slice(listenIdx + 1);
+    if (rest.length === 0) return null;
+    if (rest.length === 1) {
+      const bookFolder = collectionFolder === "Immune" ? "immune" : slug(collectionFolder);
+      return { collectionFolder, bookFolder };
+    }
+    return { collectionFolder, bookFolder: rest[0] };
+  }
+  // Picked a collection root that contains book folders of audio (no listen/ segment).
+  if (parts.length >= 2) {
+    return { collectionFolder: parts[0], bookFolder: parts[1] };
+  }
+  return { collectionFolder: "Imported", bookFolder: "imported" };
 }
 
 /**
@@ -260,44 +300,22 @@ async function walkDirectory(dir, prefix = []) {
  */
 function buildLibrary(entries) {
   const usable = entries.filter((e) => {
-    const parts = pathParts(e.path);
+    const parts = pathParts(e.path || e.file?.name || "");
     if (shouldSkipPath(parts)) return false;
     const ext = extOf(e.file.name);
-    return AUDIO_EXT.has(ext) || COVER_EXT.has(ext);
+    if (!(AUDIO_EXT.has(ext) || COVER_EXT.has(ext))) return false;
+    if (AUDIO_EXT.has(ext) && e.file.size === 0) return false;
+    return true;
   });
 
   /** @type {Map<string, { collectionFolder: string, bookFolder: string, files: { path: string, file: File }[] }>} */
   const groups = new Map();
 
   for (const entry of usable) {
-    const parts = pathParts(entry.path);
-    const listenIdx = parts.map((p) => p.toLowerCase()).lastIndexOf("listen");
-    let collectionFolder;
-    let bookFolder;
-    let rest;
-
-    if (listenIdx >= 0) {
-      collectionFolder =
-        listenIdx > 0 ? parts[listenIdx - 1] : "Library";
-      rest = parts.slice(listenIdx + 1);
-      if (rest.length === 0) continue;
-      if (rest.length === 1) {
-        // audio directly in listen/ → one book named after collection
-        bookFolder = collectionFolder === "Immune" ? "immune" : collectionFolder;
-      } else {
-        bookFolder = rest[0];
-      }
-    } else if (parts.length >= 2) {
-      // relative pick without "listen" in path: Collection/Book/file
-      collectionFolder = parts[0];
-      bookFolder = parts[1];
-      rest = parts.slice(1);
-    } else {
-      // flat file pick — put into a single "Imported" book
-      collectionFolder = "Imported";
-      bookFolder = "imported";
-      rest = parts;
-    }
+    const parts = pathParts(entry.path || entry.file.name);
+    const located = locateBookPath(parts);
+    if (!located) continue;
+    const { collectionFolder, bookFolder } = located;
 
     const key = `${collectionFolder}::${bookFolder}`;
     if (!groups.has(key)) {
@@ -371,50 +389,109 @@ function buildLibrary(entries) {
 
 async function pickWithDirectoryPicker() {
   const handle = await window.showDirectoryPicker({ mode: "read" });
-  const entries = await walkDirectory(handle);
-  return buildLibrary(entries);
+  const { entries, skipped } = await walkDirectory(handle);
+  return { books: buildLibrary(entries), entries, skipped };
 }
 
 function pickWithInput(input) {
   return new Promise((resolve, reject) => {
-    input.value = "";
+    let settled = false;
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      window.removeEventListener("focus", onWindowFocus);
+      input.onchange = null;
+      fn(value);
+    };
+
     input.onchange = () => {
       const files = [...(input.files || [])];
       if (!files.length) {
-        reject(new Error("No files selected"));
+        finish(reject, Object.assign(new Error("No files selected"), { name: "AbortError" }));
         return;
       }
       const entries = files.map((file) => ({
         path: file.webkitRelativePath || file.name,
         file,
       }));
-      resolve(buildLibrary(entries));
+      finish(resolve, {
+        books: buildLibrary(entries),
+        entries,
+        skipped: entries.filter((e) => AUDIO_EXT.has(extOf(e.file.name)) && e.file.size === 0).length,
+      });
     };
+
+    // User cancelled the sheet — focus returns without a change event.
+    const onWindowFocus = () => {
+      window.setTimeout(() => {
+        if (!settled && (!input.files || input.files.length === 0)) {
+          finish(reject, Object.assign(new Error("Cancelled"), { name: "AbortError" }));
+        }
+      }, 700);
+    };
+    window.addEventListener("focus", onWindowFocus);
+    try {
+      input.value = "";
+    } catch {
+      /* iOS may ignore */
+    }
     input.click();
   });
 }
 
+function setScanning(active) {
+  document.body.classList.toggle("is-scanning", active);
+  const hint = els.capabilityHint;
+  if (!hint) return;
+  if (active) {
+    hint.dataset.prev = hint.textContent || "";
+    hint.textContent = "Scanning Library… if this is iCloud, wait for Download Now to finish.";
+  } else if (hint.dataset.prev != null) {
+    hint.textContent = hint.dataset.prev;
+    delete hint.dataset.prev;
+  }
+}
+
+function emptyLibraryMessage(entries, skipped) {
+  const audio = (entries || []).filter((e) => AUDIO_EXT.has(extOf(e.file.name)));
+  const samples = audio
+    .slice(0, 3)
+    .map((e) => e.path || e.file.name)
+    .join("\n");
+  let msg =
+    "No audiobooks found.\n\n" +
+    `Files seen: ${entries?.length || 0} (audio: ${audio.length}` +
+    (skipped ? `, skipped/unread: ${skipped}` : "") +
+    ").\n\n" +
+    "Pick the Library folder (or 門羅-WhatIf / Immune / 上學不容易) that contains listen/ with mp3/m4b.\n" +
+    "On iPhone/iPad: in Files, tap Download Now on listen/ first.";
+  if (samples) msg += `\n\nSample paths:\n${samples}`;
+  return msg;
+}
+
 async function loadLibrary(mode) {
+  setScanning(true);
   try {
-    let books;
+    let result;
     if (mode === "directory" && typeof window.showDirectoryPicker === "function") {
-      books = await pickWithDirectoryPicker();
+      result = await pickWithDirectoryPicker();
     } else if (mode === "directory") {
-      books = await pickWithInput(els.fileInputDir);
+      result = await pickWithInput(els.fileInputDir);
     } else {
-      books = await pickWithInput(els.fileInputFiles);
+      result = await pickWithInput(els.fileInputFiles);
     }
 
+    const books = result.books || [];
+    const entries = result.entries || [];
+    const skipped = result.skipped || 0;
+
     if (!books.length) {
-      alert(
-        "No audiobooks found. Pick the Library folder (or 門羅-WhatIf / Immune) that contains a listen/ folder with mp3 / m4b / m4a files."
-      );
+      alert(emptyLibraryMessage(entries, skipped));
       return;
     }
 
     // Drop previous object URLs only after a successful scan.
     revokeAllUrls();
-    // Re-bind URLs for the new file set (previous revoke cleared the tracker).
     for (const book of books) {
       for (const ch of book.chapters) {
         ch.url = fileUrl(ch.file);
@@ -432,7 +509,12 @@ async function loadLibrary(mode) {
   } catch (err) {
     if (err?.name === "AbortError") return;
     console.error(err);
-    alert(err?.message || "Could not open the folder.");
+    alert(
+      (err?.message || "Could not open the folder.") +
+        "\n\nIf this is iCloud: Download Now on the Library/listen folders, then try again."
+    );
+  } finally {
+    setScanning(false);
   }
 }
 
