@@ -12,7 +12,10 @@ Share that URL. Each listener:
 2. In **Files**, taps **Download Now** on `listen/` so chapters are on-device.
 3. Opens the link → **Choose Library folder** (desktop Chrome) or **Choose audio files** (iPhone Safari) → play.
 
-Progress is stored in that browser’s localStorage. Reloading the page requires picking the folder/files again (browsers do not keep durable folder access the way the native app does).
+Progress and the shelf are stored in that browser. After the page or home-screen app restarts:
+
+- **Desktop Chrome/Edge** remembers the folder and reconnects on its own (or after one permission tap).
+- **iPhone/iPad** cannot keep folder access. Open a book and tap **Save to this device** to keep a copy in the browser's storage; saved books play after a restart without picking the folder again. Other books show **reconnect to play** until you pick the folder again.
 
 Source: [`docs/`](docs/) (GitHub Pages from `/docs` on `main`).
 

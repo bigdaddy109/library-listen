@@ -16,9 +16,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Library Listen" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" href="./icon.svg?v=13" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=13" />
-    <link rel="stylesheet" href="./styles.css?v=13" />
+    <link rel="icon" href="./icon.svg?v=14" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=14" />
+    <link rel="stylesheet" href="./styles.css?v=14" />
     <title>Library Listen</title>
   </head>
   <body>
@@ -27,7 +27,7 @@
         <div class="brand">
           <img
             class="brand-mark"
-            src="./icon.svg?v=13"
+            src="./icon.svg?v=14"
             width="36"
             height="36"
             alt="Library Listen"
@@ -80,6 +80,10 @@
               <p class="author" id="book-author"></p>
               <p class="subtitle" id="book-subtitle"></p>
             </div>
+          </div>
+          <div class="offline-row">
+            <button type="button" id="btn-offline" class="ghost">Save to this device</button>
+            <p class="hint" id="book-offline-status"></p>
           </div>
           <ul id="chapter-list" class="chapter-list"></ul>
         </section>
@@ -159,6 +163,6 @@
       hidden
     />
     <audio id="audio" preload="metadata" playsinline></audio>
-    <script type="module" src="./app.js?v=13"></script>
+    <script type="module" src="./app.js?v=14"></script>
   </body>
 </html>
