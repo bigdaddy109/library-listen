@@ -395,6 +395,25 @@ body.is-scanning .hint {
   color: var(--muted);
 }
 
+.offline-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.75rem;
+  margin: -0.25rem 0 1rem;
+}
+
+.offline-row .hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.book-card.unavailable .cover,
+.book-card.unavailable .title {
+  opacity: 0.6;
+}
+
 .chapter-list {
   list-style: none;
   margin: 0;

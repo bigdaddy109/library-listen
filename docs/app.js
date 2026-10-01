@@ -34,6 +34,9 @@ const PROGRESS_KEY = "librarylisten.progress.v1";
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
 const RATES = [1, 1.25, 1.5];
+const LIBRARY_KEY = "librarylisten.library.v1";
+const DB_NAME = "library-listen";
+const COVER_KEY = "__cover__";
 
 /** @type {{ books: any[], activeBookId: string|null, sort: string }} */
 const state = {
@@ -65,6 +68,192 @@ let resumeGuard = null;
 const SKIP_SECONDS = 30;
 let playbackRate = loadRate();
 const objectUrls = new Set();
+/** Books copied into IndexedDB: bookId -> Map(chapterId | COVER_KEY -> Blob) */
+const offlineIndex = new Map();
+/** @type {FileSystemDirectoryHandle | null} */
+let savedDirHandle = null;
+let savingBookId = null;
+
+let dbPromise = null;
+function openDb() {
+  if (!dbPromise) {
+    dbPromise = new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => {
+        req.result.createObjectStore("handles");
+        req.result.createObjectStore("offline");
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    dbPromise.catch(() => {
+      dbPromise = null;
+    });
+  }
+  return dbPromise;
+}
+
+async function idb(storeName, mode, fn) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, mode);
+    const req = fn(tx.objectStore(storeName));
+    tx.oncomplete = () => resolve(req?.result);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}
+
+async function loadOfflineIndex() {
+  offlineIndex.clear();
+  const rows = (await idb("offline", "readonly", (s) => s.getAll())) || [];
+  for (const row of rows) {
+    if (!offlineIndex.has(row.bookId)) offlineIndex.set(row.bookId, new Map());
+    offlineIndex.get(row.bookId).set(row.chapterId, row.blob);
+  }
+}
+
+function isBookOffline(book) {
+  const saved = offlineIndex.get(book.id);
+  return !!saved && book.chapters.every((ch) => saved.has(ch.id));
+}
+
+function isBookPlayable(book) {
+  return book.chapters.every((ch) => !!ch.file);
+}
+
+function saveLibrarySnapshot() {
+  const snapshot = state.books.map((b) => ({
+    id: b.id,
+    collectionId: b.collectionId,
+    collectionTitle: b.collectionTitle,
+    folder: b.folder,
+    title: b.title,
+    subtitle: b.subtitle,
+    author: b.author,
+    chapters: b.chapters.map((ch) => ({ id: ch.id, title: ch.title })),
+  }));
+  try {
+    localStorage.setItem(LIBRARY_KEY, JSON.stringify(snapshot));
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+/** Rebuild the shelf from the last scan; audio comes only from saved-on-device copies. */
+function restoreLibrarySnapshot() {
+  let snapshot = [];
+  try {
+    snapshot = JSON.parse(localStorage.getItem(LIBRARY_KEY) || "[]");
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(snapshot)) return [];
+  return snapshot.map((b) => {
+    const saved = offlineIndex.get(b.id);
+    return {
+      ...b,
+      coverFile: saved?.get(COVER_KEY) || null,
+      coverUrl: null,
+      chapters: b.chapters.map((ch, index) => ({
+        id: ch.id,
+        index,
+        title: ch.title,
+        file: saved?.get(ch.id) || null,
+        fromDevice: !!saved?.has(ch.id),
+        url: null,
+      })),
+    };
+  });
+}
+
+function attachUrls(books) {
+  revokeAllUrls();
+  for (const book of books) {
+    for (const ch of book.chapters) ch.url = ch.file ? fileUrl(ch.file) : null;
+    book.coverUrl = book.coverFile ? fileUrl(book.coverFile) : null;
+  }
+}
+
+async function saveBookOffline(book) {
+  if (savingBookId || !isBookPlayable(book)) return;
+  savingBookId = book.id;
+  try {
+    await navigator.storage?.persist?.().catch(() => false);
+    const items = book.chapters.map((ch) => [ch.id, ch.file]);
+    if (book.coverFile) items.push([COVER_KEY, book.coverFile]);
+    const saved = new Map();
+    for (let i = 0; i < items.length; i += 1) {
+      const [chapterId, blob] = items[i];
+      updateOfflineButton(book, `Saving ${i + 1}/${items.length}…`);
+      await idb("offline", "readwrite", (s) =>
+        s.put({ bookId: book.id, chapterId, blob }, [book.id, chapterId])
+      );
+      saved.set(chapterId, blob);
+    }
+    offlineIndex.set(book.id, saved);
+  } catch (err) {
+    console.error(err);
+    await removeBookOffline(book).catch(() => {});
+    alert(
+      err?.name === "QuotaExceededError"
+        ? "Not enough storage on this device to save the whole book."
+        : "Could not save this book on the device.\n\nIf this is iCloud: Download Now on listen/ first, then try again. Private Browsing cannot save books."
+    );
+  } finally {
+    savingBookId = null;
+    render();
+  }
+}
+
+async function removeBookOffline(book) {
+  await idb("offline", "readwrite", (s) =>
+    s.delete(IDBKeyRange.bound([book.id], [book.id, []]))
+  );
+  offlineIndex.delete(book.id);
+}
+
+function updateOfflineButton(book, busyLabel) {
+  const btn = document.getElementById("btn-offline");
+  const status = document.getElementById("book-offline-status");
+  if (!btn || !status) return;
+  const offline = isBookOffline(book);
+  btn.disabled = !!savingBookId || (!offline && !isBookPlayable(book));
+  if (busyLabel) {
+    btn.textContent = busyLabel;
+  } else if (offline) {
+    btn.textContent = "Remove from device";
+  } else {
+    btn.textContent = "Save to this device";
+  }
+  if (offline) {
+    status.textContent = "Saved on this device — plays without picking the folder again.";
+  } else if (!isBookPlayable(book)) {
+    status.textContent = "Reconnect the Library folder to play this book.";
+  } else {
+    const bytes = book.chapters.reduce((n, ch) => n + (ch.file?.size || 0), 0);
+    status.textContent = `Save a copy (${formatBytes(bytes)}) so it opens after the app restarts.`;
+  }
+}
+
+function formatBytes(bytes) {
+  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
+  return `${Math.max(1, Math.round(bytes / 1e6))} MB`;
+}
+
+async function rememberDirectory(handle) {
+  savedDirHandle = handle;
+  await idb("handles", "readwrite", (s) => s.put(handle, "library")).catch(() => {});
+}
+
+async function loadSavedDirectory() {
+  if (typeof window.showDirectoryPicker !== "function") return null;
+  try {
+    return (await idb("handles", "readonly", (s) => s.get("library"))) || null;
+  } catch {
+    return null;
+  }
+}
 
 function loadRate() {
   try {
@@ -387,10 +576,26 @@ function buildLibrary(entries) {
   });
 }
 
-async function pickWithDirectoryPicker() {
-  const handle = await window.showDirectoryPicker({ mode: "read" });
+async function scanDirectoryHandle(handle) {
   const { entries, skipped } = await walkDirectory(handle);
-  return { books: buildLibrary(entries), entries, skipped };
+  return { books: buildLibrary(entries), entries, skipped, handle };
+}
+
+async function pickWithDirectoryPicker() {
+  const handle = await window.showDirectoryPicker({ mode: "read", id: "library" });
+  return scanDirectoryHandle(handle);
+}
+
+/** Re-open the remembered folder; must run inside a user gesture unless already granted. */
+async function reopenSavedDirectory({ prompt }) {
+  const handle = savedDirHandle;
+  if (!handle?.queryPermission) return null;
+  let permission = await handle.queryPermission({ mode: "read" });
+  if (permission !== "granted" && prompt) {
+    permission = await handle.requestPermission({ mode: "read" });
+  }
+  if (permission !== "granted") return null;
+  return scanDirectoryHandle(handle);
 }
 
 function pickWithInput(input) {
@@ -469,45 +674,74 @@ function emptyLibraryMessage(entries, skipped) {
   return msg;
 }
 
+/**
+ * @param {"directory" | "files" | "reconnect" | "auto"} mode
+ *   reconnect: remembered folder (with permission prompt), else the picker.
+ *   auto: remembered folder only if permission is already granted; silent otherwise.
+ */
 async function loadLibrary(mode) {
+  const silent = mode === "auto";
   setScanning(true);
   try {
-    let result;
-    if (mode === "directory" && typeof window.showDirectoryPicker === "function") {
-      result = await pickWithDirectoryPicker();
-    } else if (mode === "directory") {
-      result = await pickWithInput(els.fileInputDir);
-    } else {
-      result = await pickWithInput(els.fileInputFiles);
+    let result = null;
+    if (!savedDirHandle && silent) return;
+    // No await before the file input on iOS, or Safari drops the tap gesture.
+    if (savedDirHandle && (mode === "reconnect" || mode === "auto")) {
+      result = await reopenSavedDirectory({ prompt: mode === "reconnect" }).catch(() => null);
+      if (!result && silent) return;
+    }
+    if (!result) {
+      if (mode === "files") {
+        result = await pickWithInput(els.fileInputFiles);
+      } else if (typeof window.showDirectoryPicker === "function") {
+        result = await pickWithDirectoryPicker();
+      } else {
+        result = await pickWithInput(els.fileInputDir);
+      }
     }
 
-    const books = result.books || [];
+    const scanned = result.books || [];
     const entries = result.entries || [];
     const skipped = result.skipped || 0;
 
-    if (!books.length) {
-      alert(emptyLibraryMessage(entries, skipped));
+    if (!scanned.length) {
+      if (!silent) alert(emptyLibraryMessage(entries, skipped));
       return;
     }
+    if (result.handle) await rememberDirectory(result.handle);
 
-    // Drop previous object URLs only after a successful scan.
-    revokeAllUrls();
-    for (const book of books) {
-      for (const ch of book.chapters) {
-        ch.url = fileUrl(ch.file);
+    // Books saved on this device stay on the shelf even if this pick did not include them.
+    const scannedIds = new Set(scanned.map((b) => b.id));
+    const kept = state.books.filter((b) => !scannedIds.has(b.id) && isBookOffline(b));
+    const books = [...scanned, ...kept];
+
+    const keepPlayback =
+      !!playback && !audio.paused && books.some((b) => b.id === playback.bookId);
+    if (!keepPlayback) {
+      audio.pause();
+      audio.removeAttribute("src");
+      playback = null;
+    }
+    const currentSrc = keepPlayback ? audio.src : null;
+    if (currentSrc) objectUrls.delete(currentSrc);
+    attachUrls(books);
+    if (currentSrc) {
+      const book = findBookIn(books, playback.bookId);
+      const ch = book?.chapters[playback.chapterIndex];
+      if (ch) {
+        objectUrls.delete(ch.url);
+        URL.revokeObjectURL(ch.url);
+        ch.url = currentSrc;
+        objectUrls.add(currentSrc);
       }
-      if (book.coverFile) book.coverUrl = fileUrl(book.coverFile);
-      else book.coverUrl = null;
     }
 
     state.books = books;
-    state.activeBookId = null;
-    audio.pause();
-    audio.removeAttribute("src");
-    playback = null;
+    if (!silent) state.activeBookId = null;
+    saveLibrarySnapshot();
     render();
   } catch (err) {
-    if (err?.name === "AbortError") return;
+    if (silent || err?.name === "AbortError") return;
     console.error(err);
     alert(
       (err?.message || "Could not open the folder.") +
@@ -643,7 +877,11 @@ function bookCard(book) {
     <div class="progress-track"><span></span></div>
   `;
   body.querySelector(".title").textContent = book.title;
-  body.querySelector(".meta").textContent = `${book.author} · ${book.chapters.length} chapters`;
+  let meta = `${book.author} · ${book.chapters.length} chapters`;
+  if (isBookOffline(book)) meta += " · on device";
+  else if (!isBookPlayable(book)) meta += " · reconnect to play";
+  body.querySelector(".meta").textContent = meta;
+  btn.classList.toggle("unavailable", !isBookPlayable(book));
   body.querySelector(".progress").textContent = line;
   const bar = body.querySelector(".progress-track > span");
   if (fraction == null) {
@@ -669,6 +907,7 @@ function renderBook() {
   document.getElementById("book-title").textContent = book.title;
   document.getElementById("book-author").textContent = book.author;
   document.getElementById("book-subtitle").textContent = book.subtitle || "";
+  updateOfflineButton(book);
 
   const progress = loadProgress()[book.id];
   els.chapterList.innerHTML = "";
@@ -712,8 +951,12 @@ function render() {
   updatePlayerBar();
 }
 
+function findBookIn(books, id) {
+  return books.find((b) => b.id === id);
+}
+
 function findBook(id) {
-  return state.books.find((b) => b.id === id);
+  return findBookIn(state.books, id);
 }
 
 function resumeTarget(seconds) {
@@ -877,6 +1120,10 @@ async function playChapter(bookId, chapterIndex, { resumeIfSame = false, forceSt
   if (!book) return;
   const chapter = book.chapters[chapterIndex];
   if (!chapter) return;
+  if (!chapter.url) {
+    loadLibrary("reconnect");
+    return;
+  }
 
   const same =
     playback?.bookId === bookId && playback.chapterIndex === chapterIndex;
@@ -1044,8 +1291,13 @@ function setupCapabilityHint() {
 function updateChangeButtonLabel() {
   const btn = document.getElementById("btn-change");
   if (!btn) return;
-  btn.textContent = "Change folder";
-  btn.title = "Pick a different Library folder";
+  if (state.books.some((b) => !isBookPlayable(b))) {
+    btn.textContent = "Reconnect Library";
+    btn.title = "Pick the Library folder again to play every book";
+  } else {
+    btn.textContent = "Change folder";
+    btn.title = "Pick a different Library folder";
+  }
 }
 
 function bindMediaSession() {
@@ -1082,8 +1334,28 @@ function bind() {
 
   // Always try a real folder chooser first (showDirectoryPicker or webkitdirectory).
   // Do not special-case iPhone/iPad — folder pick works there via Files.
-  document.getElementById("btn-change").addEventListener("click", pickDirectory);
+  document.getElementById("btn-change").addEventListener("click", () => {
+    const needsReconnect = state.books.some((b) => !isBookPlayable(b));
+    loadLibrary(needsReconnect ? "reconnect" : "directory");
+  });
   document.getElementById("btn-pick-main").addEventListener("click", pickDirectory);
+  document.getElementById("btn-offline").addEventListener("click", async () => {
+    const book = findBook(state.activeBookId);
+    if (!book || savingBookId) return;
+    if (isBookOffline(book)) {
+      if (!confirm(`Remove the saved copy of “${book.title}” from this device?`)) return;
+      await removeBookOffline(book).catch(() => {});
+      for (const ch of book.chapters) {
+        if (!ch.fromDevice) continue;
+        ch.file = null;
+        ch.url = null;
+        ch.fromDevice = false;
+      }
+      render();
+      return;
+    }
+    await saveBookOffline(book);
+  });
   document.getElementById("btn-pick-files").addEventListener("click", pickFiles);
   document.getElementById("btn-back").addEventListener("click", () => {
     state.activeBookId = null;
@@ -1182,8 +1454,22 @@ function registerSW() {
   navigator.serviceWorker.register("./sw.js").catch(() => {});
 }
 
+async function restoreSession() {
+  try {
+    await loadOfflineIndex();
+  } catch {
+    /* IndexedDB unavailable (private mode) */
+  }
+  state.books = restoreLibrarySnapshot();
+  attachUrls(state.books);
+  render();
+  savedDirHandle = await loadSavedDirectory();
+  if (savedDirHandle) await loadLibrary("auto");
+}
+
 setupCapabilityHint();
 document.getElementById("btn-sort").textContent = `Sort: ${state.sort}`;
 bind();
 render();
 registerSW();
+restoreSession();
