@@ -376,20 +376,69 @@ function loadProgress() {
   }
 }
 
+function chapterProgress(bookId, chapterId) {
+  const book = loadProgress()[bookId];
+  if (!book || !chapterId) return null;
+  const saved = book.chapters?.[chapterId];
+  if (saved && Number.isFinite(saved.positionSeconds)) return saved;
+  if (book.chapterId === chapterId && Number.isFinite(book.positionSeconds)) {
+    return {
+      positionSeconds: book.positionSeconds,
+      chapterDurationSeconds: book.chapterDurationSeconds ?? null,
+      updatedAt: book.updatedAt,
+    };
+  }
+  return null;
+}
+
+function resumeSeconds(saved) {
+  if (!saved || !Number.isFinite(saved.positionSeconds)) return 0;
+  const pos = saved.positionSeconds;
+  const dur = saved.chapterDurationSeconds;
+  if (dur > 0 && pos >= dur - 2) return 0;
+  return pos;
+}
+
 function saveProgress(bookId, chapterId, positionSeconds, chapterDurationSeconds) {
   const all = loadProgress();
-  const previous = all[bookId];
+  const previous = all[bookId] || {};
+  const chapters = { ...(previous.chapters || {}) };
+  // Keep the old single-slot chapter when switching, so Part 3 is not wiped by Part 2.
+  if (
+    previous.chapterId &&
+    previous.chapterId !== chapterId &&
+    !chapters[previous.chapterId] &&
+    Number.isFinite(previous.positionSeconds)
+  ) {
+    chapters[previous.chapterId] = {
+      positionSeconds: previous.positionSeconds,
+      chapterDurationSeconds: previous.chapterDurationSeconds ?? null,
+      updatedAt: previous.updatedAt || new Date().toISOString(),
+    };
+  }
+  const prevChapter = chapters[chapterId] || {};
   let duration = null;
   if (Number.isFinite(chapterDurationSeconds) && chapterDurationSeconds > 0) {
     duration = chapterDurationSeconds;
-  } else if (previous?.chapterId === chapterId) {
-    duration = previous.chapterDurationSeconds ?? null;
+  } else {
+    duration =
+      prevChapter.chapterDurationSeconds ??
+      (previous.chapterId === chapterId ? previous.chapterDurationSeconds : null) ??
+      null;
   }
+  const pos = Math.round(Math.max(0, positionSeconds) * 100) / 100;
+  const now = new Date().toISOString();
+  chapters[chapterId] = {
+    positionSeconds: pos,
+    chapterDurationSeconds: duration,
+    updatedAt: now,
+  };
   all[bookId] = {
     chapterId,
-    positionSeconds: Math.round(Math.max(0, positionSeconds) * 100) / 100,
+    positionSeconds: pos,
     chapterDurationSeconds: duration,
-    updatedAt: new Date().toISOString(),
+    updatedAt: now,
+    chapters,
   };
   localStorage.setItem(PROGRESS_KEY, JSON.stringify(all));
 }
@@ -909,7 +958,6 @@ function renderBook() {
   document.getElementById("book-subtitle").textContent = book.subtitle || "";
   updateOfflineButton(book);
 
-  const progress = loadProgress()[book.id];
   els.chapterList.innerHTML = "";
   book.chapters.forEach((ch, i) => {
     const li = document.createElement("li");
@@ -924,11 +972,10 @@ function renderBook() {
       <span class="ch-time"></span>
     `;
     btn.querySelector(".ch-title").textContent = ch.title;
-    const saved =
-      progress?.chapterId === ch.id
-        ? formatClock(progress.positionSeconds)
-        : "";
-    btn.querySelector(".ch-time").textContent = saved;
+    const saved = chapterProgress(book.id, ch.id);
+    const shown = saved?.positionSeconds || 0;
+    btn.querySelector(".ch-time").textContent =
+      shown > 0.5 ? formatClock(shown) : "";
     btn.addEventListener("click", () => playChapter(book.id, i, { resumeIfSame: true }));
     li.appendChild(btn);
     els.chapterList.appendChild(li);
@@ -1134,16 +1181,15 @@ async function playChapter(bookId, chapterIndex, { resumeIfSame = false, forceSt
     return;
   }
 
+  if (playback) persistCurrent();
+
   const token = ++playToken;
   playback = { bookId, chapterIndex };
   detachChapterMeta?.();
 
-  const progress = loadProgress()[bookId];
-  const shouldResume =
-    !forceStart &&
-    progress?.chapterId === chapter.id &&
-    Number.isFinite(progress.positionSeconds);
-  const resumeAt = shouldResume ? progress.positionSeconds : 0;
+  const saved = chapterProgress(bookId, chapter.id);
+  const resumeAt = forceStart ? 0 : resumeSeconds(saved);
+  const shouldResume = resumeAt > 0.5;
 
   const applyPosition = () => {
     if (token !== playToken) return;
@@ -1218,6 +1264,21 @@ function persistCurrent() {
     audio.currentTime || 0,
     Number.isFinite(audio.duration) ? audio.duration : null
   );
+  updateChapterTimes();
+}
+
+function updateChapterTimes() {
+  if (!state.activeBookId) return;
+  const book = findBook(state.activeBookId);
+  if (!book) return;
+  const buttons = els.chapterList.querySelectorAll("button");
+  book.chapters.forEach((ch, i) => {
+    const el = buttons[i]?.querySelector(".ch-time");
+    if (!el) return;
+    const saved = chapterProgress(book.id, ch.id);
+    const shown = saved?.positionSeconds || 0;
+    el.textContent = shown > 0.5 ? formatClock(shown) : "";
+  });
 }
 
 function writeSeekBar(pos, dur) {
