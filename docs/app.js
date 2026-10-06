@@ -1515,17 +1515,32 @@ function registerSW() {
   navigator.serviceWorker.register("./sw.js").catch(() => {});
 }
 
+function showPlayableBooks(books) {
+  const playable = books.filter(isBookPlayable);
+  attachUrls(playable);
+  state.books = playable;
+  state.activeBookId = null;
+  render();
+  return playable.length > 0;
+}
+
 async function restoreSession() {
   try {
     await loadOfflineIndex();
   } catch {
     /* IndexedDB unavailable (private mode) */
   }
-  state.books = restoreLibrarySnapshot();
-  attachUrls(state.books);
-  render();
   savedDirHandle = await loadSavedDirectory();
-  if (savedDirHandle) await loadLibrary("auto");
+  if (savedDirHandle) {
+    await loadLibrary("auto");
+    if (state.books.some(isBookPlayable)) return;
+  }
+  const restored = restoreLibrarySnapshot();
+  if (showPlayableBooks(restored)) return;
+  if (restored.length && els.capabilityHint) {
+    els.capabilityHint.textContent =
+      "Pick the Library folder again to keep listening. Your progress is still here.";
+  }
 }
 
 setupCapabilityHint();

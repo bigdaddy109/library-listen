@@ -15,7 +15,7 @@ Share that URL. Each listener:
 Progress and the shelf are stored in that browser. After the page or home-screen app restarts:
 
 - **Desktop Chrome/Edge** remembers the folder and reconnects on its own (or after one permission tap).
-- **iPhone/iPad** cannot keep folder access. Open a book and tap **Save to this device** to keep a copy in the browser's storage; saved books play after a restart without picking the folder again. Other books show **reconnect to play** until you pick the folder again.
+- **iPhone/iPad** cannot keep folder access. If no book was saved on the device, the next open goes back to **Choose Library folder** (progress is kept). Open a book and tap **Save to this device** to keep playing after a restart without picking the folder again.
 
 Source: [`docs/`](docs/) (GitHub Pages from `/docs` on `main`).
 
