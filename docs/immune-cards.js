@@ -1,22 +1,22 @@
 /** Original notes for the Immune audiobook. Not the book text. */
 export const IMMUNE_CARDS = [
   {
+    file: "skin.jpg",
+    title: "Skin",
+    alt: "Stacked layers of skin, tougher cells on the outside",
+    body: "Your skin is a wall of many layers. New cells form underneath, toughen, and die into an outer armor that keeps shedding. Most bacteria never get past it. A cut is a hole in that wall.",
+  },
+  {
     file: "bacteria.jpg",
     title: "Bacteria",
     alt: "A single capsule-shaped bacterium",
     body: "A bacterium is a complete tiny cell that can reproduce on its own. Not all of them are enemies. Many live on your skin and in your gut and belong there. The immune system looks for ones that are not you and that have broken in.",
   },
   {
-    file: "virus.jpg",
-    title: "Virus",
-    alt: "A geometric virus particle with spikes",
-    body: "A virus is not a cell. It is closer to a package of instructions. It enters one of your cells and uses that cell's machinery to make copies. The body has to catch free virus particles and also recognize cells that have already been taken over.",
-  },
-  {
-    file: "macrophage.jpg",
-    title: "Macrophage",
-    alt: "A large macrophage surrounding a tiny speck",
-    body: "A large cell of the innate immune system. It swallows debris and bacteria, then holds up a fragment for other immune cells. That is how it says: this is the shape to look for next.",
+    file: "inflammation.jpg",
+    title: "Inflammation",
+    alt: "Wider vessels and cells moving toward a small gap",
+    body: "Heat, swelling, redness, and pain. Blood vessels open so fluid and immune cells can reach the trouble. That is useful while the fight is short. It is harmful if it never turns off.",
   },
   {
     file: "neutrophil.jpg",
@@ -25,10 +25,40 @@ export const IMMUNE_CARDS = [
     body: "One of the first cells to arrive in large numbers at a wound, and it does not live long. It swallows invaders and can release chemicals. Part of why a cut gets hot and swollen is these cells working at the scene.",
   },
   {
+    file: "macrophage.jpg",
+    title: "Macrophage",
+    alt: "A large macrophage surrounding a tiny speck",
+    body: "A large eater of the innate immune system. It swallows debris and bacteria, then holds up a fragment for other immune cells. That is how it says: this is the shape to look for next.",
+  },
+  {
+    file: "complement.jpg",
+    title: "Complement",
+    alt: "Protein rings forming a pore on a bacterium",
+    body: "A chain of proteins already waiting in your blood. When they notice a bacterium, they stick to it, call more help, and can punch a hole in its surface. No single cell has to decide to do this.",
+  },
+  {
+    file: "cytokines.jpg",
+    title: "Cytokines",
+    alt: "A cell leaving a trail of signals for another cell",
+    body: "Cells cannot see a wound from far away. They leave a chemical trail and call with small proteins. Other cells follow that trail to the right place.",
+  },
+  {
     file: "dendritic.jpg",
     title: "Dendritic cell",
     alt: "A dendritic cell with long branching arms",
     body: "The messenger. It collects a sample where the trouble is, carries it to a lymph node, and shows it to T cells. Without this step, the rest of the immune system often does not know it should act.",
+  },
+  {
+    file: "lymph-node.jpg",
+    title: "Lymph node",
+    alt: "A bean-shaped lymph node with immune cells inside",
+    body: "A meeting town on the lymph vessels. Dendritic cells bring samples here. T cells and B cells that recognize the sample get their orders. Most of the planning does not happen at the cut itself.",
+  },
+  {
+    file: "thymus.jpg",
+    title: "Thymus",
+    alt: "A two-lobed thymus with cells entering and leaving",
+    body: "T cells are trained in the thymus, a small organ in your chest. Cells that would attack your own body are removed. The ones that leave are supposed to attack strangers, not you.",
   },
   {
     file: "t-cell.jpg",
@@ -41,6 +71,36 @@ export const IMMUNE_CARDS = [
     title: "B cell and antibody",
     alt: "A B cell releasing Y-shaped antibodies",
     body: "B cells release antibodies. An antibody is a tag aimed at one particular shape. It sticks to an invader so the invader moves less freely and is easier to swallow.",
+  },
+  {
+    file: "mucosa.jpg",
+    title: "Mucosa",
+    alt: "A folded moist surface under a thin mucus layer",
+    body: "Your mouth, gut, and lungs are not covered by dry skin. They are wet surfaces that have to let food and air in. Mucus, antibodies, and immune cells guard those openings.",
+  },
+  {
+    file: "virus.jpg",
+    title: "Virus",
+    alt: "A geometric virus particle with spikes",
+    body: "A virus is not a cell. It is closer to a package of instructions. It enters one of your cells and uses that cell's machinery to make copies. The body has to catch free virus particles and also recognize cells that have already been taken over.",
+  },
+  {
+    file: "interferon.jpg",
+    title: "Interferon",
+    alt: "A cell sending warning signals to its neighbors",
+    body: "When a cell realizes a virus is inside it, it releases warning proteins. Neighboring cells hear that warning and make themselves harder for the virus to use.",
+  },
+  {
+    file: "natural-killer.jpg",
+    title: "Natural killer cell",
+    alt: "A natural killer cell facing a cell that looks wrong",
+    body: "These cells look for cells that are hiding something. An infected cell often stops showing the normal signal that says it is healthy. A natural killer can destroy it without waiting for a T cell to learn that virus.",
+  },
+  {
+    file: "mast-cell.jpg",
+    title: "Mast cell",
+    alt: "A mast cell releasing a few granules",
+    body: "Mast cells sit in the tissues, packed with strong chemicals. They can help against parasites. In an allergy they release those chemicals against something harmless, which is why you itch, swell, or wheeze.",
   },
   {
     file: "memory.jpg",
