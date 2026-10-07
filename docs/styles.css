@@ -458,6 +458,67 @@ body.is-scanning .hint {
   font-variant-numeric: tabular-nums;
 }
 
+.book-tabs {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0 0 0.85rem;
+}
+
+.book-tabs button[aria-pressed="true"] {
+  border-color: rgba(232, 173, 71, 0.55);
+  background: rgba(232, 173, 71, 0.12);
+}
+
+.concept-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.concept-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.concept-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: #f3efe4;
+  color: #241c14;
+}
+
+.concept-card img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  object-fit: cover;
+  background: #efe6d4;
+}
+
+.concept-card h3,
+.concept-card p {
+  margin: 0.35rem 0.95rem;
+}
+
+.concept-card h3 {
+  margin-top: 0.85rem;
+  font-size: 1.2rem;
+}
+
+.concept-card .concept-en {
+  color: #6d5848;
+  font-size: 0.86rem;
+  letter-spacing: 0.02em;
+}
+
+.concept-card p:last-child {
+  margin-bottom: 0.95rem;
+  line-height: 1.5;
+}
+
 .player-bar {
   position: fixed;
   left: 0;

@@ -16,9 +16,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Library Listen" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" href="./icon.svg?v=16" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=16" />
-    <link rel="stylesheet" href="./styles.css?v=16" />
+    <link rel="icon" href="./icon.svg?v=17" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=17" />
+    <link rel="stylesheet" href="./styles.css?v=17" />
     <title>Library Listen</title>
   </head>
   <body>
@@ -27,7 +27,7 @@
         <div class="brand">
           <img
             class="brand-mark"
-            src="./icon.svg?v=16"
+            src="./icon.svg?v=17"
             width="36"
             height="36"
             alt="Library Listen"
@@ -85,7 +85,12 @@
             <button type="button" id="btn-offline" class="ghost">Save to this device</button>
             <p class="hint" id="book-offline-status"></p>
           </div>
+          <div id="book-tabs" class="book-tabs hidden">
+            <button type="button" id="tab-audio" aria-pressed="true">Audio</button>
+            <button type="button" id="tab-concepts" aria-pressed="false">Concepts</button>
+          </div>
           <ul id="chapter-list" class="chapter-list"></ul>
+          <div id="concept-list" class="concept-list hidden"></div>
         </section>
       </main>
 
@@ -163,6 +168,6 @@
       hidden
     />
     <audio id="audio" preload="metadata" playsinline></audio>
-    <script type="module" src="./app.js?v=16"></script>
+    <script type="module" src="./app.js?v=17"></script>
   </body>
 </html>
