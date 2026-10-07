@@ -1,4 +1,4 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=17";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=18";
 
 const AUDIO_EXT = new Set(["mp3", "m4a", "m4b", "aac"]);
 const COVER_EXT = new Set(["jpg", "jpeg", "png", "webp"]);
@@ -962,7 +962,7 @@ function renderConceptCards() {
   const note = document.createElement("p");
   note.className = "concept-note";
   note.textContent =
-    "配合聽 Immune 的原創筆記，講的是免疫學常識。不是書的原文，也不是書裡的插圖。音檔照常播放。";
+    "Original notes to read beside the Immune audiobook. These are common immune-system ideas, not the book’s text and not its illustrations. Audio keeps playing.";
   els.conceptList.appendChild(note);
   for (const card of IMMUNE_CARDS) {
     const article = document.createElement("article");
@@ -974,12 +974,9 @@ function renderConceptCards() {
     img.height = 800;
     const heading = document.createElement("h3");
     heading.textContent = card.title;
-    const en = document.createElement("p");
-    en.className = "concept-en";
-    en.textContent = card.en;
-    const zh = document.createElement("p");
-    zh.textContent = card.zh;
-    article.append(img, heading, en, zh);
+    const body = document.createElement("p");
+    body.textContent = card.body;
+    article.append(img, heading, body);
     els.conceptList.appendChild(article);
   }
 }
