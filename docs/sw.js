@@ -1,13 +1,22 @@
 /* Shell-only cache. Audiobook files are never cached here. */
-const CACHE = "library-listen-shell-v16";
+const CACHE = "library-listen-shell-v17";
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=16",
-  "./app.js?v=16",
+  "./styles.css?v=17",
+  "./app.js?v=17",
+  "./immune-cards.js?v=17",
   "./manifest.webmanifest",
-  "./icon.svg?v=16",
-  "./apple-touch-icon.png?v=16",
+  "./icon.svg?v=17",
+  "./apple-touch-icon.png?v=17",
+  "./concepts/immune/bacteria.jpg",
+  "./concepts/immune/virus.jpg",
+  "./concepts/immune/macrophage.jpg",
+  "./concepts/immune/neutrophil.jpg",
+  "./concepts/immune/dendritic.jpg",
+  "./concepts/immune/t-cell.jpg",
+  "./concepts/immune/b-cell.jpg",
+  "./concepts/immune/memory.jpg",
 ];
 
 self.addEventListener("install", (event) => {

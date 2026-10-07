@@ -1,3 +1,5 @@
+import { IMMUNE_CARDS } from "./immune-cards.js?v=17";
+
 const AUDIO_EXT = new Set(["mp3", "m4a", "m4b", "aac"]);
 const COVER_EXT = new Set(["jpg", "jpeg", "png", "webp"]);
 const SKIP_FOLDERS = new Set(["ebooks", "_source"]);
@@ -42,6 +44,7 @@ const COVER_KEY = "__cover__";
 const state = {
   books: [],
   activeBookId: null,
+  bookPane: "audio",
   sort: localStorage.getItem(SORT_KEY) || "collection",
 };
 
@@ -51,6 +54,7 @@ const els = {
   shelf: document.getElementById("shelf"),
   book: document.getElementById("book"),
   chapterList: document.getElementById("chapter-list"),
+  conceptList: document.getElementById("concept-list"),
   playerBar: document.getElementById("player-bar"),
   capabilityHint: document.getElementById("capability-hint"),
   fileInputDir: document.getElementById("file-input-dir"),
@@ -944,8 +948,40 @@ function bookCard(book) {
 }
 
 function openBook(bookId) {
+  if (state.activeBookId !== bookId) state.bookPane = "audio";
   state.activeBookId = bookId;
   render();
+}
+
+function isImmuneBook(book) {
+  return book?.collectionId === "immune" || String(book?.id || "").startsWith("immune/");
+}
+
+function renderConceptCards() {
+  if (els.conceptList.childElementCount) return;
+  const note = document.createElement("p");
+  note.className = "concept-note";
+  note.textContent =
+    "配合聽 Immune 的原創筆記，講的是免疫學常識。不是書的原文，也不是書裡的插圖。音檔照常播放。";
+  els.conceptList.appendChild(note);
+  for (const card of IMMUNE_CARDS) {
+    const article = document.createElement("article");
+    article.className = "concept-card";
+    const img = document.createElement("img");
+    img.src = `./concepts/immune/${card.file}`;
+    img.alt = card.alt;
+    img.width = 800;
+    img.height = 800;
+    const heading = document.createElement("h3");
+    heading.textContent = card.title;
+    const en = document.createElement("p");
+    en.className = "concept-en";
+    en.textContent = card.en;
+    const zh = document.createElement("p");
+    zh.textContent = card.zh;
+    article.append(img, heading, en, zh);
+    els.conceptList.appendChild(article);
+  }
 }
 
 function renderBook() {
@@ -980,6 +1016,15 @@ function renderBook() {
     li.appendChild(btn);
     els.chapterList.appendChild(li);
   });
+
+  const concepts = isImmuneBook(book);
+  const showConcepts = concepts && state.bookPane === "concepts";
+  document.getElementById("book-tabs").classList.toggle("hidden", !concepts);
+  document.getElementById("tab-audio").setAttribute("aria-pressed", showConcepts ? "false" : "true");
+  document.getElementById("tab-concepts").setAttribute("aria-pressed", showConcepts ? "true" : "false");
+  els.chapterList.classList.toggle("hidden", showConcepts);
+  els.conceptList.classList.toggle("hidden", !showConcepts);
+  if (showConcepts) renderConceptCards();
 }
 
 function render() {
@@ -1421,6 +1466,14 @@ function bind() {
   document.getElementById("btn-back").addEventListener("click", () => {
     state.activeBookId = null;
     render();
+  });
+  document.getElementById("tab-audio").addEventListener("click", () => {
+    state.bookPane = "audio";
+    renderBook();
+  });
+  document.getElementById("tab-concepts").addEventListener("click", () => {
+    state.bookPane = "concepts";
+    renderBook();
   });
   document.getElementById("btn-sort").addEventListener("click", cycleSort);
   document.getElementById("btn-play").addEventListener("click", async () => {
