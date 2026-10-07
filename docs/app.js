@@ -1,4 +1,4 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=18";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=19";
 
 const AUDIO_EXT = new Set(["mp3", "m4a", "m4b", "aac"]);
 const COVER_EXT = new Set(["jpg", "jpeg", "png", "webp"]);
@@ -962,7 +962,7 @@ function renderConceptCards() {
   const note = document.createElement("p");
   note.className = "concept-note";
   note.textContent =
-    "Original notes to read beside the Immune audiobook. These are common immune-system ideas, not the book’s text and not its illustrations. Audio keeps playing.";
+    "Original notes for the main cast, in listening order. Not the book's text, and not its illustrations. Audio keeps playing.";
   els.conceptList.appendChild(note);
   for (const card of IMMUNE_CARDS) {
     const article = document.createElement("article");
