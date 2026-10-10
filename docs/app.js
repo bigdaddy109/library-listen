@@ -1,4 +1,4 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=19";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=20";
 
 const AUDIO_EXT = new Set(["mp3", "m4a", "m4b", "aac"]);
 const COVER_EXT = new Set(["jpg", "jpeg", "png", "webp"]);
@@ -39,6 +39,7 @@ const RATES = [1, 1.25, 1.5];
 const LIBRARY_KEY = "librarylisten.library.v1";
 const DB_NAME = "library-listen";
 const COVER_KEY = "__cover__";
+const SLEEP_MINUTES = [0, 15, 30, 45, 60];
 
 /** @type {{ books: any[], activeBookId: string|null, sort: string }} */
 const state = {
@@ -77,6 +78,14 @@ const offlineIndex = new Map();
 /** @type {FileSystemDirectoryHandle | null} */
 let savedDirHandle = null;
 let savingBookId = null;
+/** @type {number | null} epoch ms when sleep timer should pause playback */
+let sleepUntil = null;
+let sleepTick = null;
+/** Offer Save-to-device banner after a fresh folder pick */
+let offerSaveBanner = false;
+/** bookIds already asked to save this session */
+const savePrompted = new Set();
+let toastTimer = null;
 
 let dbPromise = null;
 function openDb() {
@@ -790,7 +799,10 @@ async function loadLibrary(mode) {
     }
 
     state.books = books;
-    if (!silent) state.activeBookId = null;
+    if (!silent) {
+      state.activeBookId = null;
+      offerSaveBanner = books.some((b) => isBookPlayable(b) && !isBookOffline(b));
+    }
     saveLibrarySnapshot();
     render();
   } catch (err) {
@@ -892,10 +904,118 @@ function setCover(el, book) {
   el.appendChild(mark);
 }
 
+function mostRecentResume() {
+  const progress = loadProgress();
+  let best = null;
+  for (const book of state.books) {
+    if (!isBookPlayable(book)) continue;
+    const p = progress[book.id];
+    if (!p?.updatedAt || !p.chapterId) continue;
+    const chapterIndex = book.chapters.findIndex((c) => c.id === p.chapterId);
+    if (chapterIndex < 0) continue;
+    const saved = chapterProgress(book.id, p.chapterId);
+    const pos = Number.isFinite(saved?.positionSeconds)
+      ? saved.positionSeconds
+      : p.positionSeconds || 0;
+    if (pos < 0.5 && chapterIndex === 0) continue;
+    if (!best || p.updatedAt > best.updatedAt) {
+      best = {
+        book,
+        chapterIndex,
+        chapter: book.chapters[chapterIndex],
+        pos,
+        updatedAt: p.updatedAt,
+      };
+    }
+  }
+  return best;
+}
+
+function showToast(message, { ms = 2600 } = {}) {
+  const el = document.getElementById("toast");
+  if (!el) return;
+  el.textContent = message;
+  el.classList.remove("hidden");
+  window.clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => {
+    el.classList.add("hidden");
+  }, ms);
+}
+
+function continueCard(resume) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "continue-card";
+  const cover = document.createElement("div");
+  cover.className = "cover";
+  setCover(cover, resume.book);
+  const body = document.createElement("div");
+  body.innerHTML = `
+    <p class="continue-label">Continue listening</p>
+    <p class="title"></p>
+    <p class="progress"></p>
+  `;
+  body.querySelector(".title").textContent = resume.book.title;
+  body.querySelector(".progress").textContent =
+    `${resume.chapter.title} · ${formatClock(resume.pos)}` +
+    (resume.updatedAt ? ` · ${relativeTime(resume.updatedAt)}` : "");
+  btn.append(cover, body);
+  btn.addEventListener("click", () => {
+    openBook(resume.book.id);
+    playChapter(resume.book.id, resume.chapterIndex, { resumeIfSame: true });
+  });
+  return btn;
+}
+
+function saveBanner(targetBook) {
+  const row = document.createElement("div");
+  row.className = "save-banner";
+  const text = document.createElement("p");
+  text.textContent = targetBook
+    ? `Save “${targetBook.title}” on this phone so it opens after a restart?`
+    : "Save books on this phone so they open after a restart?";
+  const actions = document.createElement("div");
+  actions.className = "cta-row";
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "button";
+  saveBtn.className = "primary";
+  saveBtn.textContent = targetBook ? "Save this book" : "Save";
+  const dismiss = document.createElement("button");
+  dismiss.type = "button";
+  dismiss.className = "ghost";
+  dismiss.textContent = "Not now";
+  saveBtn.addEventListener("click", async () => {
+    const book = targetBook || mostRecentResume()?.book || state.books.find(isBookPlayable);
+    if (!book) return;
+    offerSaveBanner = false;
+    openBook(book.id);
+    await saveBookOffline(book);
+    showToast(`Saved “${book.title}” on this device`);
+  });
+  dismiss.addEventListener("click", () => {
+    offerSaveBanner = false;
+    renderShelf();
+  });
+  actions.append(saveBtn, dismiss);
+  row.append(text, actions);
+  return row;
+}
+
 function renderShelf() {
   const books = sortedBooks();
   els.shelf.innerHTML = "";
   if (!books.length) return;
+
+  const resume = mostRecentResume();
+  if (resume) els.shelf.appendChild(continueCard(resume));
+
+  if (offerSaveBanner) {
+    const unsaved =
+      (resume && !isBookOffline(resume.book) && resume.book) ||
+      state.books.find((b) => isBookPlayable(b) && !isBookOffline(b));
+    if (unsaved) els.shelf.appendChild(saveBanner(unsaved));
+    else offerSaveBanner = false;
+  }
 
   if (state.sort === "collection") {
     let last = null;
@@ -1288,6 +1408,83 @@ async function playChapter(bookId, chapterIndex, { resumeIfSame = false, forceSt
   updatePlayerBar();
   updateMediaSession();
   if (state.activeBookId === bookId) renderBook();
+  maybeOfferSaveWhileListening(book);
+}
+
+function maybeOfferSaveWhileListening(book) {
+  if (!book || isBookOffline(book) || !isBookPlayable(book)) return;
+  if (savePrompted.has(book.id) || savingBookId) return;
+  savePrompted.add(book.id);
+  window.setTimeout(() => {
+    if (playback?.bookId !== book.id || isBookOffline(book) || savingBookId) return;
+    if (!confirm(`Save “${book.title}” on this phone so it still plays after a restart?`)) return;
+    saveBookOffline(book).then(() => {
+      showToast(`Saved “${book.title}” on this device`);
+    });
+  }, 12000);
+}
+
+function clearSleepTimer() {
+  sleepUntil = null;
+  if (sleepTick) {
+    window.clearInterval(sleepTick);
+    sleepTick = null;
+  }
+  updateSleepButton();
+}
+
+function remainingSleepLabel() {
+  if (!sleepUntil) return "Sleep";
+  const left = Math.max(0, sleepUntil - Date.now());
+  const mins = Math.ceil(left / 60000);
+  if (mins <= 0) return "Sleep";
+  return `${mins}m`;
+}
+
+function updateSleepButton() {
+  const btn = document.getElementById("btn-sleep");
+  if (!btn) return;
+  const label = remainingSleepLabel();
+  btn.textContent = label;
+  btn.classList.toggle("is-on", !!sleepUntil);
+  btn.setAttribute(
+    "aria-label",
+    sleepUntil ? `Sleep timer ${label} left` : "Sleep timer off"
+  );
+}
+
+function cycleSleepTimer() {
+  const remaining = sleepUntil ? Math.ceil((sleepUntil - Date.now()) / 60000) : 0;
+  let nearest = 0;
+  for (let i = 0; i < SLEEP_MINUTES.length; i += 1) {
+    if (SLEEP_MINUTES[i] >= remaining) {
+      nearest = i;
+      break;
+    }
+    nearest = i;
+  }
+  const next = SLEEP_MINUTES[(nearest + 1) % SLEEP_MINUTES.length];
+  if (!next) {
+    clearSleepTimer();
+    showToast("Sleep timer off");
+    return;
+  }
+  sleepUntil = Date.now() + next * 60 * 1000;
+  if (sleepTick) window.clearInterval(sleepTick);
+  sleepTick = window.setInterval(() => {
+    if (!sleepUntil) return;
+    if (Date.now() >= sleepUntil) {
+      clearSleepTimer();
+      audio.pause();
+      persistCurrent();
+      showToast("Sleep timer — paused");
+      updatePlayerBar();
+      return;
+    }
+    updateSleepButton();
+  }, 15000);
+  updateSleepButton();
+  showToast(`Sleep in ${next} minutes`);
 }
 
 function persistCurrent() {
@@ -1363,6 +1560,7 @@ function updatePlayerBar() {
   document.getElementById("btn-prev").disabled = playback.chapterIndex <= 0 && atStart;
   document.getElementById("btn-next").disabled =
     playback.chapterIndex >= book.chapters.length - 1;
+  updateSleepButton();
   updatePositionState();
 }
 
@@ -1494,6 +1692,7 @@ function bind() {
   document.getElementById("btn-back30").addEventListener("click", () => seekBy(-SKIP_SECONDS));
   document.getElementById("btn-fwd30").addEventListener("click", () => seekBy(SKIP_SECONDS));
   document.getElementById("btn-rate").addEventListener("click", () => cycleRate());
+  document.getElementById("btn-sleep").addEventListener("click", () => cycleSleepTimer());
 
   const seek = document.getElementById("player-seek");
   seek.addEventListener("pointerdown", () => {
@@ -1519,6 +1718,13 @@ function bind() {
   audio.addEventListener("timeupdate", () => {
     maybeFixResumeSnap();
     updatePlayerBar();
+    if (sleepUntil && Date.now() >= sleepUntil) {
+      clearSleepTimer();
+      audio.pause();
+      persistCurrent();
+      showToast("Sleep timer — paused");
+      return;
+    }
     if (!audio.paused) {
       // throttle-ish via seconds bucket
       const t = Math.floor(audio.currentTime);
@@ -1546,8 +1752,11 @@ function bind() {
     if (!book) return;
     const next = playback.chapterIndex + 1;
     if (next < book.chapters.length) {
+      const nextChapter = book.chapters[next];
+      showToast(`Next: ${nextChapter.title}`);
       playChapter(book.id, next, { forceStart: true });
     } else {
+      showToast("End of book");
       updatePlayerBar();
     }
   });
