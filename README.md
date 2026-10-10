@@ -15,7 +15,10 @@ Share that URL. Each listener:
 Progress and the shelf are stored in that browser. After the page or home-screen app restarts:
 
 - **Desktop Chrome/Edge** remembers the folder and reconnects on its own (or after one permission tap).
-- **iPhone/iPad** cannot keep folder access. If no book was saved on the device, the next open goes back to **Choose Library folder** (progress is kept). Open a book and tap **Save to this device** to keep playing after a restart without picking the folder again.
+- **iPhone/iPad** cannot keep folder access. If no book was saved on the device, the next open goes back to **Choose Library folder** (progress is kept). After picking a folder, the shelf offers **Save this book**; you can also tap **Save to this device** on a book page, or accept the prompt while listening.
+- Shelf shows **Continue listening** for the last chapter with progress.
+- Player **Sleep** cycles 15 / 30 / 45 / 60 minutes, then pauses.
+- Chapter changes briefly show a **Next:** toast.
 
 Source: [`docs/`](docs/) (GitHub Pages from `/docs` on `main`).
 
