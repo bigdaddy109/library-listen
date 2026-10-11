@@ -151,6 +151,25 @@ export function shelfBadge(book) {
   return "Audio";
 }
 
+export function isImmuneBook(book) {
+  return book?.collectionId === "immune" || String(book?.id || "").startsWith("immune/");
+}
+
+/**
+ * Book-screen panes. Audio-only and ebook-only have no tabs.
+ * Both → Audio | Read. Immune keeps Concepts (and Read when a paired EPUB exists).
+ */
+export function bookPanes(book) {
+  const audio = bookHasAudio(book);
+  const ebook = bookHasEbook(book);
+  const immune = isImmuneBook(book);
+  const panes = [];
+  if (audio && (ebook || immune)) panes.push("audio");
+  if (audio && ebook) panes.push("read");
+  if (immune) panes.push("concepts");
+  return panes;
+}
+
 /**
  * Guess collection/book folders from a relative path.
  * Supports Library/Collection/listen/Book/file and shorter picks.
@@ -294,11 +313,12 @@ export function saveTextProgress(bookId, text, store = defaultStore()) {
     record.fraction = Math.min(1, Math.max(0, n));
   }
   if (typeof text.label === "string" && text.label.trim()) record.label = text.label.trim();
+  const touchLastKind = text?.touchLastKind !== false;
   all[bookId] = {
     ...previous,
     text: record,
-    lastKind: "text",
-    updatedAt: now,
+    lastKind: touchLastKind ? "text" : previous.lastKind || "audio",
+    updatedAt: touchLastKind ? now : previous.updatedAt || now,
   };
   store.setItem(PROGRESS_KEY, JSON.stringify(all));
   return record;

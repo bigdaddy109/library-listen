@@ -8,7 +8,9 @@ import {
   parseEpub,
   rewriteSpineHtml,
   scrollFraction,
+  jumpKeys,
   spineCfi,
+  spineIndexForChapter,
   spineIndexFromCfi,
   spineLabel,
   unzip,
@@ -214,5 +216,35 @@ describe("rewriteSpineHtml", () => {
     assert.equal(spineLabel({ title: "", index: 1 }, 1, 2), "2 of 2");
     assert.equal(mimeForPath("OEBPS/images/cover.png"), "image/png");
     assert.equal(mimeForPath("nav.xhtml"), "application/xhtml+xml");
+  });
+});
+
+describe("chapter jump → spine", () => {
+  const spine = (titles) => titles.map((title, index) => ({ title, index, path: `OEBPS/ch${index + 1}.xhtml` }));
+
+  it("matches audio titles to EPUB TOC labels", () => {
+    const items = spine(["Opening", "Later", "Closing"]);
+    assert.equal(spineIndexForChapter(items, { title: "Later" }, 0, 3), 1);
+    assert.equal(spineIndexForChapter(items, { title: "Opening" }, 2, 3), 0);
+    assert.deepEqual(jumpKeys("01 - The Sun"), ["01 the sun", "1 the sun", "the sun"]);
+    assert.equal(
+      spineIndexForChapter(spine(["The Sun", "A Mole of Moles"]), { title: "01 - The Sun", id: "book.m4b#0" }, 0, 2),
+      0
+    );
+    assert.equal(
+      spineIndexForChapter(spine(["The Sun", "A Mole of Moles"]), { title: "02 - A Mole of Moles", id: "book.m4b#1" }, 1, 2),
+      1
+    );
+  });
+
+  it("matches Part 01-style listen titles and falls back by index", () => {
+    const parts = spine(["Part 01", "Part 02", "Part 03"]);
+    assert.equal(spineIndexForChapter(parts, { title: "Part 01", id: "Immune-Part01.mp3" }, 0, 3), 0);
+    assert.equal(spineIndexForChapter(parts, { title: "Part 03", id: "Immune-Part03.mp3" }, 2, 3), 2);
+    const untitled = spine(["", "", ""]);
+    assert.equal(spineIndexForChapter(untitled, { title: "Track A" }, 1, 3), 1);
+    assert.equal(spineIndexForChapter(untitled, { title: "Only file" }, 0, 1), 0);
+    assert.equal(spineIndexForChapter(spine(["A", "B", "C", "D", "E"]), { title: "End" }, 1, 2), 4);
+    assert.equal(spineIndexForChapter([], { title: "Later" }, 1, 3), 0);
   });
 });

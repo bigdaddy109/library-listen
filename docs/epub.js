@@ -332,3 +332,80 @@ export function spineLabel(item, index, total) {
   if (of) return `${n} of ${of}`;
   return `Section ${n}`;
 }
+
+const LEADING_CHAPTER = /^(?:part|chapter|ch|sec|section|track)\s+/;
+
+/**
+ * Comparable tokens for an audio chapter title / m4b marker vs an EPUB TOC/spine label.
+ * Does not invent display titles.
+ */
+export function jumpKeys(value) {
+  const raw = String(value || "")
+    .toLowerCase()
+    .replace(/\.[a-z0-9]{2,4}$/i, "")
+    .replace(/#\d+$/g, "");
+  const spaced = raw
+    .replace(/[_./\\-]+/g, " ")
+    .replace(/[^a-z0-9\u4e00-\u9fff]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const keys = [];
+  const add = (key) => {
+    if (key && !keys.includes(key)) keys.push(key);
+  };
+  add(spaced);
+  const noLead = spaced.replace(LEADING_CHAPTER, "").replace(/^0+(\d)/, "$1").trim();
+  add(noLead);
+  add(noLead.replace(/^\d+\s+/, "").trim());
+  return keys;
+}
+
+function keyOverlapScore(leftKeys, rightKeys) {
+  let score = 0;
+  for (const left of leftKeys) {
+    for (const right of rightKeys) {
+      if (!left || !right || left.length < 2 || right.length < 2) continue;
+      if (left === right) score = Math.max(score, 20 + Math.min(left.length, 12));
+      else if (left.includes(right) || right.includes(left)) {
+        score = Math.max(score, 10 + Math.min(left.length, right.length, 12));
+      }
+    }
+  }
+  return score;
+}
+
+function spineItemKeys(item) {
+  const stem = String(item?.path || item?.href || "")
+    .split("/")
+    .pop();
+  return [...jumpKeys(item?.title), ...jumpKeys(stem)];
+}
+
+/**
+ * Map an audio / m4b-marker chapter onto an EPUB spine item.
+ * Title/TOC match wins; otherwise same index when counts match, else proportional.
+ */
+export function spineIndexForChapter(spine, chapter, chapterIndex = 0, chapterCount = 0) {
+  const items = Array.isArray(spine) ? spine : [];
+  if (!items.length) return 0;
+  const idx = Math.max(0, Number(chapterIndex) || 0);
+  const count = Number(chapterCount) > 0 ? Number(chapterCount) : 0;
+  const chapterKeys = [...jumpKeys(chapter?.title), ...jumpKeys(chapter?.id)];
+
+  let best = -1;
+  let bestScore = 0;
+  items.forEach((item, i) => {
+    const score = keyOverlapScore(chapterKeys, spineItemKeys(item));
+    if (score > bestScore) {
+      bestScore = score;
+      best = i;
+    }
+  });
+  if (best >= 0) return best;
+  if (count <= 1) return 0;
+  if (count === items.length) return Math.min(items.length - 1, idx);
+  return Math.max(
+    0,
+    Math.min(items.length - 1, Math.round((idx / Math.max(1, count - 1)) * (items.length - 1)))
+  );
+}

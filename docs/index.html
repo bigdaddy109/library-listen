@@ -16,9 +16,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Library Listen" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" href="./icon.svg?v=26" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=26" />
-    <link rel="stylesheet" href="./styles.css?v=26" />
+    <link rel="icon" href="./icon.svg?v=27" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=27" />
+    <link rel="stylesheet" href="./styles.css?v=27" />
     <title>Library Listen</title>
   </head>
   <body>
@@ -27,7 +27,7 @@
         <div class="brand">
           <img
             class="brand-mark"
-            src="./icon.svg?v=26"
+            src="./icon.svg?v=27"
             width="36"
             height="36"
             alt="Library Listen"
@@ -111,6 +111,7 @@
           </div>
           <div id="book-tabs" class="book-tabs hidden">
             <button type="button" id="tab-audio" aria-pressed="true">Audio</button>
+            <button type="button" id="tab-read" aria-pressed="false">Read</button>
             <button type="button" id="tab-concepts" aria-pressed="false">Concepts</button>
           </div>
           <ul id="chapter-list" class="chapter-list"></ul>
@@ -214,6 +215,6 @@
     />
     <audio id="audio" preload="metadata" playsinline></audio>
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
-    <script type="module" src="./app.js?v=26"></script>
+    <script type="module" src="./app.js?v=27"></script>
   </body>
 </html>

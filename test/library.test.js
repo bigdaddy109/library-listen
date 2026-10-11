@@ -7,6 +7,8 @@ import {
   loadProgress,
   locateBookPath,
   locateEbookPath,
+  bookPanes,
+  isImmuneBook,
   pairingKey,
   pathParts,
   resumeSeconds,
@@ -298,6 +300,32 @@ describe("shelfBadge", () => {
   });
 });
 
+describe("bookPanes", () => {
+  it("adds Audio | Read for paired books and keeps Immune Concepts", () => {
+    assert.deepEqual(bookPanes({ chapters: [{ id: "a" }], ebook: null }), []);
+    assert.deepEqual(bookPanes({ chapters: [], ebook: { name: "solo.epub" } }), []);
+    assert.deepEqual(bookPanes({ chapters: [{ id: "a" }], ebook: { name: "paired.epub" } }), [
+      "audio",
+      "read",
+    ]);
+    assert.deepEqual(
+      bookPanes({ id: "immune/immune", collectionId: "immune", chapters: [{ id: "p1" }] }),
+      ["audio", "concepts"]
+    );
+    assert.deepEqual(
+      bookPanes({
+        id: "immune/immune",
+        collectionId: "immune",
+        chapters: [{ id: "p1" }],
+        ebook: { name: "immune.epub" },
+      }),
+      ["audio", "read", "concepts"]
+    );
+    assert.equal(isImmuneBook({ collectionId: "immune" }), true);
+    assert.equal(isImmuneBook({ id: "munroe/how-to" }), false);
+  });
+});
+
 describe("progress", () => {
   it("keeps a per-chapter map when switching chapters", () => {
     const store = memoryStore();
@@ -384,6 +412,20 @@ describe("progress", () => {
     assert.ok(all.chapters["Immune-Part02.mp3"]);
     assert.equal(textProgress("immune/immune", store).locator, "epubcfi(/6/4!)");
     assert.equal(latestProgressKind(all), "text");
+  });
+
+  it("audio-driven chapter jump writes the CFI without stealing Continue", () => {
+    const store = memoryStore();
+    saveProgress("immune/immune", "Immune-Part02.mp3", 45, 580, store);
+    saveTextProgress(
+      "immune/immune",
+      { kind: "epub-cfi", locator: "epubcfi(/6/6!)", label: "Part 03", touchLastKind: false },
+      store
+    );
+    const all = loadProgress(store)["immune/immune"];
+    assert.equal(all.text.locator, "epubcfi(/6/6!)");
+    assert.equal(all.lastKind, "audio");
+    assert.equal(latestProgressKind(all), "audio");
   });
 
   it("keeps the text locator when audio progress is written later", () => {
