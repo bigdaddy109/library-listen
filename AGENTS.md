@@ -4,20 +4,20 @@ Offline audiobook player for files that already live in a shared iCloud Drive `L
 
 Read this before changing code. Keep [README.md](README.md), [SHARE-library-listen.md](SHARE-library-listen.md), and [INSTALL-zh.md](INSTALL-zh.md) as the user-facing docs — do not replace them with this file.
 
+**iOS / native is paused (Jeff, 2026-10-11).** The SwiftUI tree in `LibraryListen/` remains in the repo for history. Do not change it, do not add XCTest, do not run `./start.sh` as part of web work, and do not keep Swift metadata tables in sync unless he un-pauses native. Active work is the web player only. See [fix_plan.md](fix_plan.md).
+
 ## What it is
 
-Two clients share one library layout and (mostly) the same metadata rules:
-
-| Surface | Where | Who uses it |
+| Surface | Where | Status |
 | --- | --- | --- |
-| **Web player (primary, live)** | [`docs/`](docs/) | Anyone with the Pages link. GitHub Pages from `/docs` on `main`: https://bigdaddy109.github.io/library-listen/ |
-| **Native iOS/iPadOS app (optional)** | [`LibraryListen/`](LibraryListen/) + [`LibraryListen.xcodeproj`](LibraryListen.xcodeproj) | Sideload via Xcode. Personal team. Not App Store. |
+| **Web player (live)** | [`docs/`](docs/) | **Active.** GitHub Pages from `/docs` on `main`: https://bigdaddy109.github.io/library-listen/ |
+| **Native iOS/iPadOS app** | [`LibraryListen/`](LibraryListen/) + [`LibraryListen.xcodeproj`](LibraryListen.xcodeproj) | **Paused.** Sideload-via-Xcode code is still here. Do not treat it as a second product to maintain. |
 
-The live product people open is the web player. Recent merged PRs (#1–#9) are almost all web-player work. Treat native as a second implementation of the same idea, not the deploy path.
+Recent merged PRs (#1–#9) are almost all web-player work. That is the deploy path.
 
 ## Architecture
 
-### Library layout (both clients)
+### Library layout
 
 ```text
 Library/
@@ -29,8 +29,8 @@ Library/
 - Skip `ebooks/`, `_source/`, and any name starting with `_`.
 - Audio: `mp3`, `m4a`, `m4b`, `aac`. Covers: `jpg`, `jpeg`, `png`, `webp`.
 - Files sitting directly in `listen/` are one book (Immune). Subfolders are books (Munroe).
-- Known titles/authors live in [`docs/app.js`](docs/app.js) (`KNOWN_COLLECTIONS` / `KNOWN_BOOKS`) and [`LibraryListen/HubPaths.swift`](LibraryListen/HubPaths.swift). Keep those tables in sync if you add a book.
-- Never commit real Hub audio. Silent stubs only — see Fixtures below.
+- Known titles/authors for the live player live in [`docs/app.js`](docs/app.js) (`KNOWN_COLLECTIONS` / `KNOWN_BOOKS`). The same names also exist in paused [`LibraryListen/HubPaths.swift`](LibraryListen/HubPaths.swift) — leave that file alone.
+- Never commit real Hub audio.
 
 ### Web player (`docs/`)
 
@@ -44,19 +44,12 @@ Vanilla ES modules. No bundler, no `package.json`, no framework.
 - Sort / rate: `librarylisten.shelfSort`, `librarylisten.rate`.
 - IndexedDB `library-listen`: `handles` (desktop File System Access directory handle) and `offline` (copied chapter/cover blobs).
 - Folder pick: `showDirectoryPicker` when present (desktop Chromium); otherwise `<input webkitdirectory>` / file list. iPhone Safari cannot keep folder permission across launches — after restart the user re-picks or plays books saved with **Save to this device**.
-- Playback extras that exist only on web today: sleep timer (15/30/45/60), −30/+30, next-chapter toast, save-to-device, Immune Concepts tab.
+- Playback extras on the web player: sleep timer (15/30/45/60), −30/+30, next-chapter toast, save-to-device, Immune Concepts tab. No shelf search yet (see [fix_plan.md](fix_plan.md)).
+- A chaptered `m4b` is **one chapter** on the web (`buildLibrary` does not read markers).
 
-### Native app (`LibraryListen/`)
+### Native app (`LibraryListen/`) — paused
 
-SwiftUI, iOS 17+, Xcode 16 project, bundle id `com.jeffwu.librarylisten`, team `36V44B3RTF` (Jeff’s personal team).
-
-- [`LibraryListenApp.swift`](LibraryListen/LibraryListenApp.swift) owns `LibrarySession` + `PlayerController`.
-- [`LibraryScanner.swift`](LibraryListen/LibraryScanner.swift) walks `listen/` and, for a single `m4b`/`m4a`, loads AVFoundation chapter markers. **The web player does not do this** — a chaptered m4b is one chapter on the web.
-- [`BookmarkStore.swift`](LibraryListen/BookmarkStore.swift) persists security-scoped bookmarks in UserDefaults so the folder survives relaunches (this is the native advantage over iPhone Safari).
-- [`ProgressStore.swift`](LibraryListen/ProgressStore.swift) writes `Application Support/LibraryListen/progress.json`. **One slot per book** (chapter + file position), not the web’s per-chapter map.
-- [`ICloudFiles.swift`](LibraryListen/ICloudFiles.swift) kicks `startDownloadingUbiquitousItem` when a file is still in the cloud.
-- [`FolderPicker.swift`](LibraryListen/FolderPicker.swift) is a UIKit `UIDocumentPickerViewController` (more reliable than SwiftUI `.fileImporter` for folders).
-- Playback extras that exist only on native today: in-shelf search, multi-folder bookmarks, lock-screen remote commands, bundled silent sample.
+Leave this tree untouched. Short map only so you do not mistake it for the live player: SwiftUI iOS 17+, Xcode 16, bundle id `com.jeffwu.librarylisten`. It can persist a folder bookmark (Safari cannot), parse m4b chapter markers, and search the shelf. It does not have the web sleep timer, save-to-device, or Immune cards. Install notes remain in [INSTALL-zh.md](INSTALL-zh.md) / [SHARE-library-listen.md](SHARE-library-listen.md) for when (if) native is un-paused.
 
 ### What is intentionally out of scope
 
@@ -85,32 +78,9 @@ node --check docs/immune-cards.js
 node --check docs/sw.js
 ```
 
-### Native (Mac + full Xcode.app)
+### Native — paused
 
-Command Line Tools alone cannot install to a phone.
-
-```bash
-./start.sh
-```
-
-That generates silent fixtures and, on Darwin, opens `LibraryListen.xcodeproj`. In Xcode: scheme **LibraryListen**, destination a simulator or a trusted device, Signing Team = Jeff’s Apple ID, Run (⌘R). Do **not** Archive for the App Store.
-
-CLI build (Mac only; this repo has no Linux/Swift toolchain):
-
-```bash
-xcodebuild -project LibraryListen.xcodeproj -scheme LibraryListen \
-  -destination 'generic/platform=iOS Simulator' build
-```
-
-Sideload details, Device Hub, and the ~7-day personal-team profile: [INSTALL-zh.md](INSTALL-zh.md) and the install section of [SHARE-library-listen.md](SHARE-library-listen.md).
-
-### Fixtures (native only)
-
-```bash
-bash scripts/generate-fixtures.sh
-```
-
-Needs `ffmpeg`. Writes silent mp3s + a chaptered m4b under `LibraryListen/Fixtures/`, which Xcode copies into the app bundle as the “bundled sample.” **Never replace those stubs with copyrighted Hub audio.**
+Do not run `./start.sh`, `scripts/generate-fixtures.sh`, or `xcodebuild` for current work. Those exist only for the shelved iOS app. Sideload details stay in [INSTALL-zh.md](INSTALL-zh.md) if native is ever un-paused.
 
 ## Tests (as of 2026-10-11)
 
@@ -125,11 +95,9 @@ Recorded on a Linux agent against `main` @ `23df173`:
 | `docs/manifest.webmanifest` JSON | **Pass** |
 | Service-worker asset list vs files on disk | **Pass** (cache name `library-listen-shell-v20`, query `?v=20` consistent in html/js/sw) |
 | Immune concept image files vs `immune-cards.js` | **Pass** |
-| `bash -n start.sh` and `scripts/generate-fixtures.sh` | **Pass** |
-| `bash scripts/generate-fixtures.sh` | **Pass** — writes Munroe + Immune stubs. Also **overwrites** `AppIcon.png` (see pitfalls). Revert the icon; do not commit generated audio. |
-| `xcodebuild` / `swift` | **Missing** on Linux. Native app is unbuildable and untestable in this environment. Xcode scheme TestAction is empty; `project.pbxproj` has no XCTest target. |
+| `xcodebuild` / XCTest / `.github/workflows` | **Absent.** Native is paused; do not add a Swift test target or a paid device farm. |
 
-Do not invent a paid device farm, TestFlight, or CI service. If you add tests, keep them local (`node --test` for extracted JS helpers, or an XCTest target Jeff can run in Xcode).
+Do not invent a paid CI service. If you add tests, keep them local (`node --test` for extracted JS helpers).
 
 ## Cache-bust (web)
 
@@ -143,16 +111,11 @@ Miss one and phones keep a stale shell. HTML navigations are network-first; othe
 
 ## Pitfalls
 
-- **`./start.sh` / `generate-fixtures.sh` rewrites `AppIcon.png`.** Confirmed: the script runs `ffmpeg` against `LibraryListen/Assets.xcassets/AppIcon.appiconset/AppIcon.png`. Restore that file before commit unless you meant to change the icon.
-- **Fixtures are not in git.** Only [`LibraryListen/Fixtures/README.txt`](LibraryListen/Fixtures/README.txt) is committed. The bundled sample is empty until someone runs the generator. The committed README still says `Audio/Immune/listen/…`, which is wrong (Hub path is `Library/Immune/listen/…`).
-- **Personal Hub paths ship in the native UI.** [`HubPaths.swift`](LibraryListen/HubPaths.swift) hard-codes `/Users/jeffwu/Documents/Main Hub/Personal/Daryl Stuff/Library`. [`OnboardingView.swift`](LibraryListen/OnboardingView.swift) and [`SettingsView.swift`](LibraryListen/SettingsView.swift) display those strings. [`INSTALL-zh.md`](INSTALL-zh.md) names `Main Hub / Personal / Daryl Stuff / Library`. Do not add more personal paths. Do not put secrets in the repo (`.gitignore` already blocks `.env*` and `/Library/`).
-- **iPhone Safari cannot persist a folder.** Desktop Chrome/Edge can, via IndexedDB directory handles. On iOS, progress survives but playable `File` objects do not. Save-to-device (IndexedDB blobs) is the workaround. `confirm()` save prompts fire ~12s into playback — don’t add more blocking dialogs without a reason.
-- **iCloud placeholders look like empty files.** The web walker skips 0-byte audio and unreadable handles instead of failing the whole scan. “Empty shelf” almost always means Download Now was not done. Native calls `ICloudFiles.ensureLocal` but still cannot play a cloud-only file.
-- **Web vs native already disagree.** Web: per-chapter progress, sleep timer, save-to-device, Immune cards, no m4b chapter markers, no search. Native: one progress slot per book, search, bookmarks, m4b chapters, no sleep timer, no concept cards. Changing a rule in one client and not the other is a bug.
+- **iPhone Safari cannot persist a folder.** Desktop Chrome/Edge can, via IndexedDB directory handles. On iOS Safari, progress survives but playable `File` objects do not. Save-to-device (IndexedDB blobs) is the workaround. `confirm()` save prompts fire ~12s into playback — don’t add more blocking dialogs without a reason.
+- **iCloud placeholders look like empty files.** The web walker skips 0-byte audio and unreadable handles instead of failing the whole scan. “Empty shelf” almost always means Download Now was not done.
 - **Resume is fragile on iOS Safari.** `playChapter` must not `await` before `audio.play()` or the user-gesture is dropped. There is a resume-guard against post-play snap-back. Touch it with a real iPhone, not only desktop.
-- **Personal-team installs expire (~7 days).** The app will not open until Xcode runs again. Bluetooth is not an update channel.
-- **No Mac Catalyst.** `SUPPORTS_MACCATALYST = NO`.
-- **Linux agents cannot build the iOS app.** Record that; don’t fake an `xcodebuild` pass.
+- **Native is paused.** Do not “fix” `HubPaths` personal paths, `ProgressStore`, `generate-fixtures.sh` / `AppIcon.png`, or Xcode signing as part of web work. Those stay dropped in [fix_plan.md](fix_plan.md).
+- **No secrets.** `.gitignore` already blocks `.env*` and `/Library/`. Do not add real Hub paths or copyrighted audio.
 
 ## Working rules
 
@@ -161,9 +124,10 @@ Miss one and phones keep a stale shell. HTML navigations are network-first; othe
 3. **Search the repo before assuming something is missing.** README, SHARE, INSTALL-zh, this file, and `fix_plan.md` already exist once this PR lands.
 4. **No stubs.** Don’t add empty tests, placeholder functions, or “TODO implement later” files.
 5. **One most-important thing at a time** (see [fix_plan.md](fix_plan.md)). Finish and verify that item before starting the next.
-6. **Commit only after the checks you can run have passed.** At minimum: `node --check` on any edited JS, and do not leave generated fixture audio or a rewritten `AppIcon.png` in the commit. Native builds only on a Mac with Xcode.
-7. **No paid external API calls or new paid services** without Jeff’s approval. No new cloud accounts. No App Store pipeline unless he asks.
-8. **No secrets in code.** No real library paths beyond what is already there (and prefer removing those). No copyrighted audiobooks.
+6. **Commit only after the checks you can run have passed.** At minimum: `node --check` on any edited JS.
+7. **No paid external API calls or new paid services** without Jeff’s approval. No new cloud accounts. No App Store pipeline.
+8. **No secrets in code.** No real library paths. No copyrighted audiobooks.
+9. **Do not work the paused native app** unless Jeff explicitly un-pauses it.
 
 ## Suggested first command when you open the repo
 
