@@ -2,7 +2,8 @@
 
 export const AUDIO_EXT = new Set(["mp3", "m4a", "m4b", "aac"]);
 export const COVER_EXT = new Set(["jpg", "jpeg", "png", "webp"]);
-export const SKIP_FOLDERS = new Set(["ebooks", "_source"]);
+export const EPUB_EXT = new Set(["epub"]);
+export const SKIP_FOLDERS = new Set(["_source"]);
 
 export const KNOWN_COLLECTIONS = {
   "門羅-WhatIf": { id: "munroe", title: "Munroe", author: "Randall Munroe" },
@@ -98,6 +99,54 @@ export function pathParts(path) {
 
 export function shouldSkipPath(parts) {
   return parts.some((p) => p.startsWith("_") || SKIP_FOLDERS.has(p.toLowerCase()));
+}
+
+export function ebookFolderIndex(parts) {
+  return parts.map((p) => p.toLowerCase()).lastIndexOf("ebooks");
+}
+
+export function isUnderEbookFolder(parts) {
+  return ebookFolderIndex(parts) >= 0;
+}
+
+export function pairingKey(collectionFolder, bookFolder) {
+  return `${collectionFolder}::${slug(bookFolder)}`;
+}
+
+/**
+ * Pair Library/ebooks/<book>.epub (or ebooks/<book>/file.epub) to a listen book.
+ * Collection-scoped siblings use Collection/ebooks/ next to Collection/listen/.
+ */
+export function locateEbookPath(parts) {
+  const ebookIdx = ebookFolderIndex(parts);
+  if (ebookIdx < 0) return null;
+  const collectionFolder = ebookIdx > 0 ? parts[ebookIdx - 1] : "Library";
+  const rest = parts.slice(ebookIdx + 1);
+  if (rest.length === 0) return null;
+  if (rest.length === 1) {
+    const name = rest[0];
+    if (!EPUB_EXT.has(extOf(name))) return null;
+    const stem = name.replace(/\.[^.]+$/, "");
+    return { collectionFolder, bookFolder: slug(stem) };
+  }
+  return { collectionFolder, bookFolder: slug(rest[0]) };
+}
+
+export function bookHasAudio(book) {
+  return (book?.chapters || []).length > 0;
+}
+
+export function bookHasEbook(book) {
+  return !!(book?.ebook?.file || book?.ebook?.name || book?.ebook?.id);
+}
+
+/** Shelf badge: Audio, Read, or Both. */
+export function shelfBadge(book) {
+  const audio = bookHasAudio(book);
+  const read = bookHasEbook(book);
+  if (audio && read) return "Both";
+  if (read) return "Read";
+  return "Audio";
 }
 
 /**
@@ -213,8 +262,68 @@ export function saveProgress(
   store.setItem(PROGRESS_KEY, JSON.stringify(all));
 }
 
+function nameSort(a, b) {
+  return a.file.name.localeCompare(b.file.name, undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
+function pickCoverFile(files) {
+  const covers = files.filter((f) => COVER_EXT.has(extOf(f.file.name)));
+  covers.sort((a, b) => {
+    const score = (name) => {
+      const n = name.toLowerCase();
+      if (n.includes("cover")) return 0;
+      if (n.includes("folder")) return 1;
+      return 2;
+    };
+    return score(a.file.name) - score(b.file.name);
+  });
+  return covers[0]?.file || null;
+}
+
+function pickEbookEntry(files) {
+  return files.filter((f) => EPUB_EXT.has(extOf(f.file.name))).sort(nameSort)[0] || null;
+}
+
+function ebookRecord(entry) {
+  if (!entry?.file) return null;
+  return {
+    id: entry.file.name,
+    name: entry.file.name,
+    file: entry.file,
+  };
+}
+
+function makeBook({ collectionFolder, bookFolder, audioFiles, coverFile, ebook }) {
+  const collection = collectionMeta(collectionFolder);
+  const meta = bookMeta(bookFolder, collection.author);
+  const chapters = audioFiles.map((f, index) => ({
+    id: f.file.name,
+    index,
+    title: titleFromFilename(f.file.name),
+    file: f.file,
+    url: null,
+  }));
+  return {
+    id: `${collection.id}/${slug(bookFolder)}`,
+    collectionId: collection.id,
+    collectionTitle: collection.title,
+    folder: bookFolder,
+    title: meta.title,
+    subtitle: meta.subtitle,
+    author: meta.author,
+    coverFile,
+    coverUrl: null,
+    chapters,
+    ebook,
+  };
+}
+
 /**
- * Build audiobooks from flat path+file list.
+ * Build shelf books from a flat path+file list.
+ * Pairs listen/ audio to sibling ebooks/<book>.epub (PDF is ignored).
  * @param {{ path: string, file: { name: string, size?: number } }[]} entries
  */
 export function buildLibrary(entries) {
@@ -223,81 +332,74 @@ export function buildLibrary(entries) {
     if (shouldSkipPath(parts)) return false;
     if (!e.file?.name) return false;
     const ext = extOf(e.file.name);
-    if (!(AUDIO_EXT.has(ext) || COVER_EXT.has(ext))) return false;
-    if (AUDIO_EXT.has(ext) && e.file.size === 0) return false;
+    if (!(AUDIO_EXT.has(ext) || COVER_EXT.has(ext) || EPUB_EXT.has(ext))) return false;
+    if ((AUDIO_EXT.has(ext) || EPUB_EXT.has(ext)) && e.file.size === 0) return false;
     return true;
   });
 
   /** @type {Map<string, { collectionFolder: string, bookFolder: string, files: { path: string, file: { name: string, size?: number } }[] }>} */
-  const groups = new Map();
+  const listenGroups = new Map();
+  /** @type {Map<string, { collectionFolder: string, bookFolder: string, files: { path: string, file: { name: string, size?: number } }[] }>} */
+  const ebookGroups = new Map();
 
   for (const entry of usable) {
     const parts = pathParts(entry.path || entry.file.name);
+    if (isUnderEbookFolder(parts)) {
+      const located = locateEbookPath(parts);
+      if (!located) continue;
+      const key = pairingKey(located.collectionFolder, located.bookFolder);
+      if (!ebookGroups.has(key)) {
+        ebookGroups.set(key, { ...located, files: [] });
+      }
+      ebookGroups.get(key).files.push(entry);
+      continue;
+    }
+    const ext = extOf(entry.file.name);
+    if (!(AUDIO_EXT.has(ext) || COVER_EXT.has(ext))) continue;
     const located = locateBookPath(parts);
     if (!located) continue;
     const { collectionFolder, bookFolder } = located;
-
-    const key = `${collectionFolder}::${bookFolder}`;
-    if (!groups.has(key)) {
-      groups.set(key, { collectionFolder, bookFolder, files: [] });
+    const key = pairingKey(collectionFolder, bookFolder);
+    if (!listenGroups.has(key)) {
+      listenGroups.set(key, { collectionFolder, bookFolder, files: [] });
     }
-    groups.get(key).files.push(entry);
+    listenGroups.get(key).files.push(entry);
   }
 
   const books = [];
-  for (const group of groups.values()) {
-    const collection = collectionMeta(group.collectionFolder);
-    const meta = bookMeta(group.bookFolder, collection.author);
-    const audioFiles = group.files
-      .filter((f) => AUDIO_EXT.has(extOf(f.file.name)))
-      .sort((a, b) =>
-        a.file.name.localeCompare(b.file.name, undefined, {
-          numeric: true,
-          sensitivity: "base",
-        })
-      );
+  const pairedEbookKeys = new Set();
+
+  for (const group of listenGroups.values()) {
+    const audioFiles = group.files.filter((f) => AUDIO_EXT.has(extOf(f.file.name))).sort(nameSort);
     if (!audioFiles.length) continue;
+    const key = pairingKey(group.collectionFolder, group.bookFolder);
+    const ebookGroup = ebookGroups.get(key);
+    const ebook = ebookRecord(pickEbookEntry(ebookGroup?.files || []));
+    if (ebook) pairedEbookKeys.add(key);
+    books.push(
+      makeBook({
+        collectionFolder: group.collectionFolder,
+        bookFolder: group.bookFolder,
+        audioFiles,
+        coverFile: pickCoverFile(group.files) || pickCoverFile(ebookGroup?.files || []),
+        ebook,
+      })
+    );
+  }
 
-    const coverEntry = group.files.find((f) => {
-      const ext = extOf(f.file.name);
-      if (!COVER_EXT.has(ext)) return false;
-      const n = f.file.name.toLowerCase();
-      return n.includes("cover") || n.includes("folder") || true;
-    });
-    // Prefer names that look like covers
-    const covers = group.files.filter((f) => COVER_EXT.has(extOf(f.file.name)));
-    covers.sort((a, b) => {
-      const score = (name) => {
-        const n = name.toLowerCase();
-        if (n.includes("cover")) return 0;
-        if (n.includes("folder")) return 1;
-        return 2;
-      };
-      return score(a.file.name) - score(b.file.name);
-    });
-    const coverFile = covers[0]?.file || coverEntry?.file || null;
-
-    const chapters = audioFiles.map((f, index) => ({
-      id: f.file.name,
-      index,
-      title: titleFromFilename(f.file.name),
-      file: f.file,
-      url: null,
-    }));
-
-    const id = `${collection.id}/${slug(group.bookFolder)}`;
-    books.push({
-      id,
-      collectionId: collection.id,
-      collectionTitle: collection.title,
-      folder: group.bookFolder,
-      title: meta.title,
-      subtitle: meta.subtitle,
-      author: meta.author,
-      coverFile,
-      coverUrl: null,
-      chapters,
-    });
+  for (const [key, group] of ebookGroups) {
+    if (pairedEbookKeys.has(key)) continue;
+    const ebook = ebookRecord(pickEbookEntry(group.files));
+    if (!ebook) continue;
+    books.push(
+      makeBook({
+        collectionFolder: group.collectionFolder,
+        bookFolder: group.bookFolder,
+        audioFiles: [],
+        coverFile: pickCoverFile(group.files),
+        ebook,
+      })
+    );
   }
 
   return books.sort((a, b) => {

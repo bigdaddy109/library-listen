@@ -98,6 +98,25 @@ describe("bookMatches", () => {
     assert.equal(bookMatches(immune(), ""), true);
     assert.equal(bookMatches(immune(), "   "), true);
   });
+
+  it("matches an ebook-only row by title without chapters", () => {
+    const solo = {
+      id: "library/solo-title",
+      collectionTitle: "Library",
+      folder: "solo-title",
+      title: "Solo Title",
+      subtitle: null,
+      author: "Unknown",
+      chapters: [],
+      ebook: { name: "solo-title.epub" },
+    };
+    assert.equal(bookMatches(solo, "solo"), true);
+    assert.equal(bookMatches(solo, "library"), true);
+    assert.equal(bookMatches(solo, "part 01"), false);
+    assert.deepEqual(filterBooks([solo, immune()], "solo").map((b) => b.id), [
+      "library/solo-title",
+    ]);
+  });
 });
 
 describe("filterBooks", () => {

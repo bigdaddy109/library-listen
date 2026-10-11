@@ -1,13 +1,16 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=24";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=25";
 import {
   AUDIO_EXT,
+  EPUB_EXT,
   SKIP_FOLDERS,
+  bookHasAudio,
   extOf,
   buildLibrary,
   loadProgress,
   chapterProgress,
   saveProgress,
-} from "./library.js?v=24";
+  shelfBadge,
+} from "./library.js?v=25";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -15,7 +18,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=24";
+} from "./search.js?v=25";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -30,8 +33,8 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=24";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=24";
+} from "./markers.js?v=25";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=25";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -132,12 +135,15 @@ async function loadOfflineIndex() {
 }
 
 function isBookOffline(book) {
+  const chapters = book.chapters || [];
+  if (!chapters.length) return false;
   const saved = offlineIndex.get(book.id);
-  return !!saved && book.chapters.every((ch) => !!offlineChapterBlob(saved, ch));
+  return !!saved && chapters.every((ch) => !!offlineChapterBlob(saved, ch));
 }
 
 function isBookPlayable(book) {
-  return book.chapters.every((ch) => !!ch.file);
+  const chapters = book.chapters || [];
+  return chapters.length > 0 && chapters.every((ch) => !!ch.file);
 }
 
 function saveLibrarySnapshot() {
@@ -150,6 +156,9 @@ function saveLibrarySnapshot() {
     subtitle: b.subtitle,
     author: b.author,
     kind: b.kind,
+    ebook: b.ebook
+      ? { id: b.ebook.id, name: b.ebook.name || b.ebook.file?.name }
+      : null,
     chapters: b.chapters.map((ch) => snapshotChapter(ch)),
   }));
   try {
@@ -175,6 +184,9 @@ function restoreLibrarySnapshot() {
       coverFile: saved?.get(COVER_KEY) || null,
       coverUrl: null,
       kind: b.kind,
+      ebook: b.ebook
+        ? { id: b.ebook.id, name: b.ebook.name, file: null }
+        : null,
       chapters: b.chapters.map((ch, index) => {
         const file = offlineChapterBlob(saved, ch);
         return {
@@ -260,6 +272,8 @@ function updateOfflineButton(book, busyLabel) {
   }
   if (offline) {
     status.textContent = "Saved on this device — plays without picking the folder again.";
+  } else if (!bookHasAudio(book)) {
+    status.textContent = "";
   } else if (!isBookPlayable(book)) {
     status.textContent = "Reconnect the Library folder to play this book.";
   } else {
@@ -385,7 +399,8 @@ async function walkDirectory(dir, prefix = []) {
       try {
         const file = await handle.getFile();
         // Cloud-only placeholders often come through as empty.
-        if (!file || (AUDIO_EXT.has(extOf(file.name)) && file.size === 0)) {
+        const ext = extOf(file.name);
+        if (!file || ((AUDIO_EXT.has(ext) || EPUB_EXT.has(ext)) && file.size === 0)) {
           skipped += 1;
           continue;
         }
@@ -452,8 +467,10 @@ function pickWithInput(input) {
           finish(resolve, {
             books,
             entries,
-            skipped: entries.filter((e) => AUDIO_EXT.has(extOf(e.file.name)) && e.file.size === 0)
-              .length,
+            skipped: entries.filter((e) => {
+              const ext = extOf(e.file.name);
+              return (AUDIO_EXT.has(ext) || EPUB_EXT.has(ext)) && e.file.size === 0;
+            }).length,
           })
         )
         .catch((err) => finish(reject, err));
@@ -838,19 +855,25 @@ function bookCard(book) {
   setCover(cover, book);
   const body = document.createElement("div");
   const { line, fraction } = progressLine(book);
+  const badge = shelfBadge(book);
   body.innerHTML = `
-    <p class="title"></p>
+    <p class="title-row"><span class="title"></span><span class="shelf-badge"></span></p>
     <p class="meta"></p>
     <p class="progress"></p>
     <div class="progress-track"><span></span></div>
     <p class="chapter-hits hidden"></p>
   `;
   body.querySelector(".title").textContent = book.title;
-  let meta = `${book.author} · ${book.chapters.length} chapters`;
+  const badgeEl = body.querySelector(".shelf-badge");
+  badgeEl.textContent = badge;
+  badgeEl.classList.add(`shelf-badge-${badge.toLowerCase()}`);
+  const hasAudio = bookHasAudio(book);
+  let meta = book.author;
+  if (hasAudio) meta += ` · ${book.chapters.length} chapters`;
   if (isBookOffline(book)) meta += " · on device";
-  else if (!isBookPlayable(book)) meta += " · reconnect to play";
+  else if (hasAudio && !isBookPlayable(book)) meta += " · reconnect to play";
   body.querySelector(".meta").textContent = meta;
-  btn.classList.toggle("unavailable", !isBookPlayable(book));
+  btn.classList.toggle("unavailable", hasAudio && !isBookPlayable(book));
   body.querySelector(".progress").textContent = line;
   const bar = body.querySelector(".progress-track > span");
   if (fraction == null) {
@@ -912,6 +935,7 @@ function renderBook() {
   document.getElementById("book-author").textContent = book.author;
   document.getElementById("book-subtitle").textContent = book.subtitle || "";
   updateOfflineButton(book);
+  document.querySelector(".offline-row")?.classList.toggle("hidden", !bookHasAudio(book));
 
   els.chapterList.innerHTML = "";
   book.chapters.forEach((ch, i) => {

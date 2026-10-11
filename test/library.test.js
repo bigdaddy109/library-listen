@@ -6,9 +6,12 @@ import {
   chapterProgress,
   loadProgress,
   locateBookPath,
+  locateEbookPath,
+  pairingKey,
   pathParts,
   resumeSeconds,
   saveProgress,
+  shelfBadge,
   shouldSkipPath,
   titleFromFilename,
 } from "../docs/library.js";
@@ -140,6 +143,9 @@ describe("buildLibrary scan", () => {
       ["Introduction", "Global Windstorm"]
     );
     assert.equal(whatIf.coverFile?.name, "cover.jpg");
+    assert.equal(whatIf.ebook, null);
+    assert.equal(shelfBadge(whatIf), "Audio");
+    assert.equal(shelfBadge(books.find((b) => b.id === "immune/immune")), "Audio");
   });
 
   it("still groups Immune when the pick starts at the collection folder", () => {
@@ -152,17 +158,19 @@ describe("buildLibrary scan", () => {
     assert.equal(books[0].chapters.length, 2);
   });
 
-  it("skips ebooks/, _source/, _prefixed folders, 0-byte audio, and unreadable files", () => {
-    assert.equal(shouldSkipPath(pathParts("Library/Immune/ebooks/book.mp3")), true);
+  it("scans ebooks/ but still skips _source/, _prefixed folders, 0-byte media, and unreadable files", () => {
+    assert.equal(shouldSkipPath(pathParts("Library/Immune/ebooks/immune.epub")), false);
     assert.equal(shouldSkipPath(pathParts("Library/門羅-WhatIf/_source/raw.mp3")), true);
     assert.equal(shouldSkipPath(pathParts("Library/_draft/listen/book/a.mp3")), true);
 
     const books = buildLibrary([
       entry("Library/Immune/listen/Immune-Part01.mp3"),
       entry("Library/Immune/ebooks/not-audio-book.mp3"),
+      entry("Library/Immune/ebooks/ignored.pdf"),
       entry("Library/Immune/_source/raw.mp3"),
       entry("Library/_tmp/listen/ghost/a.mp3"),
       entry("Library/Immune/listen/empty-cloud.mp3", 0),
+      entry("Library/Immune/ebooks/empty-cloud.epub", 0),
       { path: "Library/Immune/listen/unreadable.mp3", file: null },
       entry("Library/Immune/listen/notes.txt"),
     ]);
@@ -171,6 +179,116 @@ describe("buildLibrary scan", () => {
     assert.deepEqual(
       books[0].chapters.map((ch) => ch.id),
       ["Immune-Part01.mp3"]
+    );
+    assert.equal(books[0].ebook, null);
+    assert.equal(shelfBadge(books[0]), "Audio");
+  });
+
+  it("pairs Library/listen/<book>/ to Library/ebooks/<book>.epub", () => {
+    const books = buildLibrary([
+      entry("Library/listen/what-if-1/01 - Introduction.mp3"),
+      entry("Library/listen/what-if-1/02 - Global Windstorm.mp3"),
+      entry("Library/ebooks/what-if-1.epub"),
+    ]);
+    assert.equal(books.length, 1);
+    assert.equal(books[0].id, "library/what-if-1");
+    assert.equal(books[0].folder, "what-if-1");
+    assert.equal(books[0].chapters.length, 2);
+    assert.equal(books[0].ebook?.name, "what-if-1.epub");
+    assert.equal(shelfBadge(books[0]), "Both");
+  });
+
+  it("pairs collection-scoped listen/ and ebooks/ siblings by slug", () => {
+    const books = buildLibrary([
+      ...libraryTree(),
+      entry("Library/Immune/ebooks/Immune.epub"),
+      entry("Library/門羅-WhatIf/ebooks/what-if-1.epub"),
+      entry("Library/門羅-WhatIf/ebooks/How To/how-to.epub"),
+    ]);
+    const immune = books.find((b) => b.id === "immune/immune");
+    const whatIf = books.find((b) => b.id === "munroe/what-if-1");
+    const howTo = books.find((b) => b.id === "munroe/how-to");
+    const whatIf2 = books.find((b) => b.id === "munroe/what-if-2");
+    assert.equal(immune.ebook?.name, "Immune.epub");
+    assert.equal(shelfBadge(immune), "Both");
+    assert.equal(whatIf.ebook?.name, "what-if-1.epub");
+    assert.equal(shelfBadge(whatIf), "Both");
+    assert.equal(howTo.ebook?.name, "how-to.epub");
+    assert.equal(shelfBadge(howTo), "Both");
+    assert.equal(whatIf2.ebook, null);
+    assert.equal(shelfBadge(whatIf2), "Audio");
+  });
+
+  it("adds a searchable ebook-only row and ignores PDF", () => {
+    const books = buildLibrary([
+      entry("Library/ebooks/solo-title.epub"),
+      entry("Library/ebooks/earth-science.pdf"),
+      entry("Library/Immune/ebooks/notes.pdf"),
+    ]);
+    assert.deepEqual(
+      books.map((b) => [b.id, shelfBadge(b), b.chapters.length, b.ebook?.name]),
+      [["library/solo-title", "Read", 0, "solo-title.epub"]]
+    );
+    assert.equal(books[0].title, "Solo Title");
+  });
+
+  it("does not cross-pair Library-root ebooks with a collection listen folder", () => {
+    const books = buildLibrary([
+      entry("Library/Immune/listen/Immune-Part01.mp3"),
+      entry("Library/ebooks/immune.epub"),
+    ]);
+    assert.deepEqual(
+      books.map((b) => [b.id, shelfBadge(b)]),
+      [
+        ["immune/immune", "Audio"],
+        ["library/immune", "Read"],
+      ]
+    );
+  });
+});
+
+describe("locateEbookPath + pairingKey", () => {
+  it("reads Library/ebooks/<book>.epub and collection-scoped siblings", () => {
+    assert.deepEqual(locateEbookPath(pathParts("Library/ebooks/what-if-1.epub")), {
+      collectionFolder: "Library",
+      bookFolder: "what-if-1",
+    });
+    assert.deepEqual(locateEbookPath(pathParts("Library/Immune/ebooks/Immune.epub")), {
+      collectionFolder: "Immune",
+      bookFolder: "immune",
+    });
+    assert.deepEqual(locateEbookPath(pathParts("ebooks/what-if-1.epub")), {
+      collectionFolder: "Library",
+      bookFolder: "what-if-1",
+    });
+    assert.deepEqual(
+      locateEbookPath(pathParts("Library/門羅-WhatIf/ebooks/what-if-1/book.epub")),
+      { collectionFolder: "門羅-WhatIf", bookFolder: "what-if-1" }
+    );
+  });
+
+  it("returns null when the path is not an EPUB under ebooks/", () => {
+    assert.equal(locateEbookPath(pathParts("Library/ebooks")), null);
+    assert.equal(locateEbookPath(pathParts("Library/ebooks/cover.jpg")), null);
+    assert.equal(locateEbookPath(pathParts("Library/listen/what-if-1/01.mp3")), null);
+  });
+
+  it("pairs listen folder slugs to ebook stems", () => {
+    assert.equal(
+      pairingKey("門羅-WhatIf", "what-if-1"),
+      pairingKey("門羅-WhatIf", "What If 1")
+    );
+    assert.equal(pairingKey("Immune", "immune"), pairingKey("Immune", "Immune"));
+  });
+});
+
+describe("shelfBadge", () => {
+  it("returns Audio, Read, or Both from chapters and ebook", () => {
+    assert.equal(shelfBadge({ chapters: [{ id: "a" }], ebook: null }), "Audio");
+    assert.equal(shelfBadge({ chapters: [], ebook: { name: "solo.epub" } }), "Read");
+    assert.equal(
+      shelfBadge({ chapters: [{ id: "a" }], ebook: { id: "book.epub" } }),
+      "Both"
     );
   });
 });
