@@ -52,6 +52,7 @@ body {
 
 .top {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
@@ -63,7 +64,7 @@ body {
   background: linear-gradient(
     to bottom,
     var(--bg-deep) 0%,
-    var(--bg-deep) 72%,
+    var(--bg-deep) 88%,
     transparent 100%
   );
 }
@@ -100,6 +101,88 @@ body {
   display: flex;
   gap: 0.4rem;
   flex: 0 0 auto;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.shelf-tools {
+  flex: 1 1 100%;
+}
+
+.shelf-search {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.7rem;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--card) 92%, transparent);
+}
+
+.shelf-search:focus-within {
+  border-color: rgba(232, 173, 71, 0.45);
+}
+
+.search-icon {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex: 0 0 auto;
+  fill: var(--muted);
+}
+
+.shelf-search input[type="search"] {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 1rem;
+  outline: none;
+}
+
+.shelf-search input[type="search"]::placeholder {
+  color: var(--muted);
+}
+
+.shelf-search input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.search-clear {
+  flex: 0 0 auto;
+  width: 1.7rem;
+  height: 1.7rem;
+  padding: 0;
+  border-radius: 50%;
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.shelf-count {
+  margin: 0.45rem 0 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.shelf-empty {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  line-height: 1.45;
 }
 
 button {
@@ -345,6 +428,13 @@ body.is-scanning .hint {
   margin: 0.2rem 0 0;
   color: var(--muted);
   font-size: 0.9rem;
+}
+
+.book-card .chapter-hits {
+  margin: 0.3rem 0 0;
+  color: var(--amber);
+  font-size: 0.85rem;
+  line-height: 1.35;
 }
 
 .progress-track {
