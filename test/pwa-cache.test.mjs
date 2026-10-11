@@ -192,9 +192,13 @@ describe("PWA cache-bust", () => {
       0,
       result.errors.join("\n")
     );
-    assert.ok(Number.isInteger(result.version) && result.version >= 20);
+    assert.ok(Number.isInteger(result.version) && result.version >= 21);
     assert.ok(result.assets.includes("./"));
     assert.ok(result.assets.includes("./index.html"));
+    assert.ok(
+      result.assets.some((a) => stripQuery(a) === "./library.js"),
+      "ASSETS must include library.js from main"
+    );
   });
 
   it("fails when one ?v= drifts from CACHE", () => {
@@ -209,10 +213,10 @@ describe("PWA cache-bust", () => {
 
   it("fails when a docs/ file is added but left out of ASSETS", () => {
     const sources = readPlayerSources();
-    sources.files = [...sources.files, "library.js"];
+    sources.files = [...sources.files, "extra-shell.js"];
     const result = auditPwaCache(sources);
     assert.ok(
-      result.errors.some((e) => e.includes("./library.js") && e.includes("not in sw.js ASSETS")),
+      result.errors.some((e) => e.includes("./extra-shell.js") && e.includes("not in sw.js ASSETS")),
       result.errors.join("\n")
     );
   });
@@ -220,10 +224,10 @@ describe("PWA cache-bust", () => {
   it("fails when app.js imports a module that ASSETS omitted", () => {
     const sources = readPlayerSources();
     const version = live().version;
-    sources.app = `import { x } from "./library.js?v=${version}";\n` + sources.app;
+    sources.app = `import { x } from "./extra-shell.js?v=${version}";\n` + sources.app;
     const result = auditPwaCache(sources);
     assert.ok(
-      result.errors.some((e) => e.includes("docs/app.js imports") && e.includes("library.js")),
+      result.errors.some((e) => e.includes("docs/app.js imports") && e.includes("extra-shell.js")),
       result.errors.join("\n")
     );
   });
