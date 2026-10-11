@@ -13,6 +13,8 @@ import {
   saveProgress,
   saveTextProgress,
   shelfBadge,
+  bookScreenTabs,
+  isImmuneBook,
   shouldSkipPath,
   textProgress,
   titleFromFilename,
@@ -294,6 +296,47 @@ describe("shelfBadge", () => {
     assert.equal(
       shelfBadge({ chapters: [{ id: "a" }], ebook: { id: "book.epub" } }),
       "Both"
+    );
+  });
+});
+
+describe("bookScreenTabs", () => {
+  it("hides the tab bar for audio-only and ebook-only books", () => {
+    assert.deepEqual(bookScreenTabs({ chapters: [{ id: "a" }], ebook: null }), []);
+    assert.deepEqual(bookScreenTabs({ chapters: [], ebook: { name: "solo.epub" } }), []);
+  });
+
+  it("adds Audio | Read for a paired listen + EPUB book", () => {
+    assert.deepEqual(
+      bookScreenTabs({
+        id: "munroe/how-to",
+        collectionId: "munroe",
+        chapters: [{ id: "01.mp3" }],
+        ebook: { name: "how-to.epub" },
+      }),
+      ["audio", "read"]
+    );
+  });
+
+  it("keeps Concepts for Immune and adds Read when an EPUB is paired", () => {
+    assert.equal(isImmuneBook({ collectionId: "immune", id: "immune/immune" }), true);
+    assert.deepEqual(
+      bookScreenTabs({
+        id: "immune/immune",
+        collectionId: "immune",
+        chapters: [{ id: "Immune-Part01.mp3" }],
+        ebook: null,
+      }),
+      ["audio", "concepts"]
+    );
+    assert.deepEqual(
+      bookScreenTabs({
+        id: "immune/immune",
+        collectionId: "immune",
+        chapters: [{ id: "Immune-Part01.mp3" }],
+        ebook: { name: "immune.epub" },
+      }),
+      ["audio", "read", "concepts"]
     );
   });
 });

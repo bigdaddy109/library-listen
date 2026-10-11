@@ -332,3 +332,77 @@ export function spineLabel(item, index, total) {
   if (of) return `${n} of ${of}`;
   return `Section ${n}`;
 }
+
+/** Fold a chapter / TOC title for matching. "Part 01" and "part 1" share a core. */
+export function chapterMatchKey(value) {
+  return String(value || "")
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/['\u2019]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+export function chapterMatchCore(value) {
+  return chapterMatchKey(value)
+    .replace(/^(chapter|part|ch|pt)\s+/, "")
+    .replace(/^0+(\d)/, "$1");
+}
+
+function chapterNumber(value) {
+  const key = chapterMatchKey(value);
+  const match =
+    key.match(/^(?:chapter|part|ch|pt)\s+0*(\d+)\b/) || key.match(/^0*(\d+)\b/);
+  return match ? Number(match[1]) : null;
+}
+
+function titleScore(chapterTitle, spineTitle) {
+  const a = chapterMatchKey(chapterTitle);
+  const b = chapterMatchKey(spineTitle);
+  if (!a || !b) return 0;
+  if (a === b) return 100;
+  const ac = chapterMatchCore(chapterTitle);
+  const bc = chapterMatchCore(spineTitle);
+  if (ac && ac === bc) return 90;
+  const an = chapterNumber(chapterTitle);
+  const bn = chapterNumber(spineTitle);
+  if (an != null && an === bn) {
+    const word = /^(chapter|part|ch|pt)\b/;
+    if (word.test(a) && word.test(b)) return 80;
+    if (word.test(a) || word.test(b)) return 60;
+    return 45;
+  }
+  if (ac.length >= 4 && bc.length >= 4 && (bc.includes(ac) || ac.includes(bc))) return 70;
+  return 0;
+}
+
+/**
+ * Map an audio / m4b chapter onto an EPUB spine (TOC titles first, then index).
+ * Does not invent titles or read SMIL.
+ */
+export function spineIndexForChapter(spine, chapters, chapterIndex) {
+  const items = Array.isArray(spine) ? spine : [];
+  if (!items.length) return 0;
+  const chs = Array.isArray(chapters) ? chapters : [];
+  const last = Math.max(0, chs.length - 1);
+  const raw = Number(chapterIndex);
+  const idx = Math.max(0, Math.min(Number.isFinite(raw) ? raw : 0, last));
+  const wanted = chs[idx];
+  if (wanted?.title) {
+    let best = -1;
+    let score = 0;
+    for (let i = 0; i < items.length; i += 1) {
+      const next = titleScore(wanted.title, items[i]?.title);
+      if (next > score) {
+        score = next;
+        best = i;
+      }
+    }
+    if (best >= 0 && score >= 45) return best;
+  }
+  if (chs.length <= 1) return 0;
+  if (chs.length === items.length) return idx;
+  return Math.min(items.length - 1, Math.round((idx / (chs.length - 1)) * (items.length - 1)));
+}

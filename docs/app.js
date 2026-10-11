@@ -1,4 +1,4 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=26";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=27";
 import {
   AUDIO_EXT,
   EBOOK_OFFLINE_KEY,
@@ -6,6 +6,7 @@ import {
   SKIP_FOLDERS,
   bookHasAudio,
   bookHasEbook,
+  bookScreenTabs,
   extOf,
   buildLibrary,
   isEbookSavedOffline,
@@ -16,7 +17,7 @@ import {
   saveTextProgress,
   shelfBadge,
   textProgress,
-} from "./library.js?v=26";
+} from "./library.js?v=27";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -24,7 +25,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=26";
+} from "./search.js?v=27";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -39,8 +40,8 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=26";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=26";
+} from "./markers.js?v=27";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=27";
 import {
   applyScrollFraction,
   mimeForPath,
@@ -48,10 +49,11 @@ import {
   rewriteSpineHtml,
   scrollFraction,
   spineCfi,
+  spineIndexForChapter,
   spineIndexFromCfi,
   spineLabel,
   zipPath,
-} from "./epub.js?v=26";
+} from "./epub.js?v=27";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -105,6 +107,12 @@ let readerSession = null;
 let readerToken = 0;
 let readerSaveTimer = null;
 let readerDirty = false;
+/** Audio-driven spine jump: do not treat as a reader Continue write. */
+let readerFollowAudio = false;
+let ignoreReaderScroll = false;
+/** @type {{ bookId: string, chapterIndex: number } | null} */
+let pendingReaderJump = null;
+let readerLoadingId = null;
 /** @type {FileSystemDirectoryHandle | null} */
 let savedDirHandle = null;
 let savingBookId = null;
@@ -822,7 +830,7 @@ function continueCard(resume) {
   }
   btn.append(cover, body);
   btn.addEventListener("click", () => {
-    openBook(resume.book.id);
+    openBook(resume.book.id, { pane: reading ? "read" : "audio" });
     if (!reading) playChapter(resume.book.id, resume.chapterIndex, { resumeIfSame: true });
   });
   return btn;
@@ -965,17 +973,24 @@ function bookCard(book) {
   return btn;
 }
 
-function openBook(bookId) {
+function resolvedBookPane(book, pane = state.bookPane) {
+  const tabs = bookScreenTabs(book);
+  if (pane === "read" && bookHasEbook(book) && !tabs.includes("read")) return "read";
+  if (tabs.includes(pane)) return pane;
+  if (!bookHasAudio(book) && bookHasEbook(book)) return "read";
+  return tabs[0] || "audio";
+}
+
+function openBook(bookId, { pane } = {}) {
+  const book = findBook(bookId);
   if (state.activeBookId !== bookId) {
-    state.bookPane = "audio";
-    if (readerDirty) persistReaderProgress();
+    if (readerDirty && !readerFollowAudio) persistReaderProgress();
+    state.bookPane = resolvedBookPane(book, pane || "audio");
+  } else if (pane) {
+    state.bookPane = resolvedBookPane(book, pane);
   }
   state.activeBookId = bookId;
   render();
-}
-
-function isImmuneBook(book) {
-  return book?.collectionId === "immune" || String(book?.id || "").startsWith("immune/");
 }
 
 function renderConceptCards() {
@@ -1029,6 +1044,7 @@ function teardownReader({ keepToken = false } = {}) {
   revokeReaderUrls(readerSession);
   readerSession = null;
   readerDirty = false;
+  readerLoadingId = null;
   if (!keepToken) readerToken += 1;
   const { frame } = readerEls();
   if (frame) {
@@ -1042,6 +1058,7 @@ function teardownReader({ keepToken = false } = {}) {
 }
 
 function persistReaderProgress() {
+  if (readerFollowAudio) return;
   const session = readerSession;
   if (!session?.pub) return;
   const book = findBook(session.bookId);
@@ -1070,6 +1087,8 @@ function updateReaderChrome() {
 }
 
 function onReaderScroll() {
+  if (ignoreReaderScroll) return;
+  readerFollowAudio = false;
   readerDirty = true;
   if (readerSaveTimer) return;
   readerSaveTimer = window.setTimeout(() => {
@@ -1091,6 +1110,7 @@ function onReaderClick(event) {
   const path = zipPath(dir, href);
   const index = session.pub.spine.findIndex((entry) => entry.path === path);
   if (index < 0) return;
+  readerFollowAudio = false;
   readerDirty = true;
   persistReaderProgress();
   renderReaderSpine(index, 0);
@@ -1123,7 +1143,11 @@ function renderReaderSpine(index, fraction = 0) {
     if (readerSession !== session) return;
     const doc = frame.contentDocument;
     if (!doc) return;
+    ignoreReaderScroll = true;
     applyScrollFraction(doc.scrollingElement || doc.documentElement, fraction);
+    window.setTimeout(() => {
+      ignoreReaderScroll = false;
+    }, 0);
     doc.addEventListener("scroll", onReaderScroll, { passive: true });
     doc.addEventListener("click", onReaderClick);
   };
@@ -1133,6 +1157,11 @@ function renderReaderSpine(index, fraction = 0) {
 }
 
 async function loadReader(book) {
+  if (readerSession?.bookId === book.id && readerSession.pub) {
+    if (pendingReaderJump?.bookId === book.id) applyPendingReaderJump(book);
+    return;
+  }
+  if (readerLoadingId === book.id) return;
   const token = ++readerToken;
   if (readerSession && readerSession.bookId !== book.id) teardownReader({ keepToken: true });
   const { status, frame } = readerEls();
@@ -1144,6 +1173,7 @@ async function loadReader(book) {
   }
   if (status) status.textContent = "Opening ebook…";
   readerDirty = false;
+  readerLoadingId = book.id;
   try {
     const pub = await parseEpub(await book.ebook.file.arrayBuffer());
     if (token !== readerToken) return;
@@ -1153,23 +1183,49 @@ async function loadReader(book) {
       Math.max(0, spineIndexFromCfi(saved?.locator))
     );
     readerSession = { bookId: book.id, pub, index, urls: [], token };
-    renderReaderSpine(index, saved?.fraction || 0);
+    if (pendingReaderJump?.bookId === book.id) {
+      applyPendingReaderJump(book);
+    } else {
+      readerFollowAudio = false;
+      renderReaderSpine(index, saved?.fraction || 0);
+    }
     if (status) status.textContent = "";
   } catch (err) {
     console.error(err);
     if (token !== readerToken) return;
     readerSession = null;
     if (status) status.textContent = "Could not open this EPUB.";
+  } finally {
+    if (readerLoadingId === book.id) readerLoadingId = null;
   }
 }
 
-function syncReader(book, hide) {
-  const { root } = readerEls();
-  const show = bookHasEbook(book) && !hide;
-  root?.classList.toggle("hidden", !show);
-  if (!show) return;
+function applyPendingReaderJump(book) {
+  const jump = pendingReaderJump;
+  if (!jump || jump.bookId !== book.id) return;
+  if (!readerSession?.pub || readerSession.bookId !== book.id) return;
+  pendingReaderJump = null;
+  const index = spineIndexForChapter(readerSession.pub.spine, book.chapters, jump.chapterIndex);
+  readerFollowAudio = true;
+  readerDirty = false;
+  renderReaderSpine(index, 0);
+}
+
+function jumpReaderToChapter(book, chapterIndex) {
+  if (!bookHasEbook(book) || !book.chapters?.length) return;
+  pendingReaderJump = { bookId: book.id, chapterIndex };
   if (readerSession?.bookId === book.id && readerSession.pub) {
-    updateReaderChrome();
+    applyPendingReaderJump(book);
+  }
+}
+
+function syncReader(book, { visible, load }) {
+  const { root } = readerEls();
+  root?.classList.toggle("hidden", !visible);
+  if (!load) return;
+  if (readerSession?.bookId === book.id && readerSession.pub) {
+    if (pendingReaderJump?.bookId === book.id) applyPendingReaderJump(book);
+    else updateReaderChrome();
     return;
   }
   loadReader(book);
@@ -1211,15 +1267,27 @@ function renderBook() {
     els.chapterList.appendChild(li);
   });
 
-  const concepts = isImmuneBook(book);
-  const showConcepts = concepts && state.bookPane === "concepts";
-  document.getElementById("book-tabs").classList.toggle("hidden", !concepts);
-  document.getElementById("tab-audio").setAttribute("aria-pressed", showConcepts ? "false" : "true");
-  document.getElementById("tab-concepts").setAttribute("aria-pressed", showConcepts ? "true" : "false");
+  const tabs = bookScreenTabs(book);
+  const pane = resolvedBookPane(book);
+  if (state.bookPane !== pane) state.bookPane = pane;
+  const showConcepts = pane === "concepts";
+  const showReadTab = tabs.includes("read");
+  const showReader =
+    bookHasEbook(book) && !showConcepts && (pane === "read" || !showReadTab);
+  document.getElementById("book-tabs").classList.toggle("hidden", tabs.length === 0);
+  const tabAudio = document.getElementById("tab-audio");
+  const tabRead = document.getElementById("tab-read");
+  const tabConcepts = document.getElementById("tab-concepts");
+  tabAudio?.classList.toggle("hidden", !tabs.includes("audio"));
+  tabRead?.classList.toggle("hidden", !showReadTab);
+  tabConcepts?.classList.toggle("hidden", !tabs.includes("concepts"));
+  tabAudio?.setAttribute("aria-pressed", pane === "audio" ? "true" : "false");
+  tabRead?.setAttribute("aria-pressed", pane === "read" ? "true" : "false");
+  tabConcepts?.setAttribute("aria-pressed", showConcepts ? "true" : "false");
   els.chapterList.classList.toggle("hidden", showConcepts || !book.chapters.length);
   els.conceptList.classList.toggle("hidden", !showConcepts);
   if (showConcepts) renderConceptCards();
-  syncReader(book, showConcepts);
+  syncReader(book, { visible: showReader, load: bookHasEbook(book) });
 }
 
 function render() {
@@ -1518,6 +1586,7 @@ async function playChapter(bookId, chapterIndex, { resumeIfSame = false, forceSt
   els.playerBar.classList.remove("hidden");
   updatePlayerBar();
   updateMediaSession();
+  jumpReaderToChapter(book, chapterIndex);
   if (state.activeBookId === bookId) renderBook();
   maybeOfferSaveWhileListening(book);
 }
@@ -1647,6 +1716,7 @@ function syncChapterFromTime({ toast = false } = {}) {
   playback = { bookId: playback.bookId, chapterIndex: next };
   persistCurrent();
   updateMediaSession();
+  jumpReaderToChapter(book, next);
   if (state.activeBookId === book.id) renderBook();
   if (toast && crossedForward && !audio.paused) {
     showToast(`Next: ${book.chapters[next].title}`);
@@ -1824,18 +1894,24 @@ function bind() {
   });
   document.getElementById("reader-prev")?.addEventListener("click", () => {
     if (!readerSession || readerSession.index <= 0) return;
+    readerFollowAudio = false;
     readerDirty = true;
     persistReaderProgress();
     renderReaderSpine(readerSession.index - 1, 0);
   });
   document.getElementById("reader-next")?.addEventListener("click", () => {
     if (!readerSession || readerSession.index >= readerSession.pub.spine.length - 1) return;
+    readerFollowAudio = false;
     readerDirty = true;
     persistReaderProgress();
     renderReaderSpine(readerSession.index + 1, 0);
   });
   document.getElementById("tab-audio").addEventListener("click", () => {
     state.bookPane = "audio";
+    renderBook();
+  });
+  document.getElementById("tab-read")?.addEventListener("click", () => {
+    state.bookPane = "read";
     renderBook();
   });
   document.getElementById("tab-concepts").addEventListener("click", () => {

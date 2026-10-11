@@ -151,6 +151,25 @@ export function shelfBadge(book) {
   return "Audio";
 }
 
+export function isImmuneBook(book) {
+  return book?.collectionId === "immune" || String(book?.id || "").startsWith("immune/");
+}
+
+/**
+ * Book-screen tabs. Empty means no tab bar (audio-only, or ebook-only).
+ * Immune keeps Concepts; a paired EPUB adds Read beside Audio.
+ */
+export function bookScreenTabs(book) {
+  const audio = bookHasAudio(book);
+  const read = bookHasEbook(book);
+  const immune = isImmuneBook(book);
+  const tabs = [];
+  if (audio && (read || immune)) tabs.push("audio");
+  if (audio && read) tabs.push("read");
+  if (immune) tabs.push("concepts");
+  return tabs;
+}
+
 /**
  * Guess collection/book folders from a relative path.
  * Supports Library/Collection/listen/Book/file and shorter picks.
