@@ -1,4 +1,4 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=23";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=24";
 import {
   AUDIO_EXT,
   SKIP_FOLDERS,
@@ -7,7 +7,7 @@ import {
   loadProgress,
   chapterProgress,
   saveProgress,
-} from "./library.js?v=23";
+} from "./library.js?v=24";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -15,7 +15,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=23";
+} from "./search.js?v=24";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -30,7 +30,8 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=23";
+} from "./markers.js?v=24";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=24";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -1246,11 +1247,30 @@ async function playChapter(bookId, chapterIndex, { resumeIfSame = false, forceSt
 }
 
 function maybeOfferSaveWhileListening(book) {
-  if (!book || isBookOffline(book) || !isBookPlayable(book)) return;
+  if (
+    !shouldOfferSaveWhileListening({
+      book,
+      isPlayable: !!book && isBookPlayable(book),
+      isOffline: !!book && isBookOffline(book),
+      hasDirectoryHandle: !!savedDirHandle,
+    })
+  ) {
+    return;
+  }
   if (savePrompted.has(book.id) || savingBookId) return;
   savePrompted.add(book.id);
   window.setTimeout(() => {
-    if (playback?.bookId !== book.id || isBookOffline(book) || savingBookId) return;
+    if (playback?.bookId !== book.id || savingBookId) return;
+    if (
+      !shouldOfferSaveWhileListening({
+        book,
+        isPlayable: isBookPlayable(book),
+        isOffline: isBookOffline(book),
+        hasDirectoryHandle: !!savedDirHandle,
+      })
+    ) {
+      return;
+    }
     if (!confirm(`Save “${book.title}” on this phone so it still plays after a restart?`)) return;
     saveBookOffline(book).then(() => {
       showToast(`Saved “${book.title}” on this device`);
