@@ -9,8 +9,10 @@ import {
   rewriteSpineHtml,
   scrollFraction,
   spineCfi,
+  spineIndexForChapter,
   spineIndexFromCfi,
   spineLabel,
+  chapterMatchCore,
   unzip,
   zipPath,
 } from "../docs/epub.js";
@@ -208,7 +210,53 @@ describe("rewriteSpineHtml", () => {
     assert.match(html, /data-library-listen-reader/);
     assert.match(html, /href="#note"/);
   });
+});
 
+describe("spineIndexForChapter", () => {
+  const spine = (titles) => titles.map((title, index) => ({ index, title }));
+  const chapters = (titles) => titles.map((title, index) => ({ id: `${index}`, title }));
+
+  it("matches audio / m4b titles onto TOC labels before using index", () => {
+    assert.equal(chapterMatchCore("Part 01"), "1");
+    assert.equal(chapterMatchCore("Chapter 2"), "2");
+    const items = spine(["Cover", "Part 01", "Part 02", "Part 03"]);
+    const chs = chapters(["Part 01", "Part 02", "Part 03"]);
+    assert.equal(spineIndexForChapter(items, chs, 0), 1);
+    assert.equal(spineIndexForChapter(items, chs, 2), 3);
+    assert.equal(
+      spineIndexForChapter(spine(["Opening", "Later", "Closing"]), chapters(["Later"]), 0),
+      1
+    );
+    assert.equal(
+      spineIndexForChapter(
+        spine(["Chapter 1", "Chapter 2", "Chapter 3"]),
+        chapters(["Chapter 2"]),
+        0
+      ),
+      1
+    );
+    assert.equal(
+      spineIndexForChapter(
+        spine(["Global Windstorm", "New York"]),
+        chapters(["02 - Global Windstorm"]),
+        0
+      ),
+      0
+    );
+  });
+
+  it("falls back to equal-count or proportional index when titles do not match", () => {
+    const items = spine(["Opening", "Later", "Closing"]);
+    const parts = chapters(["Part 01", "Part 02", "Part 03", "Part 04", "Part 05"]);
+    assert.equal(spineIndexForChapter(items, parts, 0), 0);
+    assert.equal(spineIndexForChapter(items, parts, 4), 2);
+    const paired = spine(["A", "B", "C"]);
+    assert.equal(spineIndexForChapter(paired, chapters(["One", "Two", "Three"]), 1), 1);
+    assert.equal(spineIndexForChapter([], chapters(["Part 01"]), 0), 0);
+  });
+});
+
+describe("spineLabel", () => {
   it("labels a spine item without inventing a file-name title", () => {
     assert.equal(spineLabel({ title: "Opening", index: 0 }, 0, 2), "Opening · 1 of 2");
     assert.equal(spineLabel({ title: "", index: 1 }, 1, 2), "2 of 2");
