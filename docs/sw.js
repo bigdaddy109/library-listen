@@ -1,16 +1,17 @@
 /* Shell-only cache. Audiobook files are never cached here. */
-const CACHE = "library-listen-shell-v22";
+const CACHE = "library-listen-shell-v23";
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=22",
-  "./app.js?v=22",
-  "./library.js?v=22",
-  "./search.js?v=22",
-  "./immune-cards.js?v=22",
+  "./styles.css?v=23",
+  "./app.js?v=23",
+  "./library.js?v=23",
+  "./search.js?v=23",
+  "./markers.js?v=23",
+  "./immune-cards.js?v=23",
   "./manifest.webmanifest",
-  "./icon.svg?v=22",
-  "./apple-touch-icon.png?v=22",
+  "./icon.svg?v=23",
+  "./apple-touch-icon.png?v=23",
   "./concepts/immune/skin.jpg",
   "./concepts/immune/bacteria.jpg",
   "./concepts/immune/inflammation.jpg",

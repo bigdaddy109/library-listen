@@ -1,4 +1,4 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=22";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=23";
 import {
   AUDIO_EXT,
   SKIP_FOLDERS,
@@ -6,9 +6,8 @@ import {
   buildLibrary,
   loadProgress,
   chapterProgress,
-  resumeSeconds,
   saveProgress,
-} from "./library.js?v=22";
+} from "./library.js?v=23";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -16,7 +15,22 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=22";
+} from "./search.js?v=23";
+import {
+  applyAudiobookMarkers,
+  chapterIndexAtTime,
+  chapterRelativePosition,
+  chapterStart,
+  filePositionFromDisplay,
+  isAudiobook,
+  liveChapterDuration,
+  offlineChapterBlob,
+  resolvedChapterDuration,
+  restoreChapterFields,
+  resumeFileSeconds,
+  snapshotChapter,
+  uniqueChapterFiles,
+} from "./markers.js?v=23";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -118,7 +132,7 @@ async function loadOfflineIndex() {
 
 function isBookOffline(book) {
   const saved = offlineIndex.get(book.id);
-  return !!saved && book.chapters.every((ch) => saved.has(ch.id));
+  return !!saved && book.chapters.every((ch) => !!offlineChapterBlob(saved, ch));
 }
 
 function isBookPlayable(book) {
@@ -134,7 +148,8 @@ function saveLibrarySnapshot() {
     title: b.title,
     subtitle: b.subtitle,
     author: b.author,
-    chapters: b.chapters.map((ch) => ({ id: ch.id, title: ch.title })),
+    kind: b.kind,
+    chapters: b.chapters.map((ch) => snapshotChapter(ch)),
   }));
   try {
     localStorage.setItem(LIBRARY_KEY, JSON.stringify(snapshot));
@@ -158,23 +173,36 @@ function restoreLibrarySnapshot() {
       ...b,
       coverFile: saved?.get(COVER_KEY) || null,
       coverUrl: null,
-      chapters: b.chapters.map((ch, index) => ({
-        id: ch.id,
-        index,
-        title: ch.title,
-        file: saved?.get(ch.id) || null,
-        fromDevice: !!saved?.has(ch.id),
-        url: null,
-      })),
+      kind: b.kind,
+      chapters: b.chapters.map((ch, index) => {
+        const file = offlineChapterBlob(saved, ch);
+        return {
+          id: ch.id,
+          index,
+          title: ch.title,
+          file,
+          fromDevice: !!file,
+          url: null,
+          ...restoreChapterFields(ch, index),
+        };
+      }),
     };
   });
 }
 
 function attachUrls(books) {
   revokeAllUrls();
+  const seen = new WeakMap();
+  const urlFor = (file) => {
+    if (!file) return null;
+    if (seen.has(file)) return seen.get(file);
+    const url = fileUrl(file);
+    seen.set(file, url);
+    return url;
+  };
   for (const book of books) {
-    for (const ch of book.chapters) ch.url = ch.file ? fileUrl(ch.file) : null;
-    book.coverUrl = book.coverFile ? fileUrl(book.coverFile) : null;
+    for (const ch of book.chapters) ch.url = urlFor(ch.file);
+    book.coverUrl = urlFor(book.coverFile);
   }
 }
 
@@ -183,7 +211,7 @@ async function saveBookOffline(book) {
   savingBookId = book.id;
   try {
     await navigator.storage?.persist?.().catch(() => false);
-    const items = book.chapters.map((ch) => [ch.id, ch.file]);
+    const items = uniqueChapterFiles(book.chapters).map(({ key, file }) => [key, file]);
     if (book.coverFile) items.push([COVER_KEY, book.coverFile]);
     const saved = new Map();
     for (let i = 0; i < items.length; i += 1) {
@@ -234,7 +262,7 @@ function updateOfflineButton(book, busyLabel) {
   } else if (!isBookPlayable(book)) {
     status.textContent = "Reconnect the Library folder to play this book.";
   } else {
-    const bytes = book.chapters.reduce((n, ch) => n + (ch.file?.size || 0), 0);
+    const bytes = uniqueChapterFiles(book.chapters).reduce((n, { file }) => n + (file?.size || 0), 0);
     status.textContent = `Save a copy (${formatBytes(bytes)}) so it opens after the app restarts.`;
   }
 }
@@ -369,9 +397,15 @@ async function walkDirectory(dir, prefix = []) {
   return { entries: out, skipped };
 }
 
+async function booksFromEntries(entries) {
+  const books = buildLibrary(entries);
+  await applyAudiobookMarkers(books);
+  return books;
+}
+
 async function scanDirectoryHandle(handle) {
   const { entries, skipped } = await walkDirectory(handle);
-  return { books: buildLibrary(entries), entries, skipped, handle };
+  return { books: await booksFromEntries(entries), entries, skipped, handle };
 }
 
 async function pickWithDirectoryPicker() {
@@ -412,11 +446,16 @@ function pickWithInput(input) {
         path: file.webkitRelativePath || file.name,
         file,
       }));
-      finish(resolve, {
-        books: buildLibrary(entries),
-        entries,
-        skipped: entries.filter((e) => AUDIO_EXT.has(extOf(e.file.name)) && e.file.size === 0).length,
-      });
+      booksFromEntries(entries)
+        .then((books) =>
+          finish(resolve, {
+            books,
+            entries,
+            skipped: entries.filter((e) => AUDIO_EXT.has(extOf(e.file.name)) && e.file.size === 0)
+              .length,
+          })
+        )
+        .catch((err) => finish(reject, err));
     };
 
     // User cancelled the sheet — focus returns without a change event.
@@ -577,8 +616,8 @@ function progressLine(book) {
   const chapter =
     book.chapters.find((c) => c.id === p.chapterId) || book.chapters[0];
   if (!chapter) return { line: "Not started", fraction: null };
-  const pos = p.positionSeconds || 0;
-  const dur = p.chapterDurationSeconds;
+  const pos = chapterRelativePosition(chapter, p.positionSeconds || 0);
+  const dur = resolvedChapterDuration(chapter, p.chapterDurationSeconds);
   let line = `${chapter.title} · ${formatClock(pos)}`;
   if (dur > 0) line += ` / ${formatClock(dur)}`;
   if (p.updatedAt) line += ` · ${relativeTime(p.updatedAt)}`;
@@ -645,9 +684,10 @@ function mostRecentResume() {
     const chapterIndex = book.chapters.findIndex((c) => c.id === p.chapterId);
     if (chapterIndex < 0) continue;
     const saved = chapterProgress(book.id, p.chapterId);
-    const pos = Number.isFinite(saved?.positionSeconds)
+    const filePos = Number.isFinite(saved?.positionSeconds)
       ? saved.positionSeconds
       : p.positionSeconds || 0;
+    const pos = chapterRelativePosition(book.chapters[chapterIndex], filePos);
     if (pos < 0.5 && chapterIndex === 0) continue;
     if (!best || p.updatedAt > best.updatedAt) {
       best = {
@@ -887,7 +927,7 @@ function renderBook() {
     `;
     btn.querySelector(".ch-title").textContent = ch.title;
     const saved = chapterProgress(book.id, ch.id);
-    const shown = saved?.positionSeconds || 0;
+    const shown = chapterRelativePosition(ch, saved?.positionSeconds || 0);
     btn.querySelector(".ch-time").textContent =
       shown > 0.5 ? formatClock(shown) : "";
     btn.addEventListener("click", () => playChapter(book.id, i, { resumeIfSame: true }));
@@ -990,8 +1030,14 @@ function clampTime(seconds) {
 function seekWithin(seconds) {
   if (!playback) return;
   applyPlaybackPosition(clampTime(seconds));
+  syncChapterFromTime({ toast: false });
   persistCurrent();
   updatePlayerBar();
+}
+
+function seekDisplay(seconds) {
+  const ctx = currentChapter();
+  seekWithin(ctx ? filePositionFromDisplay(ctx.chapter, seconds) : seconds);
 }
 
 function seekBy(delta) {
@@ -1000,8 +1046,10 @@ function seekBy(delta) {
 
 function skipToPrevious() {
   if (!playback) return;
-  if ((audio.currentTime || 0) > 3) {
-    seekWithin(0);
+  const ctx = currentChapter();
+  const display = ctx ? chapterRelativePosition(ctx.chapter, audio.currentTime || 0) : audio.currentTime || 0;
+  if (display > 3) {
+    seekWithin(ctx ? chapterStart(ctx.chapter) : 0);
     return;
   }
   if (playback.chapterIndex <= 0) return;
@@ -1023,18 +1071,38 @@ function coverMime(file) {
   return "image/jpeg";
 }
 
+function currentChapter() {
+  if (!playback) return null;
+  const book = findBook(playback.bookId);
+  const chapter = book?.chapters[playback.chapterIndex];
+  if (!book || !chapter) return null;
+  return { book, chapter };
+}
+
+function displayClock() {
+  const ctx = currentChapter();
+  const filePos = audio.currentTime || 0;
+  const fileDur = Number.isFinite(audio.duration) ? audio.duration : null;
+  if (!ctx) {
+    return { pos: filePos, dur: fileDur || 0 };
+  }
+  return {
+    pos: chapterRelativePosition(ctx.chapter, filePos),
+    dur: liveChapterDuration(ctx.chapter, fileDur) || 0,
+  };
+}
+
 function updatePositionState() {
   if (!("mediaSession" in navigator)) return;
   if (typeof navigator.mediaSession.setPositionState !== "function") return;
   if (!playback) return;
-  const dur = audio.duration;
-  if (!Number.isFinite(dur) || dur <= 0) return;
-  const pos = Math.min(Math.max(0, audio.currentTime || 0), dur);
+  const { pos, dur } = displayClock();
+  if (!(dur > 0)) return;
   try {
     navigator.mediaSession.setPositionState({
       duration: dur,
       playbackRate: audio.playbackRate || 1,
-      position: pos,
+      position: Math.min(Math.max(0, pos), dur),
     });
   } catch {
     /* some browsers reject the state while metadata is in flux */
@@ -1112,32 +1180,36 @@ async function playChapter(bookId, chapterIndex, { resumeIfSame = false, forceSt
   detachChapterMeta?.();
 
   const saved = chapterProgress(bookId, chapter.id);
-  const resumeAt = forceStart ? 0 : resumeSeconds(saved);
-  const shouldResume = resumeAt > 0.5;
+  const start = chapterStart(chapter);
+  const seekTo = forceStart ? start : resumeFileSeconds(saved, chapter);
+  const shouldResume = seekTo > 0.5;
 
   const applyPosition = () => {
     if (token !== playToken) return;
-    applyPlaybackPosition(shouldResume ? resumeTarget(resumeAt) : 0);
+    applyPlaybackPosition(shouldResume ? resumeTarget(seekTo) : start);
   };
 
-  if (shouldResume) beginResumeGuard(token, resumeAt);
+  if (shouldResume) beginResumeGuard(token, seekTo);
   else clearResumeGuard();
 
-  // Listener before src so a cached file cannot miss loadedmetadata.
-  const onMeta = () => {
-    detach();
-    applyPosition();
-    maybeFixResumeSnap();
-  };
-  const detach = () => {
-    audio.removeEventListener("loadedmetadata", onMeta);
-    if (detachChapterMeta === detach) detachChapterMeta = null;
-  };
-  detachChapterMeta = detach;
-  audio.addEventListener("loadedmetadata", onMeta);
-  audio.src = chapter.url;
+  const alreadyLoaded = audio.src === chapter.url && audio.readyState >= 1;
+  if (!alreadyLoaded) {
+    // Listener before src so a cached file cannot miss loadedmetadata.
+    const onMeta = () => {
+      detach();
+      applyPosition();
+      maybeFixResumeSnap();
+    };
+    const detach = () => {
+      audio.removeEventListener("loadedmetadata", onMeta);
+      if (detachChapterMeta === detach) detachChapterMeta = null;
+    };
+    detachChapterMeta = detach;
+    audio.addEventListener("loadedmetadata", onMeta);
+    audio.src = chapter.url;
+  }
   applyPlaybackRate();
-  if (audio.readyState >= 1) applyPosition();
+  if (alreadyLoaded || audio.readyState >= 1) applyPosition();
 
   const onPlaying = () => {
     audio.removeEventListener("playing", onPlaying);
@@ -1259,13 +1331,30 @@ function persistCurrent() {
   const book = findBook(playback.bookId);
   const chapter = book?.chapters[playback.chapterIndex];
   if (!chapter) return;
+  const fileDur = Number.isFinite(audio.duration) ? audio.duration : null;
   saveProgress(
     book.id,
     chapter.id,
     audio.currentTime || 0,
-    Number.isFinite(audio.duration) ? audio.duration : null
+    liveChapterDuration(chapter, fileDur)
   );
   updateChapterTimes();
+}
+
+function syncChapterFromTime({ toast = false } = {}) {
+  if (!playback) return;
+  const book = findBook(playback.bookId);
+  if (!isAudiobook(book)) return;
+  const next = chapterIndexAtTime(book.chapters, audio.currentTime || 0);
+  if (next < 0 || next === playback.chapterIndex) return;
+  const crossedForward = next > playback.chapterIndex;
+  playback = { bookId: playback.bookId, chapterIndex: next };
+  persistCurrent();
+  updateMediaSession();
+  if (state.activeBookId === book.id) renderBook();
+  if (toast && crossedForward && !audio.paused) {
+    showToast(`Next: ${book.chapters[next].title}`);
+  }
 }
 
 function updateChapterTimes() {
@@ -1277,7 +1366,7 @@ function updateChapterTimes() {
     const el = buttons[i]?.querySelector(".ch-time");
     if (!el) return;
     const saved = chapterProgress(book.id, ch.id);
-    const shown = saved?.positionSeconds || 0;
+    const shown = chapterRelativePosition(ch, saved?.positionSeconds || 0);
     el.textContent = shown > 0.5 ? formatClock(shown) : "";
   });
 }
@@ -1312,13 +1401,12 @@ function updatePlayerBar() {
     .getElementById("btn-play")
     .classList.toggle("is-paused", audio.paused);
 
-  const pos = audio.currentTime || 0;
-  const dur = Number.isFinite(audio.duration) ? audio.duration : 0;
+  const { pos, dur } = displayClock();
   document.getElementById("player-pos").textContent = formatClock(pos);
   document.getElementById("player-dur").textContent = formatClock(dur);
   if (!seekDragging) writeSeekBar(pos, dur);
 
-  const atStart = (audio.currentTime || 0) <= 3;
+  const atStart = pos <= 3;
   document.getElementById("btn-prev").disabled = playback.chapterIndex <= 0 && atStart;
   document.getElementById("btn-next").disabled =
     playback.chapterIndex >= book.chapters.length - 1;
@@ -1386,7 +1474,7 @@ function bindMediaSession() {
   });
   setHandler("seekto", (details) => {
     if (typeof details?.seekTime === "number" && Number.isFinite(details.seekTime)) {
-      seekWithin(details.seekTime);
+      seekDisplay(details.seekTime);
     }
   });
 }
@@ -1474,11 +1562,16 @@ function bind() {
   });
   seek.addEventListener("input", () => {
     if (ignoreSeekInput) return;
-    const dur = audio.duration;
+    const { dur } = displayClock();
     if (!Number.isFinite(dur) || dur <= 0) return;
     const max = Number(seek.max);
     if (!Number.isFinite(max) || Math.abs(max - dur * 1000) > 50) return;
-    audio.currentTime = Number(seek.value) / 1000;
+    const ctx = currentChapter();
+    const fileTime = ctx
+      ? filePositionFromDisplay(ctx.chapter, Number(seek.value) / 1000)
+      : Number(seek.value) / 1000;
+    applyPlaybackPosition(clampTime(fileTime));
+    syncChapterFromTime({ toast: false });
     updatePlayerBar();
   });
   seek.addEventListener("change", () => {
@@ -1488,6 +1581,7 @@ function bind() {
 
   audio.addEventListener("timeupdate", () => {
     maybeFixResumeSnap();
+    syncChapterFromTime({ toast: true });
     updatePlayerBar();
     if (sleepUntil && Date.now() >= sleepUntil) {
       clearSleepTimer();
