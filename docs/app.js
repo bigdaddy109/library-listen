@@ -1,38 +1,15 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=20";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=21";
+import {
+  AUDIO_EXT,
+  SKIP_FOLDERS,
+  extOf,
+  buildLibrary,
+  loadProgress,
+  chapterProgress,
+  resumeSeconds,
+  saveProgress,
+} from "./library.js?v=21";
 
-const AUDIO_EXT = new Set(["mp3", "m4a", "m4b", "aac"]);
-const COVER_EXT = new Set(["jpg", "jpeg", "png", "webp"]);
-const SKIP_FOLDERS = new Set(["ebooks", "_source"]);
-
-const KNOWN_COLLECTIONS = {
-  "門羅-WhatIf": { id: "munroe", title: "Munroe", author: "Randall Munroe" },
-  Immune: { id: "immune", title: "Immune", author: "Philipp Dettmer" },
-};
-
-const KNOWN_BOOKS = {
-  "what-if-1": {
-    title: "What If?",
-    subtitle: "Serious Scientific Answers to Absurd Hypothetical Questions",
-    author: "Randall Munroe",
-  },
-  "what-if-2": {
-    title: "What If? 2",
-    subtitle: "Additional Serious Scientific Answers to Absurd Hypothetical Questions",
-    author: "Randall Munroe",
-  },
-  "how-to": {
-    title: "How To",
-    subtitle: "Absurd Scientific Advice for Common Real-World Problems",
-    author: "Randall Munroe",
-  },
-  immune: {
-    title: "Immune",
-    subtitle: "A Journey into the Mysterious System That Keeps You Alive",
-    author: "Philipp Dettmer",
-  },
-};
-
-const PROGRESS_KEY = "librarylisten.progress.v1";
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
 const RATES = [1, 1.25, 1.5];
@@ -307,58 +284,6 @@ function cycleRate() {
   updatePositionState();
 }
 
-function extOf(name) {
-  const i = name.lastIndexOf(".");
-  return i >= 0 ? name.slice(i + 1).toLowerCase() : "";
-}
-
-function slug(value) {
-  const folded = value.normalize("NFKD").replace(/\p{M}/gu, "");
-  const cleaned = folded
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return cleaned || "collection";
-}
-
-function humanize(value) {
-  return value
-    .replace(/[-_]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function collectionMeta(folder) {
-  return (
-    KNOWN_COLLECTIONS[folder] || {
-      id: slug(folder),
-      title: humanize(folder),
-      author: "Unknown",
-    }
-  );
-}
-
-function bookMeta(folder, collectionAuthor) {
-  const key = folder.toLowerCase();
-  return (
-    KNOWN_BOOKS[folder] ||
-    KNOWN_BOOKS[key] || {
-      title: humanize(folder),
-      subtitle: null,
-      author: collectionAuthor,
-    }
-  );
-}
-
-function titleFromFilename(fileName) {
-  const base = fileName.replace(/\.[^.]+$/, "");
-  const part = base.match(/(?:^|[-_\s])part\s*0*(\d+)$/i);
-  if (part) return `Part ${String(Number(part[1])).padStart(2, "0")}`;
-  const numbered = base.replace(/^\s*\d+\s*[-.)]+\s*/, "").trim();
-  return numbered || base;
-}
-
 function formatClock(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
   const total = Math.floor(seconds);
@@ -381,81 +306,6 @@ function relativeTime(iso) {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-function loadProgress() {
-  try {
-    return JSON.parse(localStorage.getItem(PROGRESS_KEY) || "{}");
-  } catch {
-    return {};
-  }
-}
-
-function chapterProgress(bookId, chapterId) {
-  const book = loadProgress()[bookId];
-  if (!book || !chapterId) return null;
-  const saved = book.chapters?.[chapterId];
-  if (saved && Number.isFinite(saved.positionSeconds)) return saved;
-  if (book.chapterId === chapterId && Number.isFinite(book.positionSeconds)) {
-    return {
-      positionSeconds: book.positionSeconds,
-      chapterDurationSeconds: book.chapterDurationSeconds ?? null,
-      updatedAt: book.updatedAt,
-    };
-  }
-  return null;
-}
-
-function resumeSeconds(saved) {
-  if (!saved || !Number.isFinite(saved.positionSeconds)) return 0;
-  const pos = saved.positionSeconds;
-  const dur = saved.chapterDurationSeconds;
-  if (dur > 0 && pos >= dur - 2) return 0;
-  return pos;
-}
-
-function saveProgress(bookId, chapterId, positionSeconds, chapterDurationSeconds) {
-  const all = loadProgress();
-  const previous = all[bookId] || {};
-  const chapters = { ...(previous.chapters || {}) };
-  // Keep the old single-slot chapter when switching, so Part 3 is not wiped by Part 2.
-  if (
-    previous.chapterId &&
-    previous.chapterId !== chapterId &&
-    !chapters[previous.chapterId] &&
-    Number.isFinite(previous.positionSeconds)
-  ) {
-    chapters[previous.chapterId] = {
-      positionSeconds: previous.positionSeconds,
-      chapterDurationSeconds: previous.chapterDurationSeconds ?? null,
-      updatedAt: previous.updatedAt || new Date().toISOString(),
-    };
-  }
-  const prevChapter = chapters[chapterId] || {};
-  let duration = null;
-  if (Number.isFinite(chapterDurationSeconds) && chapterDurationSeconds > 0) {
-    duration = chapterDurationSeconds;
-  } else {
-    duration =
-      prevChapter.chapterDurationSeconds ??
-      (previous.chapterId === chapterId ? previous.chapterDurationSeconds : null) ??
-      null;
-  }
-  const pos = Math.round(Math.max(0, positionSeconds) * 100) / 100;
-  const now = new Date().toISOString();
-  chapters[chapterId] = {
-    positionSeconds: pos,
-    chapterDurationSeconds: duration,
-    updatedAt: now,
-  };
-  all[bookId] = {
-    chapterId,
-    positionSeconds: pos,
-    chapterDurationSeconds: duration,
-    updatedAt: now,
-    chapters,
-  };
-  localStorage.setItem(PROGRESS_KEY, JSON.stringify(all));
-}
-
 function revokeAllUrls() {
   for (const url of objectUrls) URL.revokeObjectURL(url);
   objectUrls.clear();
@@ -465,22 +315,6 @@ function fileUrl(file) {
   const url = URL.createObjectURL(file);
   objectUrls.add(url);
   return url;
-}
-
-function normalizeRelPath(path) {
-  return path.replace(/\\/g, "/").replace(/^\.?\//, "");
-}
-
-function pathParts(path) {
-  return normalizeRelPath(path)
-    .split("/")
-    .filter((p) => p && p !== ".");
-}
-
-function shouldSkipPath(parts) {
-  return parts.some(
-    (p) => p.startsWith("_") || SKIP_FOLDERS.has(p.toLowerCase())
-  );
 }
 
 /**
@@ -520,122 +354,6 @@ async function walkDirectory(dir, prefix = []) {
     }
   }
   return { entries: out, skipped };
-}
-
-/**
- * Guess collection/book folders from a relative path.
- * Supports Library/Collection/listen/Book/file and shorter picks.
- */
-function locateBookPath(parts) {
-  const listenIdx = parts.map((p) => p.toLowerCase()).lastIndexOf("listen");
-  if (listenIdx >= 0) {
-    const collectionFolder = listenIdx > 0 ? parts[listenIdx - 1] : "Library";
-    const rest = parts.slice(listenIdx + 1);
-    if (rest.length === 0) return null;
-    if (rest.length === 1) {
-      const bookFolder = collectionFolder === "Immune" ? "immune" : slug(collectionFolder);
-      return { collectionFolder, bookFolder };
-    }
-    return { collectionFolder, bookFolder: rest[0] };
-  }
-  // Picked a collection root that contains book folders of audio (no listen/ segment).
-  if (parts.length >= 2) {
-    return { collectionFolder: parts[0], bookFolder: parts[1] };
-  }
-  return { collectionFolder: "Imported", bookFolder: "imported" };
-}
-
-/**
- * Build audiobooks from flat path+file list.
- * @param {{ path: string, file: File }[]} entries
- */
-function buildLibrary(entries) {
-  const usable = entries.filter((e) => {
-    const parts = pathParts(e.path || e.file?.name || "");
-    if (shouldSkipPath(parts)) return false;
-    const ext = extOf(e.file.name);
-    if (!(AUDIO_EXT.has(ext) || COVER_EXT.has(ext))) return false;
-    if (AUDIO_EXT.has(ext) && e.file.size === 0) return false;
-    return true;
-  });
-
-  /** @type {Map<string, { collectionFolder: string, bookFolder: string, files: { path: string, file: File }[] }>} */
-  const groups = new Map();
-
-  for (const entry of usable) {
-    const parts = pathParts(entry.path || entry.file.name);
-    const located = locateBookPath(parts);
-    if (!located) continue;
-    const { collectionFolder, bookFolder } = located;
-
-    const key = `${collectionFolder}::${bookFolder}`;
-    if (!groups.has(key)) {
-      groups.set(key, { collectionFolder, bookFolder, files: [] });
-    }
-    groups.get(key).files.push(entry);
-  }
-
-  const books = [];
-  for (const group of groups.values()) {
-    const collection = collectionMeta(group.collectionFolder);
-    const meta = bookMeta(group.bookFolder, collection.author);
-    const audioFiles = group.files
-      .filter((f) => AUDIO_EXT.has(extOf(f.file.name)))
-      .sort((a, b) =>
-        a.file.name.localeCompare(b.file.name, undefined, {
-          numeric: true,
-          sensitivity: "base",
-        })
-      );
-    if (!audioFiles.length) continue;
-
-    const coverEntry = group.files.find((f) => {
-      const ext = extOf(f.file.name);
-      if (!COVER_EXT.has(ext)) return false;
-      const n = f.file.name.toLowerCase();
-      return n.includes("cover") || n.includes("folder") || true;
-    });
-    // Prefer names that look like covers
-    const covers = group.files.filter((f) => COVER_EXT.has(extOf(f.file.name)));
-    covers.sort((a, b) => {
-      const score = (name) => {
-        const n = name.toLowerCase();
-        if (n.includes("cover")) return 0;
-        if (n.includes("folder")) return 1;
-        return 2;
-      };
-      return score(a.file.name) - score(b.file.name);
-    });
-    const coverFile = covers[0]?.file || coverEntry?.file || null;
-
-    const chapters = audioFiles.map((f, index) => ({
-      id: f.file.name,
-      index,
-      title: titleFromFilename(f.file.name),
-      file: f.file,
-      url: null,
-    }));
-
-    const id = `${collection.id}/${slug(group.bookFolder)}`;
-    books.push({
-      id,
-      collectionId: collection.id,
-      collectionTitle: collection.title,
-      folder: group.bookFolder,
-      title: meta.title,
-      subtitle: meta.subtitle,
-      author: meta.author,
-      coverFile,
-      coverUrl: null,
-      chapters,
-    });
-  }
-
-  return books.sort((a, b) => {
-    const c = a.collectionTitle.localeCompare(b.collectionTitle);
-    if (c) return c;
-    return a.title.localeCompare(b.title);
-  });
 }
 
 async function scanDirectoryHandle(handle) {

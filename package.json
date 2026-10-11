@@ -1,0 +1,8 @@
+{
+  "name": "library-listen",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}
