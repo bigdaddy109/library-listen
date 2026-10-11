@@ -417,10 +417,42 @@ body.is-scanning .hint {
   border-color: rgba(232, 173, 71, 0.35);
 }
 
+.book-card .title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.55rem;
+  margin: 0;
+}
+
 .book-card .title {
   margin: 0;
   font-size: 1.1rem;
   font-weight: 700;
+  min-width: 0;
+}
+
+.shelf-badge {
+  flex: 0 0 auto;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.12rem 0.42rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  line-height: 1.2;
+}
+
+.shelf-badge-both {
+  color: var(--amber);
+  border-color: rgba(232, 173, 71, 0.45);
+}
+
+.shelf-badge-read {
+  color: var(--ink);
+  border-color: rgba(245, 240, 225, 0.28);
 }
 
 .book-card .meta,
