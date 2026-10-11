@@ -11,9 +11,14 @@ import {
   pathParts,
   resumeSeconds,
   saveProgress,
+  saveTextProgress,
   shelfBadge,
   shouldSkipPath,
+  textProgress,
   titleFromFilename,
+  latestProgressKind,
+  EBOOK_OFFLINE_KEY,
+  isEbookSavedOffline,
 } from "../docs/library.js";
 
 /** In-memory file for scan tests. Not a real audiobook. */
@@ -359,5 +364,73 @@ describe("progress", () => {
   it("returns an empty object when stored progress is missing or invalid", () => {
     assert.deepEqual(loadProgress(memoryStore()), {});
     assert.deepEqual(loadProgress(memoryStore({ [PROGRESS_KEY]: "not-json" })), {});
+  });
+
+  it("saves an epub-cfi text locator without wiping audio chapters", () => {
+    const store = memoryStore();
+    saveProgress("immune/immune", "Immune-Part02.mp3", 45, 580, store);
+    const text = saveTextProgress(
+      "immune/immune",
+      { kind: "epub-cfi", locator: "epubcfi(/6/4!)", fraction: 0.37, label: "Later" },
+      store
+    );
+    assert.equal(text.kind, "epub-cfi");
+    assert.equal(text.locator, "epubcfi(/6/4!)");
+    assert.equal(text.fraction, 0.37);
+    assert.equal(text.label, "Later");
+    const all = loadProgress(store)["immune/immune"];
+    assert.equal(all.chapterId, "Immune-Part02.mp3");
+    assert.equal(all.positionSeconds, 45);
+    assert.ok(all.chapters["Immune-Part02.mp3"]);
+    assert.equal(textProgress("immune/immune", store).locator, "epubcfi(/6/4!)");
+    assert.equal(latestProgressKind(all), "text");
+  });
+
+  it("keeps the text locator when audio progress is written later", () => {
+    const store = memoryStore();
+    saveTextProgress("library/solo-title", { kind: "epub-cfi", locator: "epubcfi(/6/2!)", fraction: 0.1 }, store);
+    saveProgress("library/solo-title", "01.mp3", 12, 90, store);
+    const all = loadProgress(store)["library/solo-title"];
+    assert.equal(all.text.locator, "epubcfi(/6/2!)");
+    assert.equal(all.chapterId, "01.mp3");
+    assert.equal(latestProgressKind(all), "audio");
+  });
+
+  it("Continue uses whichever of audio vs text was updated last", () => {
+    const store = memoryStore({
+      [PROGRESS_KEY]: JSON.stringify({
+        "munroe/what-if-1": {
+          chapterId: "01 - Introduction.mp3",
+          positionSeconds: 33,
+          chapterDurationSeconds: 120,
+          updatedAt: "2026-01-02T00:00:00.000Z",
+          chapters: {
+            "01 - Introduction.mp3": {
+              positionSeconds: 33,
+              chapterDurationSeconds: 120,
+              updatedAt: "2026-01-02T00:00:00.000Z",
+            },
+          },
+          text: {
+            kind: "epub-cfi",
+            locator: "epubcfi(/6/2!)",
+            fraction: 0.2,
+            updatedAt: "2026-01-03T00:00:00.000Z",
+          },
+        },
+      }),
+    });
+    const record = loadProgress(store)["munroe/what-if-1"];
+    assert.equal(latestProgressKind(record), "text");
+    record.text.updatedAt = "2026-01-01T00:00:00.000Z";
+    assert.equal(latestProgressKind(record), "audio");
+    assert.equal(latestProgressKind(null), null);
+  });
+
+  it("treats the reserved ebook IndexedDB key as a saved EPUB blob", () => {
+    assert.equal(EBOOK_OFFLINE_KEY, "__ebook__");
+    assert.equal(isEbookSavedOffline(new Map([[EBOOK_OFFLINE_KEY, { size: 12 }]])), true);
+    assert.equal(isEbookSavedOffline(new Map()), false);
+    assert.equal(isEbookSavedOffline(null), false);
   });
 });
