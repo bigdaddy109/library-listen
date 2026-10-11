@@ -1,20 +1,15 @@
 import Foundation
 
-/// Mac Hub locations. The iPhone never reads these paths directly.
-/// Main Hub is already on iCloud Drive; the user picks those folders once.
+/// Collection names and generic relative layout examples.
+/// The iPhone never opens a host filesystem path; the user picks folders once.
 enum HubPaths {
-    static let macLibraryRoot =
-        "/Users/jeffwu/Documents/Main Hub/Personal/Daryl Stuff/Library"
-
-    static let macMunroeListen =
-        "/Users/jeffwu/Documents/Main Hub/Personal/Daryl Stuff/Library/門羅-WhatIf/listen"
-
-    static let macImmuneListen =
-        "/Users/jeffwu/Documents/Main Hub/Personal/Daryl Stuff/Library/Immune/listen"
-
     static let munroeFolder = "門羅-WhatIf"
     static let immuneFolder = "Immune"
     static let listenFolder = "listen"
+
+    /// Relative examples for onboarding/settings. Not a host home directory.
+    static let exampleMunroeListen = "Library/門羅-WhatIf/listen"
+    static let exampleImmuneListen = "Library/Immune/listen"
 
     static let knownCollections: [String: CollectionMeta] = [
         munroeFolder: CollectionMeta(id: "munroe", title: "Munroe", author: "Randall Munroe"),

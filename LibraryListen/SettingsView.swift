@@ -26,16 +26,16 @@ struct SettingsView: View {
                     .foregroundStyle(ListenTheme.muted)
             }
 
-            Section("Verified Mac Hub paths") {
-                labeledPath("Munroe", HubPaths.macMunroeListen)
-                labeledPath("Immune", HubPaths.macImmuneListen)
+            Section("Expected folder layout") {
+                labeledPath("Munroe", HubPaths.exampleMunroeListen)
+                labeledPath("Immune", HubPaths.exampleImmuneListen)
                 Text("Immune is nine files: Immune-Part01.mp3 … Immune-Part09.mp3, sitting directly in Library/Immune/listen/. Pick the Library folder to scan both trees.")
                     .font(.footnote)
                     .foregroundStyle(ListenTheme.muted)
             }
 
             Section("Offline commute") {
-                Text("iCloud Drive already syncs Main Hub. If a chapter has a cloud icon, tap Download Now in Files before you leave Wi‑Fi. The Mac does not need to be running.")
+                Text("iCloud Drive already syncs the Library folder. If a chapter has a cloud icon, tap Download Now in Files before you leave Wi‑Fi. The Mac does not need to be running.")
                     .font(.footnote)
                     .foregroundStyle(ListenTheme.muted)
             }

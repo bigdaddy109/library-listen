@@ -9,20 +9,20 @@ struct OnboardingView: View {
             Spacer()
             Text("Library Listen")
                 .font(.system(size: 40, weight: .regular, design: .serif))
-            Text("Play Munroe and Immune from Main Hub folders already on this iPhone or iPad via iCloud Drive. Pick one folder or several. No TTS.")
+            Text("Play Munroe and Immune from a Library folder already on this iPhone or iPad via iCloud Drive. Pick one folder or several. No TTS.")
                 .font(.body)
                 .foregroundStyle(ListenTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
 
             VStack(alignment: .leading, spacing: 10) {
-                step("1", "In Files, open iCloud Drive → Main Hub → … → Daryl Stuff → Library.")
+                step("1", "In Files, open iCloud Drive and find the shared Library folder (or a collection like 門羅-WhatIf).")
                 step("2", "Download Now on any cloud-only files you need for the commute.")
                 step("3", "Pick that Library folder once (or add 門羅-WhatIf and Immune). The app remembers it.")
             }
 
             Text("""
-            Munroe: \(HubPaths.macMunroeListen)
-            Immune: \(HubPaths.macImmuneListen)
+            Munroe: \(HubPaths.exampleMunroeListen)
+            Immune: \(HubPaths.exampleImmuneListen)
             """)
                 .font(.caption)
                 .foregroundStyle(ListenTheme.muted)
@@ -31,7 +31,7 @@ struct OnboardingView: View {
             Button {
                 picking = true
             } label: {
-                Text("Choose a Hub folder")
+                Text("Choose Library folder")
                     .font(.headline)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
