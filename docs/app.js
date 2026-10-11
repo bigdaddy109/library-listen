@@ -1,4 +1,4 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=21";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=22";
 import {
   AUDIO_EXT,
   SKIP_FOLDERS,
@@ -8,7 +8,15 @@ import {
   chapterProgress,
   resumeSeconds,
   saveProgress,
-} from "./library.js?v=21";
+} from "./library.js?v=22";
+import {
+  chapterHitLine,
+  emptySearchMessage,
+  filterBooks,
+  matchingChapterTitles,
+  shelfCountLabel,
+  trimQuery,
+} from "./search.js?v=22";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -18,12 +26,13 @@ const DB_NAME = "library-listen";
 const COVER_KEY = "__cover__";
 const SLEEP_MINUTES = [0, 15, 30, 45, 60];
 
-/** @type {{ books: any[], activeBookId: string|null, sort: string }} */
+/** @type {{ books: any[], activeBookId: string|null, sort: string, query: string }} */
 const state = {
   books: [],
   activeBookId: null,
   bookPane: "audio",
   sort: localStorage.getItem(SORT_KEY) || "collection",
+  query: "",
 };
 
 const audio = document.getElementById("audio");
@@ -37,6 +46,10 @@ const els = {
   capabilityHint: document.getElementById("capability-hint"),
   fileInputDir: document.getElementById("file-input-dir"),
   fileInputFiles: document.getElementById("file-input-files"),
+  shelfTools: document.getElementById("shelf-tools"),
+  shelfQuery: document.getElementById("shelf-query"),
+  clearSearch: document.getElementById("btn-clear-search"),
+  shelfCount: document.getElementById("shelf-count"),
 };
 
 /** @type {{ bookId: string, chapterIndex: number } | null} */
@@ -536,7 +549,7 @@ async function loadLibrary(mode) {
 }
 
 function sortedBooks() {
-  const books = [...state.books];
+  const books = [...filterBooks(state.books, state.query)];
   const progress = loadProgress();
   if (state.sort === "title") {
     return books.sort((a, b) => a.title.localeCompare(b.title));
@@ -719,15 +732,38 @@ function saveBanner(targetBook) {
   return row;
 }
 
+function syncSearchUi(matchCount) {
+  const show = state.books.length > 0 && !state.activeBookId;
+  els.shelfTools?.classList.toggle("hidden", !show);
+  if (els.shelfQuery && els.shelfQuery.value !== state.query) {
+    els.shelfQuery.value = state.query;
+  }
+  els.clearSearch?.classList.toggle("hidden", !trimQuery(state.query));
+  if (els.shelfCount) {
+    els.shelfCount.textContent = show ? shelfCountLabel(matchCount, state.query) : "";
+  }
+}
+
 function renderShelf() {
   const books = sortedBooks();
   els.shelf.innerHTML = "";
-  if (!books.length) return;
+  syncSearchUi(books.length);
 
-  const resume = mostRecentResume();
+  if (!books.length) {
+    if (trimQuery(state.query)) {
+      const empty = document.createElement("p");
+      empty.className = "shelf-empty";
+      empty.textContent = emptySearchMessage(state.query);
+      els.shelf.appendChild(empty);
+    }
+    return;
+  }
+
+  const searching = !!trimQuery(state.query);
+  const resume = searching ? null : mostRecentResume();
   if (resume) els.shelf.appendChild(continueCard(resume));
 
-  if (offerSaveBanner) {
+  if (!searching && offerSaveBanner) {
     const unsaved =
       (resume && !isBookOffline(resume.book) && resume.book) ||
       state.books.find((b) => isBookPlayable(b) && !isBookOffline(b));
@@ -766,6 +802,7 @@ function bookCard(book) {
     <p class="meta"></p>
     <p class="progress"></p>
     <div class="progress-track"><span></span></div>
+    <p class="chapter-hits hidden"></p>
   `;
   body.querySelector(".title").textContent = book.title;
   let meta = `${book.author} · ${book.chapters.length} chapters`;
@@ -779,6 +816,12 @@ function bookCard(book) {
     body.querySelector(".progress-track").style.display = "none";
   } else {
     bar.style.width = `${Math.round(fraction * 100)}%`;
+  }
+  const hitLine = chapterHitLine(matchingChapterTitles(book, state.query));
+  const hitsEl = body.querySelector(".chapter-hits");
+  if (hitLine) {
+    hitsEl.textContent = hitLine;
+    hitsEl.classList.remove("hidden");
   }
   btn.append(cover, body);
   btn.addEventListener("click", () => openBook(book.id));
@@ -872,6 +915,7 @@ function render() {
   document.getElementById("btn-sort").classList.toggle("hidden", !hasBooks);
   document.getElementById("btn-change").classList.toggle("hidden", !hasBooks);
   updateChangeButtonLabel();
+  if (!hasBooks || state.activeBookId) syncSearchUi(0);
 
   if (hasBooks && !state.activeBookId) renderShelf();
   if (state.activeBookId) renderBook();
@@ -1389,6 +1433,15 @@ function bind() {
     renderBook();
   });
   document.getElementById("btn-sort").addEventListener("click", cycleSort);
+  els.shelfQuery?.addEventListener("input", () => {
+    state.query = els.shelfQuery.value;
+    if (!state.activeBookId) renderShelf();
+  });
+  els.clearSearch?.addEventListener("click", () => {
+    state.query = "";
+    if (els.shelfQuery) els.shelfQuery.value = "";
+    if (!state.activeBookId) renderShelf();
+  });
   document.getElementById("btn-play").addEventListener("click", async () => {
     if (!playback) {
       const first = state.books[0];

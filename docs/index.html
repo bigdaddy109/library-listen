@@ -16,9 +16,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Library Listen" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" href="./icon.svg?v=21" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=21" />
-    <link rel="stylesheet" href="./styles.css?v=21" />
+    <link rel="icon" href="./icon.svg?v=22" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=22" />
+    <link rel="stylesheet" href="./styles.css?v=22" />
     <title>Library Listen</title>
   </head>
   <body>
@@ -27,7 +27,7 @@
         <div class="brand">
           <img
             class="brand-mark"
-            src="./icon.svg?v=21"
+            src="./icon.svg?v=22"
             width="36"
             height="36"
             alt="Library Listen"
@@ -41,6 +41,30 @@
           <button type="button" id="btn-change" class="ghost hidden" title="Change library source">
             Change folder
           </button>
+        </div>
+        <div id="shelf-tools" class="shelf-tools hidden">
+          <div class="shelf-search" role="search">
+            <label class="visually-hidden" for="shelf-query">Search title, author, or chapter</label>
+            <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M10.5 4.5a6 6 0 1 1 0 12 6 6 0 0 1 0-12zm0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm6.3 9.2 3.7 3.7-1.4 1.4-3.7-3.7 1.4-1.4z"
+              />
+            </svg>
+            <input
+              id="shelf-query"
+              type="search"
+              placeholder="Search title, author, or chapter"
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="none"
+              spellcheck="false"
+              enterkeyhint="search"
+            />
+            <button type="button" id="btn-clear-search" class="search-clear hidden" aria-label="Clear search">
+              ×
+            </button>
+          </div>
+          <p id="shelf-count" class="shelf-count"></p>
         </div>
       </header>
 
@@ -172,6 +196,6 @@
     />
     <audio id="audio" preload="metadata" playsinline></audio>
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
-    <script type="module" src="./app.js?v=21"></script>
+    <script type="module" src="./app.js?v=22"></script>
   </body>
 </html>
