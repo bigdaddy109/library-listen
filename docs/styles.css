@@ -693,6 +693,45 @@ body.is-scanning .hint {
   line-height: 1.5;
 }
 
+.reader {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.35rem;
+}
+
+.reader-bar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.reader-label {
+  margin: 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reader-frame {
+  width: 100%;
+  height: min(70vh, 36rem);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #f3efe4;
+  display: block;
+}
+
+.reader .hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 .player-bar {
   position: fixed;
   left: 0;

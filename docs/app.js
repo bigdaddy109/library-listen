@@ -1,16 +1,22 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=25";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=26";
 import {
   AUDIO_EXT,
+  EBOOK_OFFLINE_KEY,
   EPUB_EXT,
   SKIP_FOLDERS,
   bookHasAudio,
+  bookHasEbook,
   extOf,
   buildLibrary,
+  isEbookSavedOffline,
+  latestProgressKind,
   loadProgress,
   chapterProgress,
   saveProgress,
+  saveTextProgress,
   shelfBadge,
-} from "./library.js?v=25";
+  textProgress,
+} from "./library.js?v=26";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -18,7 +24,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=25";
+} from "./search.js?v=26";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -33,8 +39,19 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=25";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=25";
+} from "./markers.js?v=26";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=26";
+import {
+  applyScrollFraction,
+  mimeForPath,
+  parseEpub,
+  rewriteSpineHtml,
+  scrollFraction,
+  spineCfi,
+  spineIndexFromCfi,
+  spineLabel,
+  zipPath,
+} from "./epub.js?v=26";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -81,8 +98,13 @@ let resumeGuard = null;
 const SKIP_SECONDS = 30;
 let playbackRate = loadRate();
 const objectUrls = new Set();
-/** Books copied into IndexedDB: bookId -> Map(chapterId | COVER_KEY -> Blob) */
+/** Books copied into IndexedDB: bookId -> Map(chapterId | COVER_KEY | EBOOK_OFFLINE_KEY -> Blob) */
 const offlineIndex = new Map();
+/** @type {{ bookId: string, pub: any, index: number, urls: string[], token: number } | null} */
+let readerSession = null;
+let readerToken = 0;
+let readerSaveTimer = null;
+let readerDirty = false;
 /** @type {FileSystemDirectoryHandle | null} */
 let savedDirHandle = null;
 let savingBookId = null;
@@ -135,10 +157,12 @@ async function loadOfflineIndex() {
 }
 
 function isBookOffline(book) {
-  const chapters = book.chapters || [];
-  if (!chapters.length) return false;
   const saved = offlineIndex.get(book.id);
-  return !!saved && chapters.every((ch) => !!offlineChapterBlob(saved, ch));
+  if (!saved) return false;
+  const chapters = book.chapters || [];
+  if (chapters.length && !chapters.every((ch) => !!offlineChapterBlob(saved, ch))) return false;
+  if (bookHasEbook(book) && !isEbookSavedOffline(saved)) return false;
+  return chapters.length > 0 || bookHasEbook(book);
 }
 
 function isBookPlayable(book) {
@@ -185,7 +209,12 @@ function restoreLibrarySnapshot() {
       coverUrl: null,
       kind: b.kind,
       ebook: b.ebook
-        ? { id: b.ebook.id, name: b.ebook.name, file: null }
+        ? {
+            id: b.ebook.id,
+            name: b.ebook.name,
+            file: saved?.get(EBOOK_OFFLINE_KEY) || null,
+            fromDevice: !!saved?.get(EBOOK_OFFLINE_KEY),
+          }
         : null,
       chapters: b.chapters.map((ch, index) => {
         const file = offlineChapterBlob(saved, ch);
@@ -219,13 +248,28 @@ function attachUrls(books) {
   }
 }
 
+function blobsToSave(book) {
+  const items = uniqueChapterFiles(book.chapters || []).map(({ key, file }) => [key, file]);
+  if (book.coverFile) items.push([COVER_KEY, book.coverFile]);
+  if (book.ebook?.file) items.push([EBOOK_OFFLINE_KEY, book.ebook.file]);
+  return items;
+}
+
+function isEbookReadable(book) {
+  return !!book?.ebook?.file;
+}
+
+function isBookOpenable(book) {
+  return isBookPlayable(book) || isEbookReadable(book);
+}
+
 async function saveBookOffline(book) {
-  if (savingBookId || !isBookPlayable(book)) return;
+  if (savingBookId) return;
+  const items = blobsToSave(book);
+  if (!items.length) return;
   savingBookId = book.id;
   try {
     await navigator.storage?.persist?.().catch(() => false);
-    const items = uniqueChapterFiles(book.chapters).map(({ key, file }) => [key, file]);
-    if (book.coverFile) items.push([COVER_KEY, book.coverFile]);
     const saved = new Map();
     for (let i = 0; i < items.length; i += 1) {
       const [chapterId, blob] = items[i];
@@ -262,7 +306,7 @@ function updateOfflineButton(book, busyLabel) {
   const status = document.getElementById("book-offline-status");
   if (!btn || !status) return;
   const offline = isBookOffline(book);
-  btn.disabled = !!savingBookId || (!offline && !isBookPlayable(book));
+  btn.disabled = !!savingBookId || (!offline && !blobsToSave(book).length);
   if (busyLabel) {
     btn.textContent = busyLabel;
   } else if (offline) {
@@ -271,13 +315,15 @@ function updateOfflineButton(book, busyLabel) {
     btn.textContent = "Save to this device";
   }
   if (offline) {
-    status.textContent = "Saved on this device — plays without picking the folder again.";
-  } else if (!bookHasAudio(book)) {
-    status.textContent = "";
-  } else if (!isBookPlayable(book)) {
-    status.textContent = "Reconnect the Library folder to play this book.";
+    status.textContent = bookHasAudio(book)
+      ? "Saved on this device — plays without picking the folder again."
+      : "Saved on this device — opens without picking the folder again.";
+  } else if (!isBookOpenable(book)) {
+    status.textContent = bookHasAudio(book)
+      ? "Reconnect the Library folder to play this book."
+      : "Reconnect the Library folder to read this book.";
   } else {
-    const bytes = uniqueChapterFiles(book.chapters).reduce((n, { file }) => n + (file?.size || 0), 0);
+    const bytes = blobsToSave(book).reduce((n, [, file]) => n + (file?.size || 0), 0);
     status.textContent = `Save a copy (${formatBytes(bytes)}) so it opens after the app restarts.`;
   }
 }
@@ -589,7 +635,7 @@ async function loadLibrary(mode) {
     state.books = books;
     if (!silent) {
       state.activeBookId = null;
-      offerSaveBanner = books.some((b) => isBookPlayable(b) && !isBookOffline(b));
+      offerSaveBanner = books.some((b) => isBookOpenable(b) && !isBookOffline(b));
     }
     saveLibrarySnapshot();
     render();
@@ -631,6 +677,13 @@ function sortedBooks() {
 function progressLine(book) {
   const p = loadProgress()[book.id];
   if (!p) return { line: "Not started", fraction: null };
+  if (latestProgressKind(p) === "text") {
+    const fraction = Number.isFinite(p.text?.fraction) ? clamp01(p.text.fraction) : null;
+    let line = p.text?.label || "Reading";
+    if (fraction != null) line += ` · ${Math.round(fraction * 100)}%`;
+    if (p.text?.updatedAt) line += ` · ${relativeTime(p.text.updatedAt)}`;
+    return { line, fraction };
+  }
   const chapter =
     book.chapters.find((c) => c.id === p.chapterId) || book.chapters[0];
   if (!chapter) return { line: "Not started", fraction: null };
@@ -641,6 +694,10 @@ function progressLine(book) {
   if (p.updatedAt) line += ` · ${relativeTime(p.updatedAt)}`;
   const fraction = dur > 0 ? Math.min(1, Math.max(0, pos / dur)) : null;
   return { line, fraction };
+}
+
+function clamp01(value) {
+  return Math.min(1, Math.max(0, Number(value) || 0));
 }
 
 const COVER_PALETTES = [
@@ -696,9 +753,16 @@ function mostRecentResume() {
   const progress = loadProgress();
   let best = null;
   for (const book of state.books) {
-    if (!isBookPlayable(book)) continue;
     const p = progress[book.id];
-    if (!p?.updatedAt || !p.chapterId) continue;
+    if (!p?.updatedAt) continue;
+    if (latestProgressKind(p) === "text") {
+      if (!bookHasEbook(book)) continue;
+      if (!best || p.updatedAt > best.updatedAt) {
+        best = { kind: "text", book, text: p.text, updatedAt: p.updatedAt };
+      }
+      continue;
+    }
+    if (!isBookPlayable(book) || !p.chapterId) continue;
     const chapterIndex = book.chapters.findIndex((c) => c.id === p.chapterId);
     if (chapterIndex < 0) continue;
     const saved = chapterProgress(book.id, p.chapterId);
@@ -709,6 +773,7 @@ function mostRecentResume() {
     if (pos < 0.5 && chapterIndex === 0) continue;
     if (!best || p.updatedAt > best.updatedAt) {
       best = {
+        kind: "audio",
         book,
         chapterIndex,
         chapter: book.chapters[chapterIndex],
@@ -739,19 +804,26 @@ function continueCard(resume) {
   cover.className = "cover";
   setCover(cover, resume.book);
   const body = document.createElement("div");
+  const reading = resume.kind === "text";
   body.innerHTML = `
-    <p class="continue-label">Continue listening</p>
+    <p class="continue-label"></p>
     <p class="title"></p>
     <p class="progress"></p>
   `;
+  body.querySelector(".continue-label").textContent = reading ? "Continue reading" : "Continue listening";
   body.querySelector(".title").textContent = resume.book.title;
-  body.querySelector(".progress").textContent =
-    `${resume.chapter.title} · ${formatClock(resume.pos)}` +
-    (resume.updatedAt ? ` · ${relativeTime(resume.updatedAt)}` : "");
+  if (reading) {
+    const { line } = progressLine(resume.book);
+    body.querySelector(".progress").textContent = line;
+  } else {
+    body.querySelector(".progress").textContent =
+      `${resume.chapter.title} · ${formatClock(resume.pos)}` +
+      (resume.updatedAt ? ` · ${relativeTime(resume.updatedAt)}` : "");
+  }
   btn.append(cover, body);
   btn.addEventListener("click", () => {
     openBook(resume.book.id);
-    playChapter(resume.book.id, resume.chapterIndex, { resumeIfSame: true });
+    if (!reading) playChapter(resume.book.id, resume.chapterIndex, { resumeIfSame: true });
   });
   return btn;
 }
@@ -774,7 +846,7 @@ function saveBanner(targetBook) {
   dismiss.className = "ghost";
   dismiss.textContent = "Not now";
   saveBtn.addEventListener("click", async () => {
-    const book = targetBook || mostRecentResume()?.book || state.books.find(isBookPlayable);
+    const book = targetBook || mostRecentResume()?.book || state.books.find(isBookOpenable);
     if (!book) return;
     offerSaveBanner = false;
     openBook(book.id);
@@ -824,7 +896,7 @@ function renderShelf() {
   if (!searching && offerSaveBanner) {
     const unsaved =
       (resume && !isBookOffline(resume.book) && resume.book) ||
-      state.books.find((b) => isBookPlayable(b) && !isBookOffline(b));
+      state.books.find((b) => isBookOpenable(b) && !isBookOffline(b));
     if (unsaved) els.shelf.appendChild(saveBanner(unsaved));
     else offerSaveBanner = false;
   }
@@ -872,8 +944,9 @@ function bookCard(book) {
   if (hasAudio) meta += ` · ${book.chapters.length} chapters`;
   if (isBookOffline(book)) meta += " · on device";
   else if (hasAudio && !isBookPlayable(book)) meta += " · reconnect to play";
+  else if (bookHasEbook(book) && !isEbookReadable(book)) meta += " · reconnect to read";
   body.querySelector(".meta").textContent = meta;
-  btn.classList.toggle("unavailable", hasAudio && !isBookPlayable(book));
+  btn.classList.toggle("unavailable", !isBookOpenable(book));
   body.querySelector(".progress").textContent = line;
   const bar = body.querySelector(".progress-track > span");
   if (fraction == null) {
@@ -893,7 +966,10 @@ function bookCard(book) {
 }
 
 function openBook(bookId) {
-  if (state.activeBookId !== bookId) state.bookPane = "audio";
+  if (state.activeBookId !== bookId) {
+    state.bookPane = "audio";
+    if (readerDirty) persistReaderProgress();
+  }
   state.activeBookId = bookId;
   render();
 }
@@ -926,6 +1002,179 @@ function renderConceptCards() {
   }
 }
 
+function readerEls() {
+  return {
+    root: document.getElementById("reader"),
+    frame: document.getElementById("reader-frame"),
+    label: document.getElementById("reader-label"),
+    prev: document.getElementById("reader-prev"),
+    next: document.getElementById("reader-next"),
+    status: document.getElementById("reader-status"),
+  };
+}
+
+function revokeReaderUrls(session) {
+  for (const url of session?.urls || []) {
+    URL.revokeObjectURL(url);
+  }
+  if (session) session.urls = [];
+}
+
+function teardownReader({ keepToken = false } = {}) {
+  if (readerSaveTimer) {
+    window.clearTimeout(readerSaveTimer);
+    readerSaveTimer = null;
+  }
+  if (readerDirty) persistReaderProgress();
+  revokeReaderUrls(readerSession);
+  readerSession = null;
+  readerDirty = false;
+  if (!keepToken) readerToken += 1;
+  const { frame } = readerEls();
+  if (frame) {
+    frame.removeAttribute("srcdoc");
+    try {
+      frame.src = "about:blank";
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function persistReaderProgress() {
+  const session = readerSession;
+  if (!session?.pub) return;
+  const book = findBook(session.bookId);
+  if (!book) return;
+  const item = session.pub.spine[session.index];
+  if (!item) return;
+  const { frame } = readerEls();
+  const doc = frame?.contentDocument;
+  const scroller = doc?.scrollingElement || doc?.documentElement;
+  saveTextProgress(book.id, {
+    kind: "epub-cfi",
+    locator: spineCfi(session.index),
+    fraction: scrollFraction(scroller),
+    label: item.title || spineLabel(item, session.index, session.pub.spine.length),
+  });
+}
+
+function updateReaderChrome() {
+  const session = readerSession;
+  const { label, prev, next } = readerEls();
+  if (!session?.pub) return;
+  const item = session.pub.spine[session.index];
+  if (label) label.textContent = spineLabel(item, session.index, session.pub.spine.length);
+  if (prev) prev.disabled = session.index <= 0;
+  if (next) next.disabled = session.index >= session.pub.spine.length - 1;
+}
+
+function onReaderScroll() {
+  readerDirty = true;
+  if (readerSaveTimer) return;
+  readerSaveTimer = window.setTimeout(() => {
+    readerSaveTimer = null;
+    persistReaderProgress();
+  }, 400);
+}
+
+function onReaderClick(event) {
+  const session = readerSession;
+  if (!session?.pub) return;
+  const a = event.target?.closest?.("a");
+  if (!a) return;
+  const href = a.getAttribute("href");
+  if (!href || href.startsWith("#")) return;
+  event.preventDefault();
+  const item = session.pub.spine[session.index];
+  const dir = item.path.includes("/") ? item.path.slice(0, item.path.lastIndexOf("/") + 1) : "";
+  const path = zipPath(dir, href);
+  const index = session.pub.spine.findIndex((entry) => entry.path === path);
+  if (index < 0) return;
+  readerDirty = true;
+  persistReaderProgress();
+  renderReaderSpine(index, 0);
+}
+
+function renderReaderSpine(index, fraction = 0) {
+  const session = readerSession;
+  if (!session?.pub) return;
+  const item = session.pub.spine[index];
+  if (!item) return;
+  session.index = index;
+  revokeReaderUrls(session);
+  const raw = session.pub.read(item.path);
+  const { frame, status } = readerEls();
+  if (!raw || !frame) {
+    if (status) status.textContent = "Could not open this section.";
+    return;
+  }
+  const dir = item.path.includes("/") ? item.path.slice(0, item.path.lastIndexOf("/") + 1) : "";
+  const html = rewriteSpineHtml(new TextDecoder().decode(raw), (href) => {
+    const path = zipPath(dir, href);
+    const bytes = session.pub.read(path);
+    if (!bytes) return null;
+    const url = URL.createObjectURL(new Blob([bytes], { type: mimeForPath(path) }));
+    session.urls.push(url);
+    return url;
+  });
+  const onLoad = () => {
+    frame.removeEventListener("load", onLoad);
+    if (readerSession !== session) return;
+    const doc = frame.contentDocument;
+    if (!doc) return;
+    applyScrollFraction(doc.scrollingElement || doc.documentElement, fraction);
+    doc.addEventListener("scroll", onReaderScroll, { passive: true });
+    doc.addEventListener("click", onReaderClick);
+  };
+  frame.addEventListener("load", onLoad);
+  frame.srcdoc = html;
+  updateReaderChrome();
+}
+
+async function loadReader(book) {
+  const token = ++readerToken;
+  if (readerSession && readerSession.bookId !== book.id) teardownReader({ keepToken: true });
+  const { status, frame } = readerEls();
+  if (!book.ebook?.file) {
+    if (status) status.textContent = "Reconnect the Library folder to read this book.";
+    if (frame) frame.removeAttribute("srcdoc");
+    readerSession = null;
+    return;
+  }
+  if (status) status.textContent = "Opening ebook…";
+  readerDirty = false;
+  try {
+    const pub = await parseEpub(await book.ebook.file.arrayBuffer());
+    if (token !== readerToken) return;
+    const saved = textProgress(book.id);
+    const index = Math.min(
+      pub.spine.length - 1,
+      Math.max(0, spineIndexFromCfi(saved?.locator))
+    );
+    readerSession = { bookId: book.id, pub, index, urls: [], token };
+    renderReaderSpine(index, saved?.fraction || 0);
+    if (status) status.textContent = "";
+  } catch (err) {
+    console.error(err);
+    if (token !== readerToken) return;
+    readerSession = null;
+    if (status) status.textContent = "Could not open this EPUB.";
+  }
+}
+
+function syncReader(book, hide) {
+  const { root } = readerEls();
+  const show = bookHasEbook(book) && !hide;
+  root?.classList.toggle("hidden", !show);
+  if (!show) return;
+  if (readerSession?.bookId === book.id && readerSession.pub) {
+    updateReaderChrome();
+    return;
+  }
+  loadReader(book);
+}
+
 function renderBook() {
   const book = state.books.find((b) => b.id === state.activeBookId);
   if (!book) return;
@@ -935,7 +1184,9 @@ function renderBook() {
   document.getElementById("book-author").textContent = book.author;
   document.getElementById("book-subtitle").textContent = book.subtitle || "";
   updateOfflineButton(book);
-  document.querySelector(".offline-row")?.classList.toggle("hidden", !bookHasAudio(book));
+  document
+    .querySelector(".offline-row")
+    ?.classList.toggle("hidden", !(bookHasAudio(book) || bookHasEbook(book)));
 
   els.chapterList.innerHTML = "";
   book.chapters.forEach((ch, i) => {
@@ -965,9 +1216,10 @@ function renderBook() {
   document.getElementById("book-tabs").classList.toggle("hidden", !concepts);
   document.getElementById("tab-audio").setAttribute("aria-pressed", showConcepts ? "false" : "true");
   document.getElementById("tab-concepts").setAttribute("aria-pressed", showConcepts ? "true" : "false");
-  els.chapterList.classList.toggle("hidden", showConcepts);
+  els.chapterList.classList.toggle("hidden", showConcepts || !book.chapters.length);
   els.conceptList.classList.toggle("hidden", !showConcepts);
   if (showConcepts) renderConceptCards();
+  syncReader(book, showConcepts);
 }
 
 function render() {
@@ -1486,9 +1738,14 @@ function setupCapabilityHint() {
 function updateChangeButtonLabel() {
   const btn = document.getElementById("btn-change");
   if (!btn) return;
-  if (state.books.some((b) => !isBookPlayable(b))) {
+  if (
+    state.books.some(
+      (b) =>
+        (bookHasAudio(b) && !isBookPlayable(b)) || (bookHasEbook(b) && !isEbookReadable(b))
+    )
+  ) {
     btn.textContent = "Reconnect Library";
-    btn.title = "Pick the Library folder again to play every book";
+    btn.title = "Pick the Library folder again to play or read every book";
   } else {
     btn.textContent = "Change folder";
     btn.title = "Pick a different Library folder";
@@ -1530,7 +1787,10 @@ function bind() {
   // Always try a real folder chooser first (showDirectoryPicker or webkitdirectory).
   // Do not special-case iPhone/iPad — folder pick works there via Files.
   document.getElementById("btn-change").addEventListener("click", () => {
-    const needsReconnect = state.books.some((b) => !isBookPlayable(b));
+    const needsReconnect = state.books.some(
+      (b) =>
+        (bookHasAudio(b) && !isBookPlayable(b)) || (bookHasEbook(b) && !isEbookReadable(b))
+    );
     loadLibrary(needsReconnect ? "reconnect" : "directory");
   });
   document.getElementById("btn-pick-main").addEventListener("click", pickDirectory);
@@ -1546,6 +1806,11 @@ function bind() {
         ch.url = null;
         ch.fromDevice = false;
       }
+      if (book.ebook?.fromDevice) {
+        book.ebook.file = null;
+        book.ebook.fromDevice = false;
+      }
+      if (readerSession?.bookId === book.id) teardownReader();
       render();
       return;
     }
@@ -1553,8 +1818,21 @@ function bind() {
   });
   document.getElementById("btn-pick-files").addEventListener("click", pickFiles);
   document.getElementById("btn-back").addEventListener("click", () => {
+    if (readerDirty) persistReaderProgress();
     state.activeBookId = null;
     render();
+  });
+  document.getElementById("reader-prev")?.addEventListener("click", () => {
+    if (!readerSession || readerSession.index <= 0) return;
+    readerDirty = true;
+    persistReaderProgress();
+    renderReaderSpine(readerSession.index - 1, 0);
+  });
+  document.getElementById("reader-next")?.addEventListener("click", () => {
+    if (!readerSession || readerSession.index >= readerSession.pub.spine.length - 1) return;
+    readerDirty = true;
+    persistReaderProgress();
+    renderReaderSpine(readerSession.index + 1, 0);
   });
   document.getElementById("tab-audio").addEventListener("click", () => {
     state.bookPane = "audio";
@@ -1671,7 +1949,10 @@ function bind() {
   });
 
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden") persistCurrent();
+    if (document.visibilityState === "hidden") {
+      persistCurrent();
+      if (readerDirty) persistReaderProgress();
+    }
   });
 
   bindMediaSession();
@@ -1684,12 +1965,12 @@ function registerSW() {
 }
 
 function showPlayableBooks(books) {
-  const playable = books.filter(isBookPlayable);
-  attachUrls(playable);
-  state.books = playable;
+  const openable = books.filter(isBookOpenable);
+  attachUrls(openable);
+  state.books = openable;
   state.activeBookId = null;
   render();
-  return playable.length > 0;
+  return openable.length > 0;
 }
 
 async function restoreSession() {
@@ -1707,7 +1988,7 @@ async function restoreSession() {
   if (showPlayableBooks(restored)) return;
   if (restored.length && els.capabilityHint) {
     els.capabilityHint.textContent =
-      "Pick the Library folder again to keep listening. Your progress is still here.";
+      "Pick the Library folder again to keep listening or reading. Your progress is still here.";
   }
 }
 

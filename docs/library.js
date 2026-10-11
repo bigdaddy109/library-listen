@@ -34,6 +34,8 @@ export const KNOWN_BOOKS = {
 };
 
 export const PROGRESS_KEY = "librarylisten.progress.v1";
+/** IndexedDB offline row key for the paired EPUB blob (same store as chapters). */
+export const EBOOK_OFFLINE_KEY = "__ebook__";
 
 export function extOf(name) {
   const i = name.lastIndexOf(".");
@@ -257,9 +259,70 @@ export function saveProgress(
     positionSeconds: pos,
     chapterDurationSeconds: duration,
     updatedAt: now,
+    lastKind: "audio",
     chapters,
+    text: previous.text || undefined,
   };
   store.setItem(PROGRESS_KEY, JSON.stringify(all));
+}
+
+export function textProgress(bookId, store = defaultStore()) {
+  const book = loadProgress(store)[bookId];
+  const text = book?.text;
+  if (!text || !text.kind || !text.locator) return null;
+  return text;
+}
+
+/**
+ * Save a text locator on the same bookId without wiping audio chapters.
+ * `kind` is epub-cfi (pdf-page / txt-offset wait for those readers).
+ */
+export function saveTextProgress(bookId, text, store = defaultStore()) {
+  const all = loadProgress(store);
+  const previous = all[bookId] || {};
+  const now = new Date().toISOString();
+  const kind = text?.kind;
+  const locator = typeof text?.locator === "string" ? text.locator.trim() : "";
+  if (!kind || !locator) return previous.text || null;
+  const record = {
+    kind,
+    locator,
+    updatedAt: now,
+  };
+  if (Number.isFinite(Number(text.fraction))) {
+    const n = Number(text.fraction);
+    record.fraction = Math.min(1, Math.max(0, n));
+  }
+  if (typeof text.label === "string" && text.label.trim()) record.label = text.label.trim();
+  all[bookId] = {
+    ...previous,
+    text: record,
+    lastKind: "text",
+    updatedAt: now,
+  };
+  store.setItem(PROGRESS_KEY, JSON.stringify(all));
+  return record;
+}
+
+/** Continue uses whichever of audio vs text was written last. */
+export function latestProgressKind(record) {
+  if (!record) return null;
+  if (record.lastKind === "text" && record.text?.locator) return "text";
+  if (record.lastKind === "audio" && record.chapterId) return "audio";
+  const audioAt = record.chapterId
+    ? record.chapters?.[record.chapterId]?.updatedAt ||
+      (Number.isFinite(record.positionSeconds) ? record.updatedAt : null)
+    : null;
+  const textAt = record.text?.updatedAt || null;
+  if (!audioAt && !textAt) return null;
+  if (textAt && (!audioAt || textAt >= audioAt)) return "text";
+  return "audio";
+}
+
+export function isEbookSavedOffline(saved) {
+  if (!saved) return false;
+  if (typeof saved.has === "function") return saved.has(EBOOK_OFFLINE_KEY);
+  return !!saved[EBOOK_OFFLINE_KEY];
 }
 
 function nameSort(a, b) {
