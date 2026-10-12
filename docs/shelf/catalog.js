@@ -143,7 +143,7 @@ function parts(count) {
 }
 
 /**
- * Preview stand-ins so /shelf/ looks complete on Pages without a folder pick.
+ * Preview stand-ins so the homepage shelf looks complete on Pages without a folder pick.
  * Ids for Munroe / Immune match library.js so existing progress can show.
  */
 export function demoCatalog() {

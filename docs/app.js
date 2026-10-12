@@ -1,4 +1,4 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=34";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=35";
 import {
   AUDIO_EXT,
   EBOOK_OFFLINE_KEY,
@@ -18,7 +18,7 @@ import {
   saveTextProgress,
   shelfBadge,
   textProgress,
-} from "./library.js?v=34";
+} from "./library.js?v=35";
 import {
   DRIVE_UNAUTHORIZED_MESSAGE,
   attachDriveMedia,
@@ -42,7 +42,7 @@ import {
   signInWithGoogle,
   signOutGoogle,
   sourceDialogActions,
-} from "./drive.js?v=34";
+} from "./drive.js?v=35";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -50,7 +50,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=34";
+} from "./search.js?v=35";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -65,8 +65,8 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=34";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=34";
+} from "./markers.js?v=35";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=35";
 import {
   applyScrollFraction,
   mimeForPath,
@@ -78,7 +78,14 @@ import {
   spineIndexFromCfi,
   spineLabel,
   zipPath,
-} from "./epub.js?v=34";
+} from "./epub.js?v=35";
+import { demoCatalog } from "./shelf/catalog.js?v=35";
+import {
+  closeRiceBook,
+  initRiceShelf,
+  isRiceShelfPage,
+  setRiceShelfLibrary,
+} from "./shelf/shelf.js?v=35";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -1168,7 +1175,7 @@ function saveBanner(targetBook) {
   });
   dismiss.addEventListener("click", () => {
     offerSaveBanner = false;
-    renderShelf();
+    render();
   });
   actions.append(saveBtn, dismiss);
   row.append(text, actions);
@@ -1187,7 +1194,24 @@ function syncSearchUi(matchCount) {
   }
 }
 
+function renderRiceBanners() {
+  const host = document.getElementById("shelf-banners");
+  if (!host) return;
+  host.innerHTML = "";
+  if (!state.books.length || state.activeBookId) return;
+  const resume = mostRecentResume();
+  if (resume) host.appendChild(continueCard(resume));
+  if (offerSaveBanner) {
+    const unsaved =
+      (resume && !isBookOffline(resume.book) && resume.book) ||
+      state.books.find((b) => isBookOpenable(b) && !isBookOffline(b));
+    if (unsaved) host.appendChild(saveBanner(unsaved));
+    else offerSaveBanner = false;
+  }
+}
+
 function renderShelf() {
+  if (!els.shelf) return;
   const books = sortedBooks();
   els.shelf.innerHTML = "";
   syncSearchUi(books.length);
@@ -1309,7 +1333,7 @@ function renderConceptCards() {
     const article = document.createElement("article");
     article.className = "concept-card";
     const img = document.createElement("img");
-    img.src = `./concepts/immune/${card.file}`;
+    img.src = new URL(`./concepts/immune/${card.file}`, import.meta.url).href;
     img.alt = card.alt;
     img.width = 800;
     img.height = 800;
@@ -1604,17 +1628,28 @@ function renderBook() {
 
 function render() {
   const hasBooks = state.books.length > 0;
-  els.onboarding.classList.toggle("hidden", hasBooks && !state.activeBookId);
-  // Keep onboarding hidden when shelf or book shown
-  if (hasBooks) els.onboarding.classList.add("hidden");
-  els.shelf.classList.toggle("hidden", !hasBooks || !!state.activeBookId);
-  els.book.classList.toggle("hidden", !state.activeBookId);
-  document.getElementById("btn-sort").classList.toggle("hidden", !hasBooks);
-  document.getElementById("btn-change").classList.toggle("hidden", !hasBooks);
+  const rice = isRiceShelfPage();
+  els.onboarding?.classList.toggle("hidden", hasBooks || !!state.activeBookId);
+  if (hasBooks) els.onboarding?.classList.add("hidden");
+  if (rice) {
+    document.getElementById("app")?.classList.toggle("is-reading", !!state.activeBookId);
+    if (!state.activeBookId) {
+      setRiceShelfLibrary(hasBooks ? state.books : demoCatalog(), hasBooks ? "library" : "demo");
+      renderRiceBanners();
+    } else {
+      closeRiceBook();
+    }
+  } else {
+    els.shelf?.classList.toggle("hidden", !hasBooks || !!state.activeBookId);
+    if (hasBooks && !state.activeBookId) renderShelf();
+  }
+  els.book?.classList.toggle("hidden", !state.activeBookId);
+  const sortBtn = document.getElementById("btn-sort");
+  if (sortBtn) sortBtn.classList.toggle("hidden", rice || !hasBooks);
+  document.getElementById("btn-change")?.classList.toggle("hidden", !hasBooks);
   updateChangeButtonLabel();
-  if (!hasBooks || state.activeBookId) syncSearchUi(0);
+  if (!rice && (!hasBooks || state.activeBookId)) syncSearchUi(0);
 
-  if (hasBooks && !state.activeBookId) renderShelf();
   if (state.activeBookId) renderBook();
   updatePlayerBar();
 }
@@ -2097,8 +2132,9 @@ function cycleSort() {
   const i = order.indexOf(state.sort);
   state.sort = order[(i + 1) % order.length];
   localStorage.setItem(SORT_KEY, state.sort);
-  document.getElementById("btn-sort").textContent = `Sort: ${state.sort}`;
-  if (!state.activeBookId) renderShelf();
+  const sortBtn = document.getElementById("btn-sort");
+  if (sortBtn) sortBtn.textContent = `Sort: ${state.sort}`;
+  if (!state.activeBookId) render();
 }
 
 function setupCapabilityHint() {
@@ -2209,7 +2245,7 @@ function bind() {
     closeSourceSheet(null);
     loadLibrary("drive");
   });
-  document.getElementById("btn-change").addEventListener("click", () => {
+  document.getElementById("btn-change")?.addEventListener("click", () => {
     showChangeSourceSheet();
   });
   document.addEventListener("keydown", (event) => {
@@ -2218,7 +2254,7 @@ function bind() {
     event.preventDefault();
     closeSourceSheet(null);
   });
-  document.getElementById("btn-pick-main").addEventListener("click", pickDirectory);
+  document.getElementById("btn-pick-main")?.addEventListener("click", pickDirectory);
   els.btnSheetGoogle?.addEventListener("click", () => {
     closeSourceSheet(null);
     loadLibrary("drive");
@@ -2321,16 +2357,18 @@ function bind() {
     state.bookPane = "concepts";
     renderBook();
   });
-  document.getElementById("btn-sort").addEventListener("click", cycleSort);
-  els.shelfQuery?.addEventListener("input", () => {
-    state.query = els.shelfQuery.value;
-    if (!state.activeBookId) renderShelf();
-  });
-  els.clearSearch?.addEventListener("click", () => {
-    state.query = "";
-    if (els.shelfQuery) els.shelfQuery.value = "";
-    if (!state.activeBookId) renderShelf();
-  });
+  document.getElementById("btn-sort")?.addEventListener("click", cycleSort);
+  if (!isRiceShelfPage()) {
+    els.shelfQuery?.addEventListener("input", () => {
+      state.query = els.shelfQuery.value;
+      if (!state.activeBookId) renderShelf();
+    });
+    els.clearSearch?.addEventListener("click", () => {
+      state.query = "";
+      if (els.shelfQuery) els.shelfQuery.value = "";
+      if (!state.activeBookId) renderShelf();
+    });
+  }
   document.getElementById("btn-play").addEventListener("click", async () => {
     if (!playback) {
       const first = state.books[0];
@@ -2444,7 +2482,7 @@ function bind() {
 
 function registerSW() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("./sw.js").catch(() => {});
+  navigator.serviceWorker.register(new URL("./sw.js", import.meta.url).href).catch(() => {});
   navigator.serviceWorker.addEventListener("message", (event) => {
     if (event.data?.type !== DRIVE_UNAUTHORIZED_MESSAGE) return;
     showDriveError({ name: "DriveAuthError", status: 401 }, { silent: true });
@@ -2517,7 +2555,26 @@ function consumeOpenIntent() {
 }
 
 setupCapabilityHint();
-document.getElementById("btn-sort").textContent = `Sort: ${state.sort}`;
+const sortBtn = document.getElementById("btn-sort");
+if (sortBtn) sortBtn.textContent = `Sort: ${state.sort}`;
+if (isRiceShelfPage()) {
+  initRiceShelf({
+    onOpenBook(book, pane) {
+      openBook(book.id, { pane });
+      if (pane === "audio" && bookHasAudio(book) && book.chapters?.some((ch) => ch.file || ch.url)) {
+        const p = loadProgress()[book.id];
+        const idx = Math.max(
+          0,
+          book.chapters.findIndex((c) => c.id === p?.chapterId)
+        );
+        playChapter(book.id, idx === -1 ? 0 : idx, { resumeIfSame: true });
+      }
+    },
+    onNeedLibrary() {
+      showChangeSourceSheet();
+    },
+  });
+}
 bind();
 render();
 registerSW();

@@ -24,7 +24,7 @@ Items 1–2 below shipped. Further web work is one small PR at a time. Do not me
 
 ## Now — leftover small web items
 
-Ship these one PR at a time. Do not start a new homepage, Drive walker, PDF reader, or native work from this list. `/shelf/` preview shipped as [PR #21](https://github.com/bigdaddy109/library-listen/pull/21).
+Ship these one PR at a time. Do not start a Drive walker, PDF reader, or native work from this list. The rice-paper shelf is now the homepage; `/classic/` is the previous dark player.
 
 - **Empty-library copy + in-page status.** **Shipped** — `emptyLibraryMessage` lives in [`docs/library.js`](docs/library.js) and lists only `KNOWN_COLLECTIONS`. An empty or failed local scan writes `#library-status` instead of `alert()`.
 
@@ -43,7 +43,7 @@ These shipped after 1–2 (do not re-do them):
 Still later (optional):
 
 - **Hardcoded known books only.** New folders get `humanize(folder)` titles. That’s OK. Adding a book means editing `KNOWN_BOOKS` / `KNOWN_COLLECTIONS` in [`docs/library.js`](docs/library.js). A later optional `folder.jpg` + filename is enough; do not add a metadata service. Do not also edit the paused Swift tables unless Jeff un-pauses native.
-- **Rice-paper `/shelf/` preview.** Shipped as [PR #21](https://github.com/bigdaddy109/library-listen/pull/21) at `/shelf/`. Do not replace the homepage with it.
+- **Rice-paper homepage.** Shipped as the `/shelf/` preview in [PR #21](https://github.com/bigdaddy109/library-listen/pull/21), then moved to the root Pages URL. Old player remains at `/classic/`.
 - **PDF reader.** Jeff said later. EPUB MVP is live.
 
 ## Dropped while native is paused

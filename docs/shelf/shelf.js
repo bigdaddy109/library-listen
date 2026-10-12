@@ -7,8 +7,8 @@ import {
   buildLibrary,
   extOf,
   shelfBadge,
-} from "../library.js?v=34";
-import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=34";
+} from "../library.js?v=35";
+import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=35";
 import {
   OPEN_INTENT_KEY,
   VIEWS,
@@ -27,8 +27,8 @@ import {
   seriesMeta,
   shelfStatusLabel,
   volumeNumber,
-} from "./catalog.js?v=34";
-import { coverSvg, spineMetrics, topicMotifSvg } from "./covers.js?v=34";
+} from "./catalog.js?v=35";
+import { coverSvg, spineMetrics, topicMotifSvg } from "./covers.js?v=35";
 
 const VIEW_KEY = "librarylisten.shelfView";
 const SERIES_KEY = "librarylisten.shelfSeries";
@@ -97,17 +97,34 @@ function restoreChrome() {
   }
 }
 
+let shelfOptions = { onOpenBook: null, onNeedLibrary: null };
+let shelfBound = false;
+
+function sameBookIds(next) {
+  return (
+    state.books.length === next.length &&
+    state.books.every((book, i) => book.id === next[i]?.id)
+  );
+}
+
+function updateHint() {
+  if (!els.hint) return;
+  els.hint.textContent =
+    state.source === "library"
+      ? `已載入 ${state.books.length} 本書。聽／讀在這一頁打開。`
+      : "尚未選庫時顯示示範書。登入或選資料夾後即可聽／讀。";
+}
+
 function setLibrary(books, source = "library") {
-  state.books = books;
+  const next = Array.isArray(books) ? books : [];
+  const unchanged = state.source === source && sameBookIds(next);
+  state.books = next;
   state.source = source;
-  state.liftedId = null;
-  closeBook();
-  if (els.hint) {
-    els.hint.textContent =
-      source === "library"
-        ? `已載入 ${books.length} 本書。聽／讀會打開現有播放器。`
-        : "尚未選庫時顯示示範書。聽／讀會打開現有播放器。";
+  if (!unchanged) {
+    state.liftedId = null;
+    closeBook();
   }
+  updateHint();
   render();
 }
 
@@ -364,7 +381,16 @@ function renderSpread(book, phase = "open") {
 
 function goToPlayer(book, pane, ready) {
   if (state.source === "demo" || !ready) {
-    showToast("先在播放器選擇 Library 資料夾，才能聽或讀。");
+    showToast("先登入 Google 或選擇 Library 資料夾，才能聽或讀。");
+    if (typeof shelfOptions.onNeedLibrary === "function") {
+      shelfOptions.onNeedLibrary(book, pane);
+    }
+    return;
+  }
+  if (typeof shelfOptions.onOpenBook === "function") {
+    closeBook();
+    shelfOptions.onOpenBook(book, pane);
+    return;
   }
   try {
     sessionStorage.setItem(OPEN_INTENT_KEY, JSON.stringify({ bookId: book.id, pane }));
@@ -503,23 +529,25 @@ function bind() {
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") closeBook();
   });
-  document.getElementById("btn-pick-folder")?.addEventListener("click", async () => {
-    try {
-      applyLoaded(await loadFromFolder());
-    } catch (err) {
-      if (err?.name === "AbortError") return;
-      showToast("無法打開資料夾。");
-    }
-  });
-  document.getElementById("btn-pick-files")?.addEventListener("click", async () => {
-    try {
-      applyLoaded(await loadFromFiles());
-    } catch (err) {
-      if (err?.name === "AbortError") return;
-      showToast("無法打開檔案。");
-    }
-  });
-  bindDriveHook();
+  if (!document.body?.classList.contains("shell-shelf")) {
+    document.getElementById("btn-pick-folder")?.addEventListener("click", async () => {
+      try {
+        applyLoaded(await loadFromFolder());
+      } catch (err) {
+        if (err?.name === "AbortError") return;
+        showToast("無法打開資料夾。");
+      }
+    });
+    document.getElementById("btn-pick-files")?.addEventListener("click", async () => {
+      try {
+        applyLoaded(await loadFromFiles());
+      } catch (err) {
+        if (err?.name === "AbortError") return;
+        showToast("無法打開檔案。");
+      }
+    });
+    bindDriveHook();
+  }
 }
 
 function applyPreviewParams() {
@@ -538,19 +566,52 @@ function applyPreviewParams() {
   return params;
 }
 
-restoreChrome();
-const previewParams = applyPreviewParams();
-bind();
-render();
-const openId = previewParams.get("book");
-if (openId && findBook(openId) && (previewParams.get("spread") === "1" || previewParams.get("flip") === "1")) {
-  const book = findBook(openId);
-  openFromShelf(
-    book,
-    openBookPhase({
-      reducedMotion: prefersReducedMotion(),
-      spread: previewParams.get("spread") === "1",
-      flip: previewParams.get("flip") === "1",
-    })
-  );
+export function isRiceShelfPage() {
+  return document.body?.classList.contains("shell-shelf") && !!document.getElementById("stage");
+}
+
+export function closeRiceBook() {
+  closeBook();
+}
+
+export function setRiceShelfLibrary(books, source = "library") {
+  setLibrary(books, source);
+}
+
+export function initRiceShelf(options = {}) {
+  shelfOptions = { ...shelfOptions, ...options };
+  if (!els.stage) {
+    els.stage = document.getElementById("stage");
+    els.chips = document.getElementById("series-chips");
+    els.count = document.getElementById("shelf-count");
+    els.query = document.getElementById("shelf-query");
+    els.clear = document.getElementById("btn-clear-search");
+    els.hint = document.getElementById("load-hint");
+    els.layer = document.getElementById("book-layer");
+    els.bookStage = document.getElementById("book-stage");
+    els.toast = document.getElementById("toast");
+    els.fileDir = document.getElementById("file-input-dir");
+    els.fileFiles = document.getElementById("file-input-files");
+  }
+  restoreChrome();
+  const previewParams = applyPreviewParams();
+  if (!shelfBound) {
+    bind();
+    shelfBound = true;
+  }
+  if (!state.books.length) setLibrary(demoCatalog(), "demo");
+  else render();
+  const openId = previewParams.get("book");
+  if (openId && findBook(openId) && (previewParams.get("spread") === "1" || previewParams.get("flip") === "1")) {
+    const book = findBook(openId);
+    openFromShelf(
+      book,
+      openBookPhase({
+        reducedMotion: prefersReducedMotion(),
+        spread: previewParams.get("spread") === "1",
+        flip: previewParams.get("flip") === "1",
+      })
+    );
+  }
+  return { previewParams };
 }

@@ -27,7 +27,7 @@ Progress and the shelf are stored in that browser. After the page or home-screen
 - Player **Sleep** cycles 15 / 30 / 45 / 60 minutes, then pauses.
 - Chapter changes briefly show a **Next:** toast.
 
-Source: [`docs/`](docs/) (GitHub Pages from `/docs` on `main`). Drive helpers live in [`docs/drive.js`](docs/drive.js) so a later `/shelf/` preview can call the same module.
+Source: [`docs/`](docs/) (GitHub Pages from `/docs` on `main`). The homepage is the rice-paper shelf; the previous dark player stays at [`docs/classic/`](docs/classic/). Drive helpers live in [`docs/drive.js`](docs/drive.js).
 
 ## Google Cloud setup (Drive + GIS)
 
