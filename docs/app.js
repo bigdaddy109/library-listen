@@ -1,4 +1,4 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=27";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=28";
 import {
   AUDIO_EXT,
   EBOOK_OFFLINE_KEY,
@@ -17,7 +17,29 @@ import {
   saveTextProgress,
   shelfBadge,
   textProgress,
-} from "./library.js?v=27";
+} from "./library.js?v=28";
+import {
+  DRIVE_UNAUTHORIZED_MESSAGE,
+  attachDriveMedia,
+  clearDriveSession,
+  downloadDriveFile,
+  fetchDriveUser,
+  getAccessToken,
+  hydrateDriveCovers,
+  isDriveFile,
+  isGoogleClientConfigured,
+  isPickerConfigured,
+  libraryFolderLabel,
+  loadDriveEntries,
+  loadDriveSession,
+  openGooglePicker,
+  publishDriveToken,
+  refreshGoogleToken,
+  restoreDriveFile,
+  saveDriveSession,
+  signInWithGoogle,
+  signOutGoogle,
+} from "./drive.js?v=28";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -25,7 +47,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=27";
+} from "./search.js?v=28";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -40,8 +62,8 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=27";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=27";
+} from "./markers.js?v=28";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=28";
 import {
   applyScrollFraction,
   mimeForPath,
@@ -53,7 +75,7 @@ import {
   spineIndexFromCfi,
   spineLabel,
   zipPath,
-} from "./epub.js?v=27";
+} from "./epub.js?v=28";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -81,8 +103,19 @@ const els = {
   conceptList: document.getElementById("concept-list"),
   playerBar: document.getElementById("player-bar"),
   capabilityHint: document.getElementById("capability-hint"),
+  driveStatus: document.getElementById("drive-status"),
   fileInputDir: document.getElementById("file-input-dir"),
   fileInputFiles: document.getElementById("file-input-files"),
+  sourceSheet: document.getElementById("source-sheet"),
+  sourceSheetTitle: document.getElementById("source-sheet-title"),
+  sourceSheetCopy: document.getElementById("source-sheet-copy"),
+  sourceSheetList: document.getElementById("source-sheet-list"),
+  btnSheetPicker: document.getElementById("btn-sheet-picker"),
+  btnSheetGoogle: document.getElementById("btn-sheet-google"),
+  btnSheetLocal: document.getElementById("btn-sheet-local"),
+  btnSheetFiles: document.getElementById("btn-sheet-files"),
+  btnSheetSignout: document.getElementById("btn-sheet-signout"),
+  btnSheetCancel: document.getElementById("btn-sheet-cancel"),
   shelfTools: document.getElementById("shelf-tools"),
   shelfQuery: document.getElementById("shelf-query"),
   clearSearch: document.getElementById("btn-clear-search"),
@@ -113,6 +146,8 @@ let ignoreReaderScroll = false;
 /** @type {{ bookId: string, chapterIndex: number } | null} */
 let pendingReaderJump = null;
 let readerLoadingId = null;
+/** @type {((folder: { id: string, name: string } | null) => void) | null} */
+let folderSheetResolve = null;
 /** @type {FileSystemDirectoryHandle | null} */
 let savedDirHandle = null;
 let savingBookId = null;
@@ -188,10 +223,23 @@ function saveLibrarySnapshot() {
     subtitle: b.subtitle,
     author: b.author,
     kind: b.kind,
+    source: b.source || null,
+    coverDriveId: b.coverFile?.driveId || b.coverDriveId || null,
     ebook: b.ebook
-      ? { id: b.ebook.id, name: b.ebook.name || b.ebook.file?.name }
+      ? {
+          id: b.ebook.id,
+          name: b.ebook.name || b.ebook.file?.name,
+          driveId: b.ebook.file?.driveId || b.ebook.driveId || null,
+          size: b.ebook.file?.size || null,
+          type: b.ebook.file?.type || null,
+        }
       : null,
-    chapters: b.chapters.map((ch) => snapshotChapter(ch)),
+    chapters: b.chapters.map((ch) => ({
+      ...snapshotChapter(ch),
+      driveId: ch.file?.driveId || ch.driveId || null,
+      size: ch.file?.size || null,
+      type: ch.file?.type || null,
+    })),
   }));
   try {
     localStorage.setItem(LIBRARY_KEY, JSON.stringify(snapshot));
@@ -211,27 +259,54 @@ function restoreLibrarySnapshot() {
   if (!Array.isArray(snapshot)) return [];
   return snapshot.map((b) => {
     const saved = offlineIndex.get(b.id);
+    const canDrive = !!getAccessToken();
+    const coverDrive =
+      canDrive && b.coverDriveId
+        ? restoreDriveFile({ driveId: b.coverDriveId, name: "cover", type: "image/jpeg" })
+        : null;
     return {
       ...b,
-      coverFile: saved?.get(COVER_KEY) || null,
+      source: b.source || (b.coverDriveId || b.ebook?.driveId ? "drive" : null),
+      coverFile: saved?.get(COVER_KEY) || coverDrive,
       coverUrl: null,
       kind: b.kind,
       ebook: b.ebook
         ? {
             id: b.ebook.id,
             name: b.ebook.name,
-            file: saved?.get(EBOOK_OFFLINE_KEY) || null,
+            driveId: b.ebook.driveId || null,
+            file:
+              saved?.get(EBOOK_OFFLINE_KEY) ||
+              (canDrive
+                ? restoreDriveFile({
+                    driveId: b.ebook.driveId,
+                    name: b.ebook.name,
+                    size: b.ebook.size,
+                    type: b.ebook.type,
+                  })
+                : null),
             fromDevice: !!saved?.get(EBOOK_OFFLINE_KEY),
           }
         : null,
       chapters: b.chapters.map((ch, index) => {
-        const file = offlineChapterBlob(saved, ch);
+        const offline = offlineChapterBlob(saved, ch);
+        const file =
+          offline ||
+          (canDrive
+            ? restoreDriveFile({
+                driveId: ch.driveId,
+                name: String(ch.id || "").split("#")[0],
+                size: ch.size,
+                type: ch.type,
+              })
+            : null);
         return {
           id: ch.id,
           index,
           title: ch.title,
           file,
-          fromDevice: !!file,
+          driveId: ch.driveId || file?.driveId || null,
+          fromDevice: !!offline,
           url: null,
           ...restoreChapterFields(ch, index),
         };
@@ -240,19 +315,28 @@ function restoreLibrarySnapshot() {
   });
 }
 
+function fileIsBlob(file) {
+  return typeof Blob !== "undefined" && file instanceof Blob;
+}
+
 function attachUrls(books) {
   revokeAllUrls();
+  attachDriveMedia(books);
   const seen = new WeakMap();
   const urlFor = (file) => {
     if (!file) return null;
+    if (isDriveFile(file) && !fileIsBlob(file)) return null;
     if (seen.has(file)) return seen.get(file);
     const url = fileUrl(file);
     seen.set(file, url);
     return url;
   };
   for (const book of books) {
-    for (const ch of book.chapters) ch.url = urlFor(ch.file);
-    book.coverUrl = urlFor(book.coverFile);
+    for (const ch of book.chapters) {
+      const local = urlFor(ch.file);
+      if (local) ch.url = local;
+    }
+    book.coverUrl = urlFor(book.coverFile) || book.coverUrl;
   }
 }
 
@@ -271,6 +355,13 @@ function isBookOpenable(book) {
   return isBookPlayable(book) || isEbookReadable(book);
 }
 
+async function materializeFile(file) {
+  if (!file) return null;
+  if (fileIsBlob(file)) return file;
+  if (isDriveFile(file)) return downloadDriveFile(file);
+  return file;
+}
+
 async function saveBookOffline(book) {
   if (savingBookId) return;
   const items = blobsToSave(book);
@@ -280,8 +371,10 @@ async function saveBookOffline(book) {
     await navigator.storage?.persist?.().catch(() => false);
     const saved = new Map();
     for (let i = 0; i < items.length; i += 1) {
-      const [chapterId, blob] = items[i];
+      const [chapterId, raw] = items[i];
       updateOfflineButton(book, `Saving ${i + 1}/${items.length}…`);
+      const blob = await materializeFile(raw);
+      if (!blob) continue;
       await idb("offline", "readwrite", (s) =>
         s.put({ bookId: book.id, chapterId, blob }, [book.id, chapterId])
       );
@@ -573,34 +666,178 @@ function emptyLibraryMessage(entries, skipped) {
     (skipped ? `, skipped/unread: ${skipped}` : "") +
     ").\n\n" +
     "Pick the Library folder (or 門羅-WhatIf / Immune / 上學不容易) that contains listen/ with mp3/m4b.\n" +
-    "On iPhone/iPad: in Files, tap Download Now on listen/ first.";
+    "On iPhone/iPad: in Files, tap Download Now on listen/ first.\n" +
+    "Or 用 Google 登入 and open the shared Drive Library.";
   if (samples) msg += `\n\nSample paths:\n${samples}`;
   return msg;
 }
 
+function updateDriveStatus() {
+  const el = els.driveStatus;
+  if (!el) return;
+  const session = loadDriveSession();
+  if (session?.email || session?.folderName) {
+    const who = session.email || "Google";
+    el.textContent = `${who} · ${session.folderName || "Library"}`;
+  } else if (!isGoogleClientConfigured()) {
+    el.textContent =
+      "Google Drive sign-in needs a Web Client ID in docs/drive.js (see README). Local folder pick still works.";
+  } else {
+    el.textContent = "";
+  }
+}
+
+function closeSourceSheet(folder = null) {
+  const resolve = folderSheetResolve;
+  folderSheetResolve = null;
+  els.sourceSheet?.classList.add("hidden");
+  if (els.sourceSheet) els.sourceSheet.hidden = true;
+  if (els.sourceSheetList) els.sourceSheetList.innerHTML = "";
+  resolve?.(folder);
+}
+
+function setSheetActions({ google, local, files, picker, signout } = {}) {
+  els.btnSheetGoogle?.classList.toggle("hidden", !google);
+  els.btnSheetLocal?.classList.toggle("hidden", !local);
+  els.btnSheetFiles?.classList.toggle("hidden", !files);
+  els.btnSheetPicker?.classList.toggle("hidden", !picker);
+  els.btnSheetSignout?.classList.toggle("hidden", !signout);
+}
+
+function openSourceSheet({ title, copy, folders = [], actions = {} } = {}) {
+  closeSourceSheet(null);
+  if (els.sourceSheetTitle) els.sourceSheetTitle.textContent = title || "Library source";
+  if (els.sourceSheetCopy) els.sourceSheetCopy.textContent = copy || "";
+  if (els.sourceSheetList) {
+    els.sourceSheetList.innerHTML = "";
+    for (const folder of folders) {
+      const li = document.createElement("li");
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = folder.label || folder.name || "Library";
+      btn.addEventListener("click", () => closeSourceSheet(folder));
+      li.appendChild(btn);
+      els.sourceSheetList.appendChild(li);
+    }
+  }
+  setSheetActions(actions);
+  els.sourceSheet?.classList.remove("hidden");
+  if (els.sourceSheet) els.sourceSheet.hidden = false;
+  return new Promise((resolve) => {
+    folderSheetResolve = resolve;
+  });
+}
+
+function chooseDriveFolderUi(candidates) {
+  return openSourceSheet({
+    title: "Choose a Library folder",
+    copy: "Jeff shares Library. Pick the one shared with this Google account, or browse Drive.",
+    folders: (candidates || []).map((folder) => ({
+      ...folder,
+      label: libraryFolderLabel(folder),
+    })),
+    actions: {
+      picker: isPickerConfigured(),
+    },
+  });
+}
+
+async function pickDriveFolderWithPicker() {
+  const folder = await openGooglePicker();
+  if (folder) closeSourceSheet(folder);
+  return folder;
+}
+
+async function loadFromDrive({ silent } = {}) {
+  if (!isGoogleClientConfigured()) {
+    if (!silent) {
+      alert(
+        "Google sign-in is not configured yet.\n\nPaste a Web application Client ID into GOOGLE_OAUTH_CLIENT_ID in docs/drive.js. Setup steps are in the README.\n\nChoose Library folder still works as a local fallback."
+      );
+    }
+    return null;
+  }
+  let token = getAccessToken();
+  if (!token) {
+    try {
+      token = silent ? await refreshGoogleToken() : await signInWithGoogle();
+    } catch (err) {
+      if (silent || err?.name === "AbortError") return null;
+      throw err;
+    }
+  }
+  await publishDriveToken(token);
+  const session = loadDriveSession();
+  let walked;
+  try {
+    walked = await loadDriveEntries({
+      token,
+      folderId: session?.folderId,
+      folderName: session?.folderName,
+      chooseFolder: silent || session?.folderId ? undefined : chooseDriveFolderUi,
+    });
+  } catch (err) {
+    if (silent || err?.name === "AbortError") throw err;
+    if (err?.name === "DriveLibraryMissing" && isPickerConfigured()) {
+      const picked = await openGooglePicker(token);
+      if (!picked) {
+        throw Object.assign(new Error("Cancelled"), { name: "AbortError" });
+      }
+      walked = await loadDriveEntries({
+        token,
+        folderId: picked.id,
+        folderName: picked.name,
+      });
+    } else {
+      throw err;
+    }
+  }
+  const books = await booksFromEntries(walked.entries);
+  await hydrateDriveCovers(books, token);
+  const email = (await fetchDriveUser(token)) || session?.email || "";
+  saveDriveSession({
+    folderId: walked.folder.id,
+    folderName: walked.folder.name,
+    email,
+  });
+  updateDriveStatus();
+  return {
+    books,
+    entries: walked.entries,
+    skipped: walked.skipped,
+    driveFolder: walked.folder,
+  };
+}
+
 /**
- * @param {"directory" | "files" | "reconnect" | "auto"} mode
+ * @param {"directory" | "files" | "reconnect" | "auto" | "drive" | "drive-auto"} mode
  *   reconnect: remembered folder (with permission prompt), else the picker.
  *   auto: remembered folder only if permission is already granted; silent otherwise.
+ *   drive / drive-auto: GIS + Drive API (shared Library folder).
  */
 async function loadLibrary(mode) {
-  const silent = mode === "auto";
+  const silent = mode === "auto" || mode === "drive-auto";
   setScanning(true);
   try {
     let result = null;
-    if (!savedDirHandle && silent) return;
-    // No await before the file input on iOS, or Safari drops the tap gesture.
-    if (savedDirHandle && (mode === "reconnect" || mode === "auto")) {
-      result = await reopenSavedDirectory({ prompt: mode === "reconnect" }).catch(() => null);
-      if (!result && silent) return;
-    }
-    if (!result) {
-      if (mode === "files") {
-        result = await pickWithInput(els.fileInputFiles);
-      } else if (typeof window.showDirectoryPicker === "function") {
-        result = await pickWithDirectoryPicker();
-      } else {
-        result = await pickWithInput(els.fileInputDir);
+    if (mode === "drive" || mode === "drive-auto") {
+      result = await loadFromDrive({ silent: mode === "drive-auto" });
+      if (!result) return;
+    } else {
+      if (!savedDirHandle && silent) return;
+      // No await before the file input on iOS, or Safari drops the tap gesture.
+      if (savedDirHandle && (mode === "reconnect" || mode === "auto")) {
+        result = await reopenSavedDirectory({ prompt: mode === "reconnect" }).catch(() => null);
+        if (!result && silent) return;
+      }
+      if (!result) {
+        if (mode === "files") {
+          result = await pickWithInput(els.fileInputFiles);
+        } else if (typeof window.showDirectoryPicker === "function") {
+          result = await pickWithDirectoryPicker();
+        } else {
+          result = await pickWithInput(els.fileInputDir);
+        }
       }
     }
 
@@ -651,8 +888,10 @@ async function loadLibrary(mode) {
     if (silent || err?.name === "AbortError") return;
     console.error(err);
     alert(
-      (err?.message || "Could not open the folder.") +
-        "\n\nIf this is iCloud: Download Now on the Library/listen folders, then try again."
+      (err?.message || "Could not open the library.") +
+        (mode === "drive" || mode === "drive-auto"
+          ? "\n\nAsk Jeff to share the Library folder with this Google account, or Choose Library folder as a local fallback."
+          : "\n\nIf this is iCloud: Download Now on the Library/listen folders, then try again.")
     );
   } finally {
     setScanning(false);
@@ -1796,30 +2035,71 @@ function setupCapabilityHint() {
   pickFilesBtn?.classList.remove("primary");
   pickFilesBtn?.classList.add("ghost");
 
-  if (typeof window.showDirectoryPicker === "function") {
+  if (isGoogleClientConfigured()) {
+    els.capabilityHint.textContent =
+      "用 Google 登入 reads the shared Drive Library (drive.readonly). Choose Library folder remains a local backup.";
+  } else if (typeof window.showDirectoryPicker === "function") {
     els.capabilityHint.textContent =
       "Choose Library folder, then pick Library or a collection (門羅-WhatIf / Immune). On iPhone/iPad, pick the folder in Files after Download Now.";
   } else {
     els.capabilityHint.textContent =
       "Choose Library folder to select a folder (works in Files on iPhone/iPad and desktop). Or use Choose audio files to pick files one by one.";
   }
+  updateDriveStatus();
+}
+
+function libraryNeedsReconnect() {
+  return state.books.some(
+    (b) =>
+      (bookHasAudio(b) && !isBookPlayable(b)) || (bookHasEbook(b) && !isEbookReadable(b))
+  );
+}
+
+function libraryUsesDrive() {
+  return state.books.some((b) => b.source === "drive") || !!loadDriveSession();
 }
 
 function updateChangeButtonLabel() {
   const btn = document.getElementById("btn-change");
   if (!btn) return;
-  if (
-    state.books.some(
-      (b) =>
-        (bookHasAudio(b) && !isBookPlayable(b)) || (bookHasEbook(b) && !isEbookReadable(b))
-    )
-  ) {
+  if (libraryNeedsReconnect() && libraryUsesDrive()) {
+    btn.textContent = "Reconnect Drive";
+    btn.title = "Sign in with Google again to stream from the shared Library";
+  } else if (libraryNeedsReconnect()) {
     btn.textContent = "Reconnect Library";
     btn.title = "Pick the Library folder again to play or read every book";
+  } else if (libraryUsesDrive()) {
+    btn.textContent = "Change source";
+    btn.title = "Switch between Google Drive and a local folder";
   } else {
     btn.textContent = "Change folder";
     btn.title = "Pick a different Library folder";
   }
+}
+
+function showChangeSourceSheet() {
+  const session = loadDriveSession();
+  openSourceSheet({
+    title: "Library source",
+    copy: session?.email
+      ? `Signed in as ${session.email}. Reload Drive, pick a local folder, or sign out.`
+      : "Google Drive is the shared Library. A local folder is the fallback.",
+    actions: {
+      google: true,
+      local: true,
+      files: true,
+      picker: isPickerConfigured(),
+      signout: !!session,
+    },
+  }).then((folder) => {
+    if (!folder?.id) return;
+    saveDriveSession({
+      folderId: folder.id,
+      folderName: folder.name,
+      email: session?.email || "",
+    });
+    loadLibrary(getAccessToken() ? "drive-auto" : "drive");
+  });
 }
 
 function bindMediaSession() {
@@ -1854,16 +2134,53 @@ function bind() {
   const pickDirectory = () => loadLibrary("directory");
   const pickFiles = () => loadLibrary("files");
 
-  // Always try a real folder chooser first (showDirectoryPicker or webkitdirectory).
-  // Do not special-case iPhone/iPad — folder pick works there via Files.
+  document.getElementById("btn-google")?.addEventListener("click", () => {
+    closeSourceSheet(null);
+    loadLibrary("drive");
+  });
   document.getElementById("btn-change").addEventListener("click", () => {
-    const needsReconnect = state.books.some(
-      (b) =>
-        (bookHasAudio(b) && !isBookPlayable(b)) || (bookHasEbook(b) && !isEbookReadable(b))
-    );
-    loadLibrary(needsReconnect ? "reconnect" : "directory");
+    showChangeSourceSheet();
   });
   document.getElementById("btn-pick-main").addEventListener("click", pickDirectory);
+  els.btnSheetGoogle?.addEventListener("click", () => {
+    closeSourceSheet(null);
+    loadLibrary("drive");
+  });
+  els.btnSheetLocal?.addEventListener("click", () => {
+    closeSourceSheet(null);
+    loadLibrary("directory");
+  });
+  els.btnSheetFiles?.addEventListener("click", () => {
+    closeSourceSheet(null);
+    loadLibrary("files");
+  });
+  els.btnSheetPicker?.addEventListener("click", () => {
+    Promise.resolve()
+      .then(async () => {
+        if (!getAccessToken()) {
+          const token = await signInWithGoogle();
+          await publishDriveToken(token);
+        }
+        return pickDriveFolderWithPicker();
+      })
+      .catch((err) => {
+        if (err?.name === "AbortError") return;
+        console.error(err);
+        alert(err?.message || "Google Picker did not open.");
+      });
+  });
+  els.btnSheetCancel?.addEventListener("click", () => closeSourceSheet(null));
+  els.btnSheetSignout?.addEventListener("click", async () => {
+    await signOutGoogle();
+    await publishDriveToken("");
+    clearDriveSession();
+    closeSourceSheet(null);
+    updateDriveStatus();
+    showToast("Signed out of Google");
+  });
+  els.sourceSheet?.addEventListener("click", (event) => {
+    if (event.target === els.sourceSheet) closeSourceSheet(null);
+  });
   document.getElementById("btn-offline").addEventListener("click", async () => {
     const book = findBook(state.activeBookId);
     if (!book || savingBookId) return;
@@ -2038,6 +2355,12 @@ function bind() {
 function registerSW() {
   if (!("serviceWorker" in navigator)) return;
   navigator.serviceWorker.register("./sw.js").catch(() => {});
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    if (event.data?.type !== DRIVE_UNAUTHORIZED_MESSAGE) return;
+    refreshGoogleToken()
+      .then((token) => publishDriveToken(token))
+      .catch(() => showToast("用 Google 登入 again to keep playing from Drive"));
+  });
 }
 
 function showPlayableBooks(books) {
@@ -2058,13 +2381,18 @@ async function restoreSession() {
   savedDirHandle = await loadSavedDirectory();
   if (savedDirHandle) {
     await loadLibrary("auto");
-    if (state.books.some(isBookPlayable)) return;
+    if (state.books.some(isBookOpenable)) return;
+  }
+  if (loadDriveSession()?.folderId && isGoogleClientConfigured()) {
+    await loadLibrary("drive-auto");
+    if (state.books.some(isBookOpenable)) return;
   }
   const restored = restoreLibrarySnapshot();
   if (showPlayableBooks(restored)) return;
   if (restored.length && els.capabilityHint) {
-    els.capabilityHint.textContent =
-      "Pick the Library folder again to keep listening or reading. Your progress is still here.";
+    els.capabilityHint.textContent = libraryUsesDrive()
+      ? "用 Google 登入 again to keep listening or reading. Your progress is still here."
+      : "Pick the Library folder again to keep listening or reading. Your progress is still here.";
   }
 }
 

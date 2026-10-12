@@ -1,26 +1,70 @@
 # Library Listen
 
-Offline audiobook player for files that already live in a shared **iCloud Drive Library** folder. Local files only. No TTS. No upload of your books.
+Offline audiobook player for a shared **Library** folder. Open it from **Google Drive** (sign in, read-only) or pick a local / iCloud copy. No TTS. No upload of your books. No paid APIs.
 
 ## Web player (any device with a link)
 
 **Live:** https://bigdaddy109.github.io/library-listen/
 
-Share that URL. Each listener:
+Share that URL. Each listener (Jeff, Kerry, Daryl):
 
-1. Accepts your **iCloud** share of `Library` (or `門羅-WhatIf` / `Immune`).
-2. In **Files**, taps **Download Now** on `listen/` so chapters are on-device.
-3. Opens the link → **Choose Library folder** (desktop Chrome) or **Choose audio files** (iPhone Safari) → play.
+1. Accepts Jeff’s **Google Drive** share of the folder named `Library` (same `listen/` + `ebooks/` layout).
+2. Opens the link → **用 Google 登入** with *their own* Google account → the player finds `Library` in Drive / Shared with me (or they pick it).
+3. Plays from the shelf. Audio streams from Drive. An EPUB downloads when they open **Read**.
+
+Local fallback if Drive is not set up yet, or files are already on the device:
+
+1. Accept the **iCloud** share of `Library` (or `門羅-WhatIf` / `Immune`).
+2. In **Files**, tap **Download Now** on `listen/`.
+3. **Choose Library folder** (desktop Chrome) or **Choose audio files** (iPhone Safari).
 
 Progress and the shelf are stored in that browser. After the page or home-screen app restarts:
 
-- **Desktop Chrome/Edge** remembers the folder and reconnects on its own (or after one permission tap).
-- **iPhone/iPad** cannot keep folder access. If no book was saved on the device, the next open goes back to **Choose Library folder** (progress is kept). After picking a folder, the shelf offers **Save this book**; you can also tap **Save to this device** on a book page, or accept the prompt while listening.
+- **Google Drive:** sign-in can reconnect without re-downloading the folder. The OAuth token is kept in memory (and the service worker) only — not in `localStorage`.
+- **Desktop Chrome/Edge** can also remember a local folder and reconnect on its own (or after one permission tap).
+- **iPhone/iPad** cannot keep local folder access. If no book was saved on the device and Drive is not signed in, the next open goes back to the start screen (progress is kept). **Save to this device** still copies a book for offline play.
 - Shelf shows **Continue listening** for the last chapter with progress.
 - Player **Sleep** cycles 15 / 30 / 45 / 60 minutes, then pauses.
 - Chapter changes briefly show a **Next:** toast.
 
-Source: [`docs/`](docs/) (GitHub Pages from `/docs` on `main`).
+Source: [`docs/`](docs/) (GitHub Pages from `/docs` on `main`). Drive helpers live in [`docs/drive.js`](docs/drive.js) so a later `/shelf/` preview can call the same module.
+
+## Google Cloud setup (Drive + GIS)
+
+The Client ID is **public browser config**, not a secret. Keep the repo placeholder until you paste yours. Never commit a client secret (this app does not use one).
+
+Do this once in [Google Cloud Console](https://console.cloud.google.com/):
+
+1. Create or pick a project (e.g. `library-listen`).
+2. **APIs & Services → Library** — enable:
+   - **Google Drive API** (list + `alt=media` stream / download)
+   - **Google Picker API** (optional folder picker; needs the browser API key below)
+   - **Google Identity / GIS** is the OAuth consent + Identity Services script, not a separate paid API
+3. **APIs & Services → OAuth consent screen**
+   - User type: External (or Internal if everyone is on one Workspace)
+   - App name: `Library Listen`
+   - Scopes: only `https://www.googleapis.com/auth/drive.readonly`
+   - Test users while the app is in Testing: Jeff, Kerry, Daryl Google accounts
+4. **APIs & Services → Credentials → Create credentials → OAuth client ID**
+   - Application type: **Web application**
+   - Name: `library-listen-web`
+   - **Authorized JavaScript origins** (host only — no path, no trailing slash):
+     - `https://bigdaddy109.github.io`
+   - `/library-listen` is the player path on that origin, not a second origin. For local preview also add:
+     - `http://127.0.0.1:8080`
+     - `http://localhost:8080`
+   - Redirect URIs: not needed for the GIS token client (`initTokenClient`).
+5. Copy the **Client ID** only (`….apps.googleusercontent.com`). Paste it over the placeholder in [`docs/drive.js`](docs/drive.js):
+
+   ```js
+   export const GOOGLE_OAUTH_CLIENT_ID =
+     "YOUR_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com";
+   ```
+
+6. Optional — **Credentials → Create credentials → API key**, restrict it to HTTP referrers (`https://bigdaddy109.github.io/*`) and the Picker API. Paste it over `YOUR_GOOGLE_PICKER_API_KEY` in `docs/drive.js` so **Browse Google Drive** opens the official Picker. Without it, the player still lists folders named `Library` (My Drive + Shared with me).
+7. Jeff shares the Drive folder named `Library` with Kerry and Daryl (Viewer is enough). They sign in with their own accounts; the walker looks in Shared with me.
+
+After you paste a real Client ID, bump the PWA cache version once (see AGENTS.md) so phones pick up `drive.js`.
 
 ## Library folder layout
 
@@ -36,13 +80,17 @@ On the Mac (example Hub path):
     Immune-Part01.mp3 … Immune-Part09.mp3
 ```
 
-`ebooks/` and `_source/` are ignored.
+`_source/` and names starting with `_` are skipped. Sibling `ebooks/` folders pair an EPUB to the listen book (PDF is ignored).
 
-## How to share audio (iCloud)
+## How to share audio
+
+**Google Drive (default):** share the Drive folder named `Library` with the listener’s Google account (Viewer). They open the player and tap **用 Google 登入**.
+
+**iCloud (local fallback):**
 
 1. On Mac: share `Library` (or a single collection) via iCloud to the listener’s Apple ID.
 2. Listener: **Files → Shared** → open folder → **Download Now** on `listen/`.
-3. Open the web player link and pick that folder / those files.
+3. Open the web player link and **Choose Library folder** / those files.
 
 ## Native iOS app (optional)
 

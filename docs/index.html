@@ -16,9 +16,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Library Listen" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" href="./icon.svg?v=27" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=27" />
-    <link rel="stylesheet" href="./styles.css?v=27" />
+    <link rel="icon" href="./icon.svg?v=28" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=28" />
+    <link rel="stylesheet" href="./styles.css?v=28" />
     <title>Library Listen</title>
   </head>
   <body>
@@ -27,7 +27,7 @@
         <div class="brand">
           <img
             class="brand-mark"
-            src="./icon.svg?v=27"
+            src="./icon.svg?v=28"
             width="36"
             height="36"
             alt="Library Listen"
@@ -39,7 +39,7 @@
             Sort
           </button>
           <button type="button" id="btn-change" class="ghost hidden" title="Change library source">
-            Change folder
+            Change source
           </button>
         </div>
         <div id="shelf-tools" class="shelf-tools hidden">
@@ -72,23 +72,28 @@
         <section id="onboarding" class="panel onboarding">
           <h2>Listen from your shared Library</h2>
           <p>
-            Open the folder you already have in <strong>Files → iCloud Drive</strong>
-            (the shared <code>Library</code>, or a collection like
-            <code>門羅-WhatIf</code>). This page never uploads your books.
+            Jeff shares a Google Drive folder named <code>Library</code>
+            (same <code>listen/</code> + <code>ebooks/</code> layout).
+            Kerry and Daryl sign in with their own Google accounts — this page
+            only reads Drive, and never uploads your books.
           </p>
           <ol>
-            <li>In Files, open the shared <code>Library</code> and tap <strong>Download Now</strong> (cloud icon must be gone) on each <code>listen/</code>.</li>
-            <li>Tap <strong>Choose Library folder</strong> and pick that <code>Library</code> folder. If the shelf stays empty, the files are still cloud-only — download first, then try again.</li>
-            <li>Pick books on the shelf — progress stays on this device.</li>
+            <li>Tap <strong>用 Google 登入</strong>. If more than one <code>Library</code> folder appears, pick the shared one (or browse Drive).</li>
+            <li>Play from the shelf. Audio streams from Drive. An EPUB downloads when you open <strong>Read</strong>.</li>
+            <li>Local fallback: download the folder in Files, then <strong>Choose Library folder</strong>.</li>
           </ol>
-          <div class="cta-row">
-            <button type="button" id="btn-pick-main" class="primary large">
+          <div class="cta-row cta-stack">
+            <button type="button" id="btn-google" class="primary large">
+              用 Google 登入
+            </button>
+            <button type="button" id="btn-pick-main" class="ghost large">
               Choose Library folder
             </button>
             <button type="button" id="btn-pick-files" class="ghost large">
               Choose audio files
             </button>
           </div>
+          <p class="hint" id="drive-status"></p>
           <p class="hint" id="capability-hint"></p>
         </section>
 
@@ -215,6 +220,33 @@
     />
     <audio id="audio" preload="metadata" playsinline></audio>
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
-    <script type="module" src="./app.js?v=27"></script>
+    <div id="source-sheet" class="sheet hidden" hidden role="dialog" aria-modal="true" aria-labelledby="source-sheet-title">
+      <div class="sheet-card">
+        <h2 id="source-sheet-title">Library source</h2>
+        <p id="source-sheet-copy" class="hint">
+          Pick the shared <code>Library</code> folder, or use a local copy.
+        </p>
+        <ul id="source-sheet-list" class="source-list"></ul>
+        <div class="cta-row">
+          <button type="button" id="btn-sheet-picker" class="ghost hidden">
+            Browse Google Drive
+          </button>
+          <button type="button" id="btn-sheet-google" class="ghost hidden">
+            用 Google 登入
+          </button>
+          <button type="button" id="btn-sheet-local" class="ghost hidden">
+            Choose Library folder
+          </button>
+          <button type="button" id="btn-sheet-files" class="ghost hidden">
+            Choose audio files
+          </button>
+          <button type="button" id="btn-sheet-signout" class="ghost hidden">
+            Sign out of Google
+          </button>
+          <button type="button" id="btn-sheet-cancel" class="ghost">Cancel</button>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="./app.js?v=28"></script>
   </body>
 </html>

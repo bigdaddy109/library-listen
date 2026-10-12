@@ -164,7 +164,7 @@ function sourceFrom(input) {
   if (typeof ArrayBuffer !== "undefined" && input instanceof ArrayBuffer) {
     return sourceFrom(new Uint8Array(input));
   }
-  if (typeof Blob !== "undefined" && input instanceof Blob) {
+  if (input && Number.isFinite(input.size) && typeof input.slice === "function") {
     return {
       size: input.size,
       async read(offset, length) {
