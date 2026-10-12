@@ -6,59 +6,45 @@ Prioritized backlog from a full read of `main` @ `23df173` plus the checks in [A
 
 **Ralph method for this repo:** search before assuming missing · no stubs · one most-important thing at a time · commit only after the checks you can run have passed · PR only, never self-merge · no paid APIs or new paid services.
 
-Work **Now** first. Do not start item 2 until item 1 is merged and verified.
+Items 1–2 below shipped. Further web work is one small PR at a time. Do not merge [shelf preview #21](https://github.com/bigdaddy109/library-listen/pull/21) or reinvent Drive from leftover-backlog work.
 
 ---
 
-## Now — 1. First automated tests for scan + title + progress (web)
+## Done — 1. First automated tests for scan + title + progress (web)
 
-**Found:** There is no test runner, no CI, no `package.json`. The rules that matter for the live player live in [`docs/app.js`](docs/app.js): `buildLibrary`, `locateBookPath`, `titleFromFilename`, `saveProgress` / `chapterProgress` / `resumeSeconds`. Recent web regressions this repo already paid for: empty shelf mid-scan, resume snap-back, stale onboarding, single-slot progress wiping other chapters (fixed on web in PR #4).
-
-**Why this first:** Every later web item (m4b chapters, new collections, progress tweaks) will break silently without a fixture. The helpers are plain functions and can be tested with Node’s built-in runner. No new paid service.
-
-**Do**
-
-- Extract (or export) the pure helpers from `docs/app.js` so `node --test` can import them. Keep behavior identical.
-- Cover, with silent in-memory `File` stubs only:
-  - `listen/` layout: collection subfolders vs Immune-style files sitting in `listen/`
-  - skip `ebooks/`, `_source/`, `_…`, 0-byte / unreadable audio
-  - `titleFromFilename` (`Part 01`, stripped leading `01 - `)
-  - progress: per-chapter map kept when switching chapters; resume-at-end-of-chapter restarts at 0
-  - `locateBookPath` for `Library/…/listen/book/file`, `listen/` files, and a short collection pick
-- Add the commands to AGENTS.md once they exist.
-
-**Verify**
-
-```bash
-node --test
-node --check docs/app.js
-```
-
-Do not commit copyrighted audio. Do not add Jest/Vitest/CI-as-a-service. Do not add an XCTest target (native is paused).
-
-**Done when:** `node --test` fails if someone breaks Immune-as-one-book, Munroe-as-subfolders, or per-chapter progress.
+**Shipped:** [PR #12](https://github.com/bigdaddy109/library-listen/pull/12). Pure helpers live in [`docs/library.js`](docs/library.js); `node --test` covers Immune-as-one-book, Munroe-as-subfolders, skips, titles, and per-chapter progress.
 
 ---
 
-## 2. Make the PWA cache-bust mechanical
+## Done — 2. Make the PWA cache-bust mechanical
 
-**Found:** Shell cache is `library-listen-shell-v20`. The integer `20` is copied through `index.html` query strings, `app.js`’s `immune-cards.js?v=20` import, and every `ASSETS` entry in `sw.js`. One missed bump leaves phones on a stale shell (cache-first for JS/CSS). There is no check for this today; a static script during the 2026-10-11 health pass confirmed they currently match.
-
-**Do:** One constant or a tiny Node check that fails if the versions diverge. Optionally add a GitHub Actions workflow that only runs `node --check` + that assertion on PR (free for a public repo; do not add a paid CI product).
-
-**Verify:** Change one `?v=` and the check fails. Bump once and all three files agree.
+**Shipped:** [PR #13](https://github.com/bigdaddy109/library-listen/pull/13). `test/pwa-cache.test.mjs` fails if CACHE / `?v=` / ASSETS drift. No GitHub Actions — keep it local.
 
 ---
 
-## Later — web-player improvements (do not start while 1–2 are open)
+## Now — leftover small web items
 
-These are real and web-only. They are not the next PR.
+Ship these one PR at a time. Do not start a new homepage, `/shelf/`, Drive walker, PDF reader, or native work from this list.
 
-- **Shelf search on the web.** [`docs/app.js`](docs/app.js) can cycle sort (collection / title / author / recent) but has no query box. Title, author, collection, subtitle, folder, and chapter title are the fields the native shelf already searched — port that filter to the Pages player, at most two matching chapter names then `· +N`.
-- **Web does not read m4b chapter markers.** A chaptered m4b (What If 2 is this shape on the Hub) is one chapter in `buildLibrary`. If web gains markers, reuse the in-memory fixtures from item 1; do not copy Hub m4b files into git. Do not start this by reviving the native scanner.
-- **Aggressive save `confirm()`.** `maybeOfferSaveWhileListening` fires ~12s into a book. Useful on iPhone Safari, where folder permission does not survive a restart. Noisy on desktop, where the directory handle already persists. Gate it to “no directory handle / not offline.”
-- **Hardcoded known books only.** New folders get `humanize(folder)` titles. That’s OK. Adding a book means editing `KNOWN_BOOKS` / `KNOWN_COLLECTIONS` in [`docs/app.js`](docs/app.js). A later optional `folder.jpg` + filename is enough; do not add a metadata service. Do not also edit the paused Swift tables unless Jeff un-pauses native.
-- **Empty-library copy mentions `上學不容易`.** [`docs/app.js`](docs/app.js) `emptyLibraryMessage` lists that collection; it is not in `KNOWN_COLLECTIONS`. Either add it when that folder exists, or drop the name so the alert matches the two collections the player knows.
+- **Empty-library copy mentions `上學不容易`.** [`docs/app.js`](docs/app.js) `emptyLibraryMessage` lists that collection; it is not in `KNOWN_COLLECTIONS`. Either add it when that folder exists, or drop the name so the copy matches the two collections the player knows. Prefer an in-page status over a blocking `alert()`.
+
+---
+
+## Later — web-player improvements
+
+These shipped after 1–2 (do not re-do them):
+
+- **Shelf search on the web.** [PR #14](https://github.com/bigdaddy109/library-listen/pull/14) — [`docs/search.js`](docs/search.js).
+- **Web reads m4b chapter markers.** [PR #15](https://github.com/bigdaddy109/library-listen/pull/15) — [`docs/markers.js`](docs/markers.js). Silent fixtures only; do not copy Hub m4b files.
+- **Save `confirm()` gated.** [PR #16](https://github.com/bigdaddy109/library-listen/pull/16) — [`docs/save-prompt.js`](docs/save-prompt.js). Phones without a folder handle only.
+- **EPUB Read tab + pairing badges.** [PR #17](https://github.com/bigdaddy109/library-listen/pull/17)–[#20](https://github.com/bigdaddy109/library-listen/pull/20). PDF still later.
+- **Google Drive library source.** [PR #22](https://github.com/bigdaddy109/library-listen/pull/22)–[#23](https://github.com/bigdaddy109/library-listen/pull/23). Do not reinvent the walker or replace the OAuth client.
+
+Still later (optional):
+
+- **Hardcoded known books only.** New folders get `humanize(folder)` titles. That’s OK. Adding a book means editing `KNOWN_BOOKS` / `KNOWN_COLLECTIONS` in [`docs/library.js`](docs/library.js). A later optional `folder.jpg` + filename is enough; do not add a metadata service. Do not also edit the paused Swift tables unless Jeff un-pauses native.
+- **Rice-paper `/shelf/` preview.** Open as [PR #21](https://github.com/bigdaddy109/library-listen/pull/21). Leave it; do not merge from leftover-backlog work.
+- **PDF reader.** Jeff said later. EPUB MVP is live.
 
 ## Dropped while native is paused
 

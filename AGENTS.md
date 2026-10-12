@@ -1,6 +1,6 @@
 # Library Listen — agent notes
 
-Offline audiobook player for a shared `Library` folder. Google Drive (GIS + drive.readonly) is the web source; local-folder pick stays as fallback. No TTS. No upload of books. No paid external APIs. Client ID is a placeholder in [`docs/drive.js`](docs/drive.js) — see README for Google Cloud setup.
+Offline audiobook player for a shared `Library` folder. Google Drive (GIS + drive.readonly) is the web source; local-folder pick stays as fallback. No TTS. No upload of books. No paid external APIs. The Drive Client ID and Picker key in [`docs/drive.js`](docs/drive.js) are public browser config (not secrets) — see README for Google Cloud setup.
 
 Read this before changing code. Keep [README.md](README.md), [SHARE-library-listen.md](SHARE-library-listen.md), and [INSTALL-zh.md](INSTALL-zh.md) as the user-facing docs — do not replace them with this file.
 
@@ -13,7 +13,7 @@ Read this before changing code. Keep [README.md](README.md), [SHARE-library-list
 | **Web player (live)** | [`docs/`](docs/) | **Active.** GitHub Pages from `/docs` on `main`: https://bigdaddy109.github.io/library-listen/ |
 | **Native iOS/iPadOS app** | [`LibraryListen/`](LibraryListen/) + [`LibraryListen.xcodeproj`](LibraryListen.xcodeproj) | **Paused.** Sideload-via-Xcode code is still here. Do not treat it as a second product to maintain. |
 
-Recent merged PRs (#1–#9) are almost all web-player work. That is the deploy path.
+Recent merged PRs (#1–#23) are almost all web-player work. That is the deploy path. Open leftover: rice-paper `/shelf/` preview (#21) — do not merge it from overnight backlog work.
 
 ## Architecture
 
@@ -30,12 +30,12 @@ Library/
 - Audio: `mp3`, `m4a`, `m4b`, `aac`. Covers: `jpg`, `jpeg`, `png`, `webp`.
 - Files sitting directly in `listen/` are one book (Immune). Subfolders are books (Munroe).
 - Known titles/authors for the live player live in [`docs/library.js`](docs/library.js) (`KNOWN_COLLECTIONS` / `KNOWN_BOOKS`). The same names also exist in paused [`LibraryListen/HubPaths.swift`](LibraryListen/HubPaths.swift) — leave that file alone.
-- Google Drive: [`docs/drive.js`](docs/drive.js) walks a folder named `Library` (My Drive + Shared with me, or Google Picker) and feeds `{path, file}` entries into `buildLibrary`. Do not rewrite pairing rules there. `/shelf/` is not on `main` yet; import this module when it lands. Authorized JS origin is only `https://bigdaddy109.github.io` (no path). Local preview: `http://127.0.0.1:8080` and `http://localhost:8080`. Client ID stays a placeholder.
+- Google Drive: [`docs/drive.js`](docs/drive.js) walks a folder named `Library` (My Drive + Shared with me, or Google Picker) and feeds `{path, file}` entries into `buildLibrary`. Do not rewrite pairing rules there. `/shelf/` is still an open preview PR (#21), not on `main`. Authorized JS origin is only `https://bigdaddy109.github.io` (no path). Local preview: `http://127.0.0.1:8080` and `http://localhost:8080`. Client ID is pasted public browser config (not a secret).
 - Never commit real Hub audio or a real OAuth client secret.
 
 ### Web player (`docs/`)
 
-Vanilla ES modules. No bundler, no `package.json`, no framework.
+Vanilla ES modules. No bundler, no framework. Root `package.json` is only `"type": "module"` plus `node --test`.
 
 - [`docs/index.html`](docs/index.html) + [`docs/app.js`](docs/app.js) + [`docs/styles.css`](docs/styles.css) + [`docs/drive.js`](docs/drive.js)
 - [`docs/sw.js`](docs/sw.js) — shell-only service worker. **Audiobook bytes are never cached here.** Same-origin `/drive-media/<id>` is proxied to Drive `alt=media` with Range and is never written to the cache.
@@ -45,8 +45,8 @@ Vanilla ES modules. No bundler, no `package.json`, no framework.
 - Sort / rate: `librarylisten.shelfSort`, `librarylisten.rate`.
 - IndexedDB `library-listen`: `handles` (desktop File System Access directory handle) and `offline` (copied chapter/cover blobs).
 - Folder pick: **用 Google 登入** (GIS token, Drive API v3 `drive.readonly`) or `showDirectoryPicker` / `<input webkitdirectory>` as the local fallback. iPhone Safari cannot keep local folder permission across launches — Drive reconnect or **Save to this device** is the workaround.
-- Playback extras on the web player: sleep timer (15/30/45/60), −30/+30, next-chapter toast, save-to-device, Immune Concepts tab. No shelf search yet (see [fix_plan.md](fix_plan.md)).
-- A chaptered `m4b` is **one chapter** on the web (`buildLibrary` does not read markers).
+- Playback extras on the web player: sleep timer (15/30/45/60), −30/+30, next-chapter toast, save-to-device, Immune Concepts tab, shelf search (`docs/search.js`), EPUB Read tab, m4b chapter markers (`docs/markers.js`). The mid-listen save `confirm()` is gated to phones without a persisted folder handle.
+- A chaptered `m4b` is split with in-file markers when present (`applyAudiobookMarkers`). Unmarked files stay one chapter.
 
 ### Native app (`LibraryListen/`) — paused
 
@@ -73,37 +73,38 @@ python3 -m http.server 8080 --directory docs
 ```
 
 ```bash
-# syntax only — there is no test runner
 node --check docs/app.js
 node --check docs/drive.js
 node --check docs/immune-cards.js
 node --check docs/sw.js
+node --test
 ```
 
 ### Native — paused
 
 Do not run `./start.sh`, `scripts/generate-fixtures.sh`, or `xcodebuild` for current work. Those exist only for the shelved iOS app. Sideload details stay in [INSTALL-zh.md](INSTALL-zh.md) if native is ever un-paused.
 
-## Tests (as of 2026-10-11)
+## Tests (as of 2026-10-12)
 
-There is **no test target, no `package.json`, no CI workflow, no `tests/` directory.**
+Local `node --test` covers scan/title/progress (`test/library.test.js`), PWA cache lockstep (`test/pwa-cache.test.mjs`), shelf search, m4b markers, save-prompt gating, Drive helpers, and EPUB parse. There is **no** GitHub Actions workflow and **no** paid CI. Do not add either.
 
-Recorded on a Linux agent against `main` @ `23df173`:
+Recorded on a Linux agent against `main` @ `b0e0b6c` (after Drive OAuth #23):
 
 | Check | Result |
 | --- | --- |
-| GitHub Pages live site | **Pass** — https://bigdaddy109.github.io/library-listen/ serves the onboarding + player chrome (v20 features: Sleep, 1.0×). Pages status `built`, source `main` `/docs`. |
-| `node --check` on `docs/{app,immune-cards,sw}.js` | **Pass** |
+| GitHub Pages live site | **Pass** — https://bigdaddy109.github.io/library-listen/ serves Drive onboarding + player chrome (`library-listen-shell-v29`). Pages source `main` `/docs`. |
+| `node --check` on `docs/{app,drive,immune-cards,sw}.js` | **Pass** |
+| `node --test` | **Pass** |
 | `docs/manifest.webmanifest` JSON | **Pass** |
-| Service-worker asset list vs files on disk | **Pass** (cache name `library-listen-shell-v20`, query `?v=20` consistent in html/js/sw) |
+| Service-worker asset list vs files on disk | **Pass** (CACHE / `?v=` / ASSETS kept in lockstep by `test/pwa-cache.test.mjs`) |
 | Immune concept image files vs `immune-cards.js` | **Pass** |
 | `xcodebuild` / XCTest / `.github/workflows` | **Absent.** Native is paused; do not add a Swift test target or a paid device farm. |
 
-Do not invent a paid CI service. If you add tests, keep them local (`node --test` for extracted JS helpers).
+Do not invent a paid CI service. Keep tests local (`node --test` for extracted JS helpers).
 
 ## Cache-bust (web)
 
-The PWA cache version is a hand-maintained integer. Today it is **28**. When you change `docs/index.html`, `docs/app.js`, `docs/styles.css`, `docs/drive.js`, `docs/immune-cards.js`, icons, or concept images, bump **all** of:
+The PWA cache version is a hand-maintained integer. Today it is **29**. When you change `docs/index.html`, `docs/app.js`, `docs/styles.css`, `docs/drive.js`, `docs/immune-cards.js`, icons, or concept images, bump **all** of:
 
 1. `?v=N` on every asset link in [`docs/index.html`](docs/index.html)
 2. `import … from "./….js?v=N"` in [`docs/app.js`](docs/app.js) (including `drive.js`)
@@ -113,7 +114,7 @@ Miss one and phones keep a stale shell. HTML navigations are network-first; othe
 
 ## Pitfalls
 
-- **iPhone Safari cannot persist a folder.** Desktop Chrome/Edge can, via IndexedDB directory handles. On iOS Safari, progress survives but playable `File` objects do not. Save-to-device (IndexedDB blobs) is the workaround. `confirm()` save prompts fire ~12s into playback — don’t add more blocking dialogs without a reason.
+- **iPhone Safari cannot persist a folder.** Desktop Chrome/Edge can, via IndexedDB directory handles. On iOS Safari, progress survives but playable `File` objects do not. Save-to-device (IndexedDB blobs) is the workaround. The mid-listen `confirm()` is already gated (PR #16) — don’t add more blocking dialogs without a reason.
 - **iCloud placeholders look like empty files.** The web walker skips 0-byte audio and unreadable handles instead of failing the whole scan. “Empty shelf” almost always means Download Now was not done.
 - **Resume is fragile on iOS Safari.** `playChapter` must not `await` before `audio.play()` or the user-gesture is dropped. There is a resume-guard against post-play snap-back. Touch it with a real iPhone, not only desktop.
 - **Native is paused.** Do not “fix” `HubPaths` personal paths, `ProgressStore`, `generate-fixtures.sh` / `AppIcon.png`, or Xcode signing as part of web work. Those stay dropped in [fix_plan.md](fix_plan.md).
