@@ -120,18 +120,20 @@ function mockDriveFetch(tree) {
   };
 }
 
-describe("Google Drive config placeholders", () => {
-  it("keeps the OAuth client id as a named placeholder, not a real secret", () => {
-    assert.match(GOOGLE_OAUTH_CLIENT_ID, /YOUR_GOOGLE_OAUTH_CLIENT_ID/);
+describe("Google Drive public client config", () => {
+  it("ships the public Web Client ID so GIS can open without a paste alert", () => {
+    assert.equal(
+      GOOGLE_OAUTH_CLIENT_ID,
+      "827714015808-hp9o0gl26mbcs8mmipjfu2dtuvv9vdo3.apps.googleusercontent.com"
+    );
     assert.match(GOOGLE_OAUTH_CLIENT_ID, /\.apps\.googleusercontent\.com$/);
-    assert.equal(isPlaceholderClientId(GOOGLE_OAUTH_CLIENT_ID), true);
-    assert.equal(isGoogleClientConfigured(), false);
-    assert.doesNotMatch(GOOGLE_OAUTH_CLIENT_ID, /^\d{12}-/);
+    assert.equal(isPlaceholderClientId(GOOGLE_OAUTH_CLIENT_ID), false);
+    assert.equal(isGoogleClientConfigured(), true);
   });
 
-  it("keeps the Picker API key as a named placeholder", () => {
-    assert.match(GOOGLE_PICKER_API_KEY, /YOUR_GOOGLE_PICKER_API_KEY/);
-    assert.equal(isPickerConfigured(), false);
+  it("ships the referrer-restricted Picker API key", () => {
+    assert.equal(GOOGLE_PICKER_API_KEY, "AIzaSyBaeZWLYArw6iH-5-ietM3AyI8MNLOYui4");
+    assert.equal(isPickerConfigured(), true);
   });
 
   it("requests drive.readonly only", () => {

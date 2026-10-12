@@ -1,5 +1,5 @@
 /* Shell-only cache. Audiobook files are never cached here. */
-const CACHE = "library-listen-shell-v28";
+const CACHE = "library-listen-shell-v29";
 const DRIVE_MEDIA_PREFIX = "/drive-media/";
 const DRIVE_TOKEN_MESSAGE = "librarylisten.drive-token";
 const DRIVE_UNAUTHORIZED_MESSAGE = "librarylisten.drive-unauthorized";
@@ -15,18 +15,18 @@ self.addEventListener("message", (event) => {
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=28",
-  "./app.js?v=28",
-  "./library.js?v=28",
-  "./drive.js?v=28",
-  "./search.js?v=28",
-  "./markers.js?v=28",
-  "./save-prompt.js?v=28",
-  "./epub.js?v=28",
-  "./immune-cards.js?v=28",
+  "./styles.css?v=29",
+  "./app.js?v=29",
+  "./library.js?v=29",
+  "./drive.js?v=29",
+  "./search.js?v=29",
+  "./markers.js?v=29",
+  "./save-prompt.js?v=29",
+  "./epub.js?v=29",
+  "./immune-cards.js?v=29",
   "./manifest.webmanifest",
-  "./icon.svg?v=28",
-  "./apple-touch-icon.png?v=28",
+  "./icon.svg?v=29",
+  "./apple-touch-icon.png?v=29",
   "./concepts/immune/skin.jpg",
   "./concepts/immune/bacteria.jpg",
   "./concepts/immune/inflammation.jpg",
