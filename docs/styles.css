@@ -934,3 +934,8 @@ button.skip {
 #drive-status:empty {
   display: none;
 }
+
+#drive-status.drive-error {
+  color: var(--amber);
+  white-space: pre-wrap;
+}

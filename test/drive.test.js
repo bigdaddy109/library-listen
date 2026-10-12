@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import { buildLibrary, shelfBadge } from "../docs/library.js";
+import { parseEpub } from "../docs/epub.js";
 import {
   GOOGLE_OAUTH_CLIENT_ID,
   GOOGLE_PICKER_API_KEY,
+  DRIVE_ERROR_KIND,
+  DRIVE_ERROR_MESSAGES,
   DRIVE_FOLDER_MIME,
   DRIVE_READONLY_SCOPE,
   DRIVE_SESSION_KEY,
@@ -11,16 +17,21 @@ import {
   attachDriveMedia,
   childrenQuery,
   chooseSoleLibraryFolder,
+  classifyDriveError,
   clearDriveSession,
+  downloadDriveBuffer,
   driveAltMediaUrl,
   driveFileIdFromPath,
   driveFilesToEntries,
   driveListUrl,
   driveMediaPath,
+  driveMediaProxyOutHeaders,
   driveProxyHeaders,
   findLibraryFolders,
+  gisAuthFailure,
   isDriveFile,
   isDriveMediaPath,
+  isGisCoopWindowClosedWarning,
   isGoogleClientConfigured,
   isPickerConfigured,
   isPlaceholderClientId,
@@ -30,12 +41,16 @@ import {
   loadDriveSession,
   makeDriveFile,
   mimeForDriveName,
+  planDriveMediaProxy,
+  proxyDriveMediaRequest,
   rankLibraryFolders,
   resolveDriveItem,
   saveDriveSession,
   setAccessToken,
   setDriveRangeFetch,
+  shouldNotifyDriveUnauthorized,
   shouldSkipDriveName,
+  tokenClientOptions,
   uniqueDriveFolders,
   walkDriveFolder,
   walkPrefixForFolder,
@@ -116,6 +131,7 @@ function mockDriveFetch(tree) {
       ok: true,
       status: 200,
       json: async () => ({ files }),
+      text: async () => JSON.stringify({ files }),
     };
   };
 }
@@ -361,5 +377,311 @@ describe("Drive file adapter and session", () => {
     clearDriveSession(store);
     assert.equal(loadDriveSession(store), null);
     setAccessToken(null);
+  });
+});
+
+const COOP_WINDOW_CLOSED =
+  "Cross-Origin-Opener-Policy policy would block the window.closed call.";
+
+function putU16(view, offset, value) {
+  view.setUint16(offset, value, true);
+}
+
+function putU32(view, offset, value) {
+  view.setUint32(offset, value, true);
+}
+
+function crc32(data) {
+  let crc = 0xffffffff;
+  for (const byte of data) {
+    crc ^= byte;
+    for (let i = 0; i < 8; i += 1) {
+      crc = crc & 1 ? (crc >>> 1) ^ 0xedb88320 : crc >>> 1;
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function storeZip(entries) {
+  const locals = [];
+  const centrals = [];
+  let offset = 0;
+  for (const { name, data } of entries) {
+    const raw = typeof data === "string" ? new TextEncoder().encode(data) : data;
+    const nameBytes = new TextEncoder().encode(name);
+    const crc = crc32(raw);
+    const local = new Uint8Array(30 + nameBytes.length + raw.length);
+    const lv = new DataView(local.buffer);
+    putU32(lv, 0, 0x04034b50);
+    putU16(lv, 4, 20);
+    putU32(lv, 14, crc);
+    putU32(lv, 18, raw.length);
+    putU32(lv, 22, raw.length);
+    putU16(lv, 26, nameBytes.length);
+    local.set(nameBytes, 30);
+    local.set(raw, 30 + nameBytes.length);
+    const central = new Uint8Array(46 + nameBytes.length);
+    const cv = new DataView(central.buffer);
+    putU32(cv, 0, 0x02014b50);
+    putU16(cv, 4, 20);
+    putU16(cv, 6, 20);
+    putU32(cv, 16, crc);
+    putU32(cv, 20, raw.length);
+    putU32(cv, 24, raw.length);
+    putU16(cv, 28, nameBytes.length);
+    putU32(cv, 42, offset);
+    central.set(nameBytes, 46);
+    locals.push(local);
+    centrals.push(central);
+    offset += local.length;
+  }
+  const cdSize = centrals.reduce((n, c) => n + c.length, 0);
+  const eocd = new Uint8Array(22);
+  const ev = new DataView(eocd.buffer);
+  putU32(ev, 0, 0x06054b50);
+  putU16(ev, 8, entries.length);
+  putU16(ev, 10, entries.length);
+  putU32(ev, 12, cdSize);
+  putU32(ev, 16, offset);
+  const out = new Uint8Array(offset + cdSize + 22);
+  let pos = 0;
+  for (const part of locals) {
+    out.set(part, pos);
+    pos += part.length;
+  }
+  for (const part of centrals) {
+    out.set(part, pos);
+    pos += part.length;
+  }
+  out.set(eocd, pos);
+  return out.buffer;
+}
+
+function fixtureEpub() {
+  return storeZip([
+    { name: "mimetype", data: "application/epub+zip" },
+    {
+      name: "META-INF/container.xml",
+      data: `<?xml version="1.0"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>`,
+    },
+    {
+      name: "OEBPS/content.opf",
+      data: `<?xml version="1.0"?>
+<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="id" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Immune</dc:title>
+    <dc:identifier id="id">immune</dc:identifier>
+  </metadata>
+  <manifest>
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="ch1" href="ch1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="ch1"/>
+  </spine>
+</package>`,
+    },
+    {
+      name: "OEBPS/nav.xhtml",
+      data: `<html xmlns="http://www.w3.org/1999/xhtml"><body>
+        <nav epub:type="toc"><ol><li><a href="ch1.xhtml">Opening</a></li></ol></nav>
+      </body></html>`,
+    },
+    {
+      name: "OEBPS/ch1.xhtml",
+      data: `<html xmlns="http://www.w3.org/1999/xhtml"><body><h1>Opening</h1><p>Drive EPUB.</p></body></html>`,
+    },
+  ]);
+}
+
+describe("Drive user-visible errors", () => {
+  it("treats GIS COOP window.closed as harmless and does not fail sign-in", () => {
+    assert.equal(isGisCoopWindowClosedWarning(COOP_WINDOW_CLOSED), true);
+    assert.equal(classifyDriveError({ message: COOP_WINDOW_CLOSED }).kind, DRIVE_ERROR_KIND.coop);
+    assert.equal(gisAuthFailure({ message: COOP_WINDOW_CLOSED }), null);
+    const opts = tokenClientOptions(() => {}, () => {});
+    assert.equal("ux_mode" in opts, false);
+    assert.equal(opts.scope, DRIVE_READONLY_SCOPE);
+  });
+
+  it("explains Testing-mode test-user denial, missing Library, and expired tokens", () => {
+    const testUser = classifyDriveError({
+      error: "access_denied",
+      error_description: "Access denied: this app is currently being tested and can only be accessed by approved testers.",
+    });
+    assert.equal(testUser.kind, DRIVE_ERROR_KIND.testUser);
+    assert.match(testUser.message, /test user/);
+    assert.match(testUser.message, /Testing mode/);
+
+    const denied = classifyDriveError({ error: "access_denied" });
+    assert.equal(denied.kind, DRIVE_ERROR_KIND.accessDenied);
+    assert.match(denied.message, /Choose Library folder/);
+
+    const missing = classifyDriveError({ name: "DriveLibraryMissing" });
+    assert.equal(missing.kind, DRIVE_ERROR_KIND.noLibrary);
+    assert.equal(missing.message, DRIVE_ERROR_MESSAGES.noLibrary);
+
+    const expired = classifyDriveError({ status: 401, name: "DriveAuthError" });
+    assert.equal(expired.kind, DRIVE_ERROR_KIND.expired);
+    assert.match(expired.message, /expired/);
+    assert.match(expired.message, /用 Google 登入/);
+
+    const closed = classifyDriveError({ type: "popup_closed" });
+    assert.equal(closed.kind, DRIVE_ERROR_KIND.abort);
+    assert.equal(closed.silent, true);
+  });
+
+  it("surfaces no Library and expired Drive HTTP as thrown errors the player can show", async () => {
+    await assert.rejects(
+      () => loadDriveEntries({ token: "tok", fetchImpl: mockDriveFetch([]) }),
+      (err) => {
+        assert.equal(err.name, "DriveLibraryMissing");
+        assert.equal(err.kind, DRIVE_ERROR_KIND.noLibrary);
+        assert.match(err.message, /Library/);
+        return true;
+      }
+    );
+
+    const unauthorized = async () => ({
+      ok: false,
+      status: 401,
+      statusText: "Unauthorized",
+      text: async () => JSON.stringify({ error: { message: "Invalid Credentials" } }),
+    });
+    await assert.rejects(() => findLibraryFolders("tok", unauthorized), (err) => {
+      assert.equal(err.name, "DriveAuthError");
+      assert.equal(err.kind, DRIVE_ERROR_KIND.expired);
+      assert.equal(err.message, DRIVE_ERROR_MESSAGES.expired);
+      return true;
+    });
+
+    const forbidden = async () => ({
+      ok: false,
+      status: 403,
+      statusText: "Forbidden",
+      text: async () =>
+        JSON.stringify({
+          error: { code: 403, message: "The user does not have sufficient permissions for this file." },
+        }),
+    });
+    await assert.rejects(() => findLibraryFolders("tok", forbidden), (err) => {
+      assert.equal(err.kind, DRIVE_ERROR_KIND.noLibrary);
+      assert.match(err.message, /share Library/);
+      return true;
+    });
+
+    await assert.rejects(
+      () => downloadDriveBuffer("p1", "tok", unauthorized),
+      (err) => {
+        assert.equal(err.kind, DRIVE_ERROR_KIND.expired);
+        return true;
+      }
+    );
+  });
+});
+
+describe("Drive audio proxy and EPUB reader", () => {
+  it("forwards Range to Drive alt=media and never caches the bytes", async () => {
+    const plan = planDriveMediaProxy({ fileId: "p1", range: "bytes=0-1023", token: "tok" });
+    assert.equal(plan.ok, true);
+    assert.match(plan.dest, /files\/p1\?alt=media/);
+    assert.equal(plan.headers.Authorization, "Bearer tok");
+    assert.equal(plan.headers.Range, "bytes=0-1023");
+    assert.deepEqual(
+      driveMediaProxyOutHeaders({
+        get: (name) =>
+          ({
+            "content-type": "audio/mpeg",
+            "content-range": "bytes 0-1023/5000",
+            "content-length": "1024",
+            "accept-ranges": "bytes",
+          })[name],
+      }),
+      {
+        "Cache-Control": "no-store",
+        "Content-Type": "audio/mpeg",
+        "Content-Length": "1024",
+        "Content-Range": "bytes 0-1023/5000",
+        "Accept-Ranges": "bytes",
+      }
+    );
+    assert.equal(shouldNotifyDriveUnauthorized(401), true);
+    assert.equal(planDriveMediaProxy({ fileId: "p1", token: "" }).status, 401);
+
+    let seen = null;
+    const proxied = await proxyDriveMediaRequest(
+      { fileId: "p1", range: "bytes=200-399", token: "tok" },
+      async (url, init) => {
+        seen = { url, init };
+        return {
+          ok: false,
+          status: 206,
+          statusText: "Partial Content",
+          headers: {
+            get: (name) => (name === "content-range" ? "bytes 200-399/9000" : null),
+          },
+          arrayBuffer: async () => new Uint8Array([9, 8]).buffer,
+        };
+      }
+    );
+    assert.match(seen.url, /alt=media/);
+    assert.equal(seen.init.headers.Range, "bytes=200-399");
+    assert.equal(proxied.status, 206);
+    assert.equal(proxied.headers["Cache-Control"], "no-store");
+    assert.equal(proxied.headers["Content-Range"], "bytes 200-399/9000");
+    assert.equal(proxied.notifyUnauthorized, false);
+
+    const expired = await proxyDriveMediaRequest(
+      { fileId: "p1", range: "bytes=0-1", token: "tok" },
+      async () => ({ ok: false, status: 401, headers: { get: () => null }, arrayBuffer: async () => new ArrayBuffer(0) })
+    );
+    assert.equal(expired.status, 401);
+    assert.equal(expired.notifyUnauthorized, true);
+  });
+
+  it("keeps the service worker Range proxy in lockstep with the tested helper", () => {
+    const sw = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../docs/sw.js"), "utf8");
+    assert.match(sw, /request\.headers\.get\("Range"\)/);
+    assert.match(sw, /Cache-Control", "no-store"/);
+    assert.match(sw, /DRIVE_UNAUTHORIZED_MESSAGE/);
+    assert.match(sw, /res\.status === 401/);
+    assert.match(sw, /alt=media/);
+    assert.match(sw, /library-listen-shell-v31/);
+  });
+
+  it("opens a Drive EPUB buffer with the existing reader", async () => {
+    const buf = fixtureEpub();
+    const file = makeDriveFile({
+      id: "ie",
+      name: "Immune.epub",
+      size: buf.byteLength,
+      mimeType: "application/epub+zip",
+    });
+    setDriveRangeFetch(async (id, start, end) => {
+      assert.equal(id, "ie");
+      assert.equal(start, 0);
+      assert.equal(end, buf.byteLength);
+      return buf;
+    });
+    const pub = await parseEpub(await file.arrayBuffer());
+    setDriveRangeFetch(null);
+    assert.equal(pub.title, "Immune");
+    assert.equal(pub.spine.length, 1);
+    assert.equal(pub.spine[0].title, "Opening");
+    assert.match(new TextDecoder().decode(pub.read("OEBPS/ch1.xhtml")), /Drive EPUB/);
+  });
+
+  it("keeps local folder pick on the homepage", () => {
+    const html = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../docs/index.html"), "utf8");
+    assert.match(html, /id="btn-google"/);
+    assert.match(html, /id="btn-pick-main"/);
+    assert.match(html, /Choose Library folder/);
+    assert.match(html, /id="btn-pick-files"/);
+    assert.match(html, /id="drive-status"/);
   });
 });
