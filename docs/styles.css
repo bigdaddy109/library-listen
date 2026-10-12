@@ -998,9 +998,22 @@ button.skip {
   display: none;
 }
 
+.source-advanced summary::after {
+  content: "";
+  display: inline-block;
+  margin-left: 0.35rem;
+  border: 0.28rem solid transparent;
+  border-top-color: currentColor;
+  transform: translateY(0.12rem);
+}
+
 .source-advanced[open] summary {
   margin-bottom: 0.55rem;
   color: var(--ink);
+}
+
+.source-advanced[open] summary::after {
+  transform: translateY(-0.06rem) rotate(180deg);
 }
 
 #drive-status:empty {
