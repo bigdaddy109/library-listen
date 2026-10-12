@@ -1,4 +1,4 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=33";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=34";
 import {
   AUDIO_EXT,
   EBOOK_OFFLINE_KEY,
@@ -18,7 +18,7 @@ import {
   saveTextProgress,
   shelfBadge,
   textProgress,
-} from "./library.js?v=33";
+} from "./library.js?v=34";
 import {
   DRIVE_UNAUTHORIZED_MESSAGE,
   attachDriveMedia,
@@ -32,7 +32,6 @@ import {
   isDriveMediaPath,
   isGoogleClientConfigured,
   isPickerConfigured,
-  libraryFolderLabel,
   loadDriveEntries,
   loadDriveSession,
   openGooglePicker,
@@ -42,7 +41,8 @@ import {
   saveDriveSession,
   signInWithGoogle,
   signOutGoogle,
-} from "./drive.js?v=33";
+  sourceDialogActions,
+} from "./drive.js?v=34";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -50,7 +50,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=33";
+} from "./search.js?v=34";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -65,8 +65,8 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=33";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=33";
+} from "./markers.js?v=34";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=34";
 import {
   applyScrollFraction,
   mimeForPath,
@@ -78,7 +78,7 @@ import {
   spineIndexFromCfi,
   spineLabel,
   zipPath,
-} from "./epub.js?v=33";
+} from "./epub.js?v=34";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -116,10 +116,13 @@ const els = {
   sourceSheetList: document.getElementById("source-sheet-list"),
   btnSheetPicker: document.getElementById("btn-sheet-picker"),
   btnSheetGoogle: document.getElementById("btn-sheet-google"),
+  btnSheetReload: document.getElementById("btn-sheet-reload"),
   btnSheetLocal: document.getElementById("btn-sheet-local"),
+  btnSheetLocalLink: document.getElementById("btn-sheet-local-link"),
   btnSheetFiles: document.getElementById("btn-sheet-files"),
   btnSheetSignout: document.getElementById("btn-sheet-signout"),
   btnSheetCancel: document.getElementById("btn-sheet-cancel"),
+  sourceSheetAdvanced: document.getElementById("source-sheet-advanced"),
   shelfTools: document.getElementById("shelf-tools"),
   shelfQuery: document.getElementById("shelf-query"),
   clearSearch: document.getElementById("btn-clear-search"),
@@ -718,6 +721,11 @@ function firstSheetControl() {
   const nodes = root.querySelectorAll("button");
   for (const node of nodes) {
     if (node.hidden || node.classList.contains("hidden") || node.disabled) continue;
+    const details = node.closest("details");
+    if (details && !details.open) {
+      const summary = details.querySelector("summary");
+      if (!summary?.contains(node)) continue;
+    }
     return node;
   }
   return els.btnSheetCancel;
@@ -741,12 +749,29 @@ function closeSourceSheet(folder = null, { restoreFocus = true } = {}) {
   resolve?.(folder);
 }
 
-function setSheetActions({ google, local, files, picker, signout } = {}) {
+function setSheetActions({
+  google,
+  local,
+  files,
+  picker,
+  signout,
+  reload,
+  localLink,
+  advanced,
+} = {}) {
   els.btnSheetGoogle?.classList.toggle("hidden", !google);
+  els.btnSheetReload?.classList.toggle("hidden", !reload);
   els.btnSheetLocal?.classList.toggle("hidden", !local);
+  els.btnSheetLocalLink?.classList.toggle("hidden", !localLink);
   els.btnSheetFiles?.classList.toggle("hidden", !files);
   els.btnSheetPicker?.classList.toggle("hidden", !picker);
   els.btnSheetSignout?.classList.toggle("hidden", !signout);
+  const showAdvanced = !!advanced && (!!local || !!files);
+  if (els.sourceSheetAdvanced) {
+    els.sourceSheetAdvanced.classList.toggle("hidden", !showAdvanced);
+    els.sourceSheetAdvanced.hidden = !showAdvanced;
+    els.sourceSheetAdvanced.open = false;
+  }
 }
 
 function openSourceSheet({ title, copy, folders = [], actions = {} } = {}) {
@@ -774,20 +799,6 @@ function openSourceSheet({ title, copy, folders = [], actions = {} } = {}) {
   queueMicrotask(() => firstSheetControl()?.focus());
   return new Promise((resolve) => {
     folderSheetResolve = resolve;
-  });
-}
-
-function chooseDriveFolderUi(candidates) {
-  return openSourceSheet({
-    title: "Choose a Library folder",
-    copy: "Jeff shares Library. Pick the one shared with this Google account, or browse Drive.",
-    folders: (candidates || []).map((folder) => ({
-      ...folder,
-      label: libraryFolderLabel(folder),
-    })),
-    actions: {
-      picker: isPickerConfigured(),
-    },
   });
 }
 
@@ -825,30 +836,18 @@ async function loadFromDrive({ silent } = {}) {
   }
   await publishDriveToken(token);
   const session = loadDriveSession();
-  let walked;
-  try {
-    walked = await loadDriveEntries({
-      token,
-      folderId: session?.folderId,
-      folderName: session?.folderName,
-      chooseFolder: silent || session?.folderId ? undefined : chooseDriveFolderUi,
-    });
-  } catch (err) {
-    if (silent || err?.name === "AbortError") throw err;
-    if (err?.name === "DriveLibraryMissing" && isPickerConfigured()) {
-      const picked = await openGooglePicker(token);
-      if (!picked) {
-        throw Object.assign(new Error("Cancelled"), { name: "AbortError" });
-      }
-      walked = await loadDriveEntries({
-        token,
-        folderId: picked.id,
-        folderName: picked.name,
-      });
-    } else {
-      throw err;
-    }
-  }
+  const walked = await loadDriveEntries({
+    token,
+    folderId: session?.folderId,
+    folderName: session?.folderName,
+    pickWithPicker:
+      silent || session?.folderId
+        ? undefined
+        : async () => {
+            if (!isPickerConfigured()) return null;
+            return openGooglePicker(token);
+          },
+  });
   const books = await booksFromEntries(walked.entries);
   await hydrateDriveCovers(books, token);
   const email = (await fetchDriveUser(token)) || session?.email || "";
@@ -2106,12 +2105,13 @@ function setupCapabilityHint() {
   const pickMain = document.getElementById("btn-pick-main");
   const pickFilesBtn = document.getElementById("btn-pick-files");
   pickMain?.classList.remove("hidden");
-  pickFilesBtn?.classList.remove("primary");
-  pickFilesBtn?.classList.add("ghost");
+  pickMain?.classList.add("text-link");
+  pickFilesBtn?.classList.add("hidden");
+  if (pickFilesBtn) pickFilesBtn.hidden = true;
 
   if (isGoogleClientConfigured()) {
     els.capabilityHint.textContent =
-      "用 Google 登入 reads the shared Drive Library (drive.readonly). Choose Library folder remains a local backup.";
+      "用 Google 登入 loads the shared Drive Library. Use a local folder instead if you already have a copy.";
   } else if (typeof window.showDirectoryPicker === "function") {
     els.capabilityHint.textContent =
       "Choose Library folder, then pick Library or a collection (門羅-WhatIf / Immune). On iPhone/iPad, pick the folder in Files after Download Now.";
@@ -2153,18 +2153,15 @@ function updateChangeButtonLabel() {
 
 function showChangeSourceSheet() {
   const session = loadDriveSession();
+  const signedIn = !!(session || getAccessToken());
   openSourceSheet({
     title: "Library source",
     copy: session?.email
-      ? `Signed in as ${session.email}. Reload Drive, pick a local folder, or sign out.`
-      : "Google Drive is the shared Library. A local folder is the fallback.",
-    actions: {
-      google: true,
-      local: true,
-      files: true,
-      picker: isPickerConfigured(),
-      signout: !!session,
-    },
+      ? `Signed in as ${session.email}. Reload the Drive library or sign out.`
+      : signedIn
+        ? "Signed in to Google. Reload the Drive library or sign out."
+        : "Sign in with Google to load the shared Library folder, or use a local folder.",
+    actions: sourceDialogActions({ signedIn }),
   }).then((folder) => {
     if (!folder?.id) return;
     saveDriveSession({
@@ -2225,6 +2222,14 @@ function bind() {
   els.btnSheetGoogle?.addEventListener("click", () => {
     closeSourceSheet(null);
     loadLibrary("drive");
+  });
+  els.btnSheetReload?.addEventListener("click", () => {
+    closeSourceSheet(null);
+    loadLibrary("drive");
+  });
+  els.btnSheetLocalLink?.addEventListener("click", () => {
+    closeSourceSheet(null);
+    loadLibrary("directory");
   });
   els.btnSheetLocal?.addEventListener("click", () => {
     closeSourceSheet(null);

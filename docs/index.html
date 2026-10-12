@@ -16,9 +16,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Library Listen" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" href="./icon.svg?v=33" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=33" />
-    <link rel="stylesheet" href="./styles.css?v=33" />
+    <link rel="icon" href="./icon.svg?v=34" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=34" />
+    <link rel="stylesheet" href="./styles.css?v=34" />
     <title>Library Listen</title>
   </head>
   <body>
@@ -27,7 +27,7 @@
         <div class="brand">
           <img
             class="brand-mark"
-            src="./icon.svg?v=33"
+            src="./icon.svg?v=34"
             width="36"
             height="36"
             alt="Library Listen"
@@ -78,18 +78,18 @@
             only reads Drive, and never uploads your books.
           </p>
           <ol>
-            <li>Tap <strong>用 Google 登入</strong>. If more than one <code>Library</code> folder appears, pick the shared one (or browse Drive).</li>
+            <li>Tap <strong>用 Google 登入</strong>. The player loads the Drive folder named <code>Library</code> (including Shared with me).</li>
             <li>Play from the shelf. Audio streams from Drive. An EPUB downloads when you open <strong>Read</strong>.</li>
-            <li>Local fallback: download the folder in Files, then <strong>Choose Library folder</strong>.</li>
+            <li>Local fallback: tap <strong>Use a local folder instead</strong> (download in Files first on iPhone).</li>
           </ol>
           <div class="cta-row cta-stack">
-            <button type="button" id="btn-google" class="primary large">
+            <button type="button" id="btn-google" class="primary large" title="Sign in with Google">
               用 Google 登入
             </button>
-            <button type="button" id="btn-pick-main" class="ghost large">
-              Choose Library folder
+            <button type="button" id="btn-pick-main" class="text-link">
+              Use a local folder instead
             </button>
-            <button type="button" id="btn-pick-files" class="ghost large">
+            <button type="button" id="btn-pick-files" class="ghost hidden" hidden>
               Choose audio files
             </button>
           </div>
@@ -231,29 +231,40 @@
       <div class="sheet-card">
         <h2 id="source-sheet-title">Library source</h2>
         <p id="source-sheet-copy" class="hint">
-          Pick the shared <code>Library</code> folder, or use a local copy.
+          Sign in with Google to load the shared <code>Library</code> folder.
         </p>
         <ul id="source-sheet-list" class="source-list"></ul>
-        <div class="cta-row">
-          <button type="button" id="btn-sheet-picker" class="ghost hidden">
-            Browse Google Drive
+        <div class="cta-row cta-stack">
+          <button type="button" id="btn-sheet-reload" class="primary hidden">
+            Reload library
           </button>
-          <button type="button" id="btn-sheet-google" class="ghost hidden">
+          <button type="button" id="btn-sheet-google" class="primary hidden">
             用 Google 登入
           </button>
-          <button type="button" id="btn-sheet-local" class="ghost hidden">
-            Choose Library folder
-          </button>
-          <button type="button" id="btn-sheet-files" class="ghost hidden">
-            Choose audio files
+          <button type="button" id="btn-sheet-local-link" class="text-link hidden">
+            Use a local folder instead
           </button>
           <button type="button" id="btn-sheet-signout" class="ghost hidden">
-            Sign out of Google
+            Sign out
+          </button>
+          <details id="source-sheet-advanced" class="source-advanced hidden" hidden>
+            <summary>Advanced</summary>
+            <div class="cta-row cta-stack">
+              <button type="button" id="btn-sheet-local" class="ghost hidden">
+                Choose Library folder
+              </button>
+              <button type="button" id="btn-sheet-files" class="ghost hidden">
+                Choose audio files
+              </button>
+            </div>
+          </details>
+          <button type="button" id="btn-sheet-picker" class="ghost hidden" hidden>
+            Browse Google Drive
           </button>
           <button type="button" id="btn-sheet-cancel" class="ghost">Cancel</button>
         </div>
       </div>
     </div>
-    <script type="module" src="./app.js?v=33"></script>
+    <script type="module" src="./app.js?v=34"></script>
   </body>
 </html>
