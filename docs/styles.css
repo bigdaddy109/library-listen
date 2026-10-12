@@ -214,10 +214,20 @@ button.primary {
   border-color: rgba(255, 220, 150, 0.35);
 }
 
-button.ghost {
+button.ghost,
+a.ghost {
   border-color: var(--line);
   background: rgba(255, 255, 255, 0.03);
   color: var(--ink);
+}
+
+a.ghost {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  border-radius: 999px;
+  padding: 0.45rem 0.9rem;
+  font: inherit;
 }
 
 button.large {

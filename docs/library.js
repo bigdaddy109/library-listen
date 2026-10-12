@@ -65,7 +65,7 @@ export function knownCollectionFolders(known = KNOWN_COLLECTIONS) {
 
 /**
  * Copy for an empty scan. Folder names come from KNOWN_COLLECTIONS so a
- * preview-only title (上學不容易 on /shelf/) is not listed until that
+ * preview-only title (上學不容易 on the homepage shelf) is not listed until that
  * folder is a known player collection.
  */
 export function emptyLibraryMessage(entries, skipped, known = KNOWN_COLLECTIONS) {

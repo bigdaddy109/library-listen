@@ -1,88 +1,45 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-Hant">
   <head>
     <meta charset="utf-8" />
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#1a1712" />
+    <meta name="theme-color" content="#f3eee4" />
     <meta
       name="description"
-      content="Library Listen — offline audiobook player. Pick your iCloud Library folder and play."
+      content="Library Listen — rice-paper bookshelf. Sign in with Google to play from the shared Library folder."
     />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Library Listen" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="書架" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" href="./icon.svg?v=34" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=34" />
-    <link rel="stylesheet" href="./styles.css?v=34" />
-    <title>Library Listen</title>
+    <link rel="icon" href="./icon.svg?v=35" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=35" />
+    <link rel="stylesheet" href="./styles.css?v=35" />
+    <link rel="stylesheet" href="./shelf/shelf.css?v=35" />
+    <title>書架 · Library Listen</title>
   </head>
-  <body>
-    <div id="app">
-      <header class="top">
-        <div class="brand">
-          <img
-            class="brand-mark"
-            src="./icon.svg?v=34"
-            width="36"
-            height="36"
-            alt="Library Listen"
-          />
-          <h1>Library Listen</h1>
-        </div>
-        <div class="top-actions">
-          <button type="button" id="btn-sort" class="ghost hidden" title="Sort shelf">
-            Sort
-          </button>
-          <button type="button" id="btn-change" class="ghost hidden" title="Change library source">
-            Change source
-          </button>
-        </div>
-        <div id="shelf-tools" class="shelf-tools hidden">
-          <div class="shelf-search" role="search">
-            <label class="visually-hidden" for="shelf-query">Search title, author, or chapter</label>
-            <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M10.5 4.5a6 6 0 1 1 0 12 6 6 0 0 1 0-12zm0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm6.3 9.2 3.7 3.7-1.4 1.4-3.7-3.7 1.4-1.4z"
-              />
-            </svg>
-            <input
-              id="shelf-query"
-              type="search"
-              placeholder="Search title, author, or chapter"
-              autocomplete="off"
-              autocorrect="off"
-              autocapitalize="none"
-              spellcheck="false"
-              enterkeyhint="search"
-            />
-            <button type="button" id="btn-clear-search" class="search-clear hidden" aria-label="Clear search">
-              ×
+  <body class="shell-shelf" data-shell="shelf">
+    <div id="app" class="paper">
+      <header class="mast">
+        <p class="eyebrow">Library Listen</p>
+        <div class="mast-row">
+          <h1>書架</h1>
+          <div class="mast-links">
+            <button type="button" id="btn-change" class="ghost hidden" title="Change library source">
+              Change source
             </button>
+            <a class="player-link" href="./classic/index.html">舊版播放器</a>
           </div>
-          <p id="shelf-count" class="shelf-count"></p>
         </div>
-      </header>
-
-      <main>
-        <section id="onboarding" class="panel onboarding">
-          <h2>Listen from your shared Library</h2>
-          <p>
-            Jeff shares a Google Drive folder named <code>Library</code>
-            (same <code>listen/</code> + <code>ebooks/</code> layout).
-            Kerry and Daryl sign in with their own Google accounts — this page
-            only reads Drive, and never uploads your books.
-          </p>
-          <ol>
-            <li>Tap <strong>用 Google 登入</strong>. The player loads the Drive folder named <code>Library</code> (including Shared with me).</li>
-            <li>Play from the shelf. Audio streams from Drive. An EPUB downloads when you open <strong>Read</strong>.</li>
-            <li>Local fallback: tap <strong>Use a local folder instead</strong> (download in Files first on iPhone).</li>
-          </ol>
-          <div class="cta-row cta-stack">
+        <p class="lede">
+          紙色書架。用 Google 登入讀共享的 <code>Library</code> 資料夾，或改用本機檔案。
+        </p>
+        <section id="onboarding" class="onboarding">
+          <div class="load-row cta-stack">
             <button type="button" id="btn-google" class="primary large" title="Sign in with Google">
               用 Google 登入
             </button>
@@ -103,111 +60,146 @@
             hidden
           ></p>
         </section>
+        <p id="load-hint" class="hint">尚未選庫時顯示示範書。登入或選資料夾後即可聽／讀。</p>
+      </header>
 
-        <section id="shelf" class="shelf hidden" aria-live="polite"></section>
-
-        <section id="book" class="book-screen hidden">
-          <button type="button" id="btn-back" class="ghost back">← Shelf</button>
-          <div class="book-hero">
-            <div id="book-cover" class="cover large"></div>
-            <div class="book-meta">
-              <p class="collection" id="book-collection"></p>
-              <h2 id="book-title"></h2>
-              <p class="author" id="book-author"></p>
-              <p class="subtitle" id="book-subtitle"></p>
-            </div>
-          </div>
-          <div class="offline-row">
-            <button type="button" id="btn-offline" class="ghost">Save to this device</button>
-            <p class="hint" id="book-offline-status"></p>
-          </div>
-          <div id="book-tabs" class="book-tabs hidden">
-            <button type="button" id="tab-audio" aria-pressed="true">Audio</button>
-            <button type="button" id="tab-read" class="hidden" aria-pressed="false">Read</button>
-            <button type="button" id="tab-concepts" aria-pressed="false">Concepts</button>
-          </div>
-          <ul id="chapter-list" class="chapter-list"></ul>
-          <div id="concept-list" class="concept-list hidden"></div>
-          <div id="reader" class="reader hidden">
-            <div class="reader-bar">
-              <button type="button" id="reader-prev" class="ghost" aria-label="Previous section">
-                Previous
-              </button>
-              <p id="reader-label" class="reader-label"></p>
-              <button type="button" id="reader-next" class="ghost" aria-label="Next section">
-                Next
-              </button>
-            </div>
-            <iframe
-              id="reader-frame"
-              class="reader-frame"
-              title="Ebook"
-              sandbox="allow-same-origin"
-            ></iframe>
-            <p id="reader-status" class="hint"></p>
-          </div>
-        </section>
-      </main>
-
-      <footer id="player-bar" class="player-bar hidden">
-        <div class="player-cover" id="player-cover"></div>
-        <div class="player-text">
-          <div id="player-title" class="player-title">—</div>
-          <div class="player-sub">
-            <div id="player-chapter" class="player-chapter">—</div>
-            <button type="button" id="btn-rate" class="skip rate" aria-label="Playback speed 1.0×">
-              1.0×
-            </button>
-            <button type="button" id="btn-sleep" class="skip sleep" aria-label="Sleep timer off">
-              Sleep
-            </button>
-          </div>
-        </div>
-        <div class="player-controls">
-          <button type="button" id="btn-prev" class="icon" aria-label="Back to start or previous part">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M6 6h2.2v12H6V6zm3.2 6 8.8 6.2V5.8L9.2 12z" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            id="btn-play"
-            class="icon play is-paused"
-            aria-label="Play"
-          >
-            <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M8 5.5v13l11-6.5-11-6.5z" />
-            </svg>
-            <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M7 5h3.5v14H7V5zm6.5 0H17v14h-3.5V5z" />
-            </svg>
-          </button>
-          <button type="button" id="btn-next" class="icon" aria-label="Next chapter">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M15.8 6H18v12h-2.2V6zM6 5.8v12.4L14.8 12 6 5.8z" />
-            </svg>
-          </button>
-        </div>
-        <div class="player-time">
-          <button type="button" id="btn-back30" class="skip" aria-label="Back 30 seconds">
-            −30
-          </button>
-          <span id="player-pos">0:00</span>
+      <div class="toolbar">
+        <div class="search" role="search">
+          <label class="visually-hidden" for="shelf-query">搜尋書名、作者或章節</label>
           <input
-            id="player-seek"
-            type="range"
-            min="0"
-            max="1000"
-            step="1"
-            value="0"
-            aria-label="Seek"
+            id="shelf-query"
+            type="search"
+            placeholder="搜尋書名、作者、章節"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="none"
+            spellcheck="false"
+            enterkeyhint="search"
           />
-          <span id="player-dur">0:00</span>
-          <button type="button" id="btn-fwd30" class="skip" aria-label="Forward 30 seconds">
-            +30
+          <button type="button" id="btn-clear-search" class="search-clear hidden" aria-label="清除搜尋">
+            ×
           </button>
         </div>
-      </footer>
+        <div class="view-toggle" role="tablist" aria-label="檢視">
+          <button type="button" data-view="spines" aria-pressed="true">書架</button>
+          <button type="button" data-view="topics" aria-pressed="false">主題卡片</button>
+          <button type="button" data-view="covers" aria-pressed="false">封面牆</button>
+        </div>
+      </div>
+
+      <div id="series-chips" class="chips" aria-label="系列"></div>
+      <p id="shelf-count" class="count"></p>
+      <div id="shelf-banners" class="shelf-banners"></div>
+      <main id="stage" class="stage" aria-live="polite"></main>
+    </div>
+
+    <section id="book" class="book-screen hidden">
+      <button type="button" id="btn-back" class="ghost back">← 書架</button>
+      <div class="book-hero">
+        <div id="book-cover" class="cover large"></div>
+        <div class="book-meta">
+          <p class="collection" id="book-collection"></p>
+          <h2 id="book-title"></h2>
+          <p class="author" id="book-author"></p>
+          <p class="subtitle" id="book-subtitle"></p>
+        </div>
+      </div>
+      <div class="offline-row">
+        <button type="button" id="btn-offline" class="ghost">Save to this device</button>
+        <p class="hint" id="book-offline-status"></p>
+      </div>
+      <div id="book-tabs" class="book-tabs hidden">
+        <button type="button" id="tab-audio" aria-pressed="true">Audio</button>
+        <button type="button" id="tab-read" class="hidden" aria-pressed="false">Read</button>
+        <button type="button" id="tab-concepts" aria-pressed="false">Concepts</button>
+      </div>
+      <ul id="chapter-list" class="chapter-list"></ul>
+      <div id="concept-list" class="concept-list hidden"></div>
+      <div id="reader" class="reader hidden">
+        <div class="reader-bar">
+          <button type="button" id="reader-prev" class="ghost" aria-label="Previous section">
+            Previous
+          </button>
+          <p id="reader-label" class="reader-label"></p>
+          <button type="button" id="reader-next" class="ghost" aria-label="Next section">
+            Next
+          </button>
+        </div>
+        <iframe
+          id="reader-frame"
+          class="reader-frame"
+          title="Ebook"
+          sandbox="allow-same-origin"
+        ></iframe>
+        <p id="reader-status" class="hint"></p>
+      </div>
+    </section>
+
+    <footer id="player-bar" class="player-bar hidden">
+      <div class="player-cover" id="player-cover"></div>
+      <div class="player-text">
+        <div id="player-title" class="player-title">—</div>
+        <div class="player-sub">
+          <div id="player-chapter" class="player-chapter">—</div>
+          <button type="button" id="btn-rate" class="skip rate" aria-label="Playback speed 1.0×">
+            1.0×
+          </button>
+          <button type="button" id="btn-sleep" class="skip sleep" aria-label="Sleep timer off">
+            Sleep
+          </button>
+        </div>
+      </div>
+      <div class="player-controls">
+        <button type="button" id="btn-prev" class="icon" aria-label="Back to start or previous part">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 6h2.2v12H6V6zm3.2 6 8.8 6.2V5.8L9.2 12z" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          id="btn-play"
+          class="icon play is-paused"
+          aria-label="Play"
+        >
+          <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M8 5.5v13l11-6.5-11-6.5z" />
+          </svg>
+          <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M7 5h3.5v14H7V5zm6.5 0H17v14h-3.5V5z" />
+          </svg>
+        </button>
+        <button type="button" id="btn-next" class="icon" aria-label="Next chapter">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M15.8 6H18v12h-2.2V6zM6 5.8v12.4L14.8 12 6 5.8z" />
+          </svg>
+        </button>
+      </div>
+      <div class="player-time">
+        <button type="button" id="btn-back30" class="skip" aria-label="Back 30 seconds">
+          −30
+        </button>
+        <span id="player-pos">0:00</span>
+        <input
+          id="player-seek"
+          type="range"
+          min="0"
+          max="1000"
+          step="1"
+          value="0"
+          aria-label="Seek"
+        />
+        <span id="player-dur">0:00</span>
+        <button type="button" id="btn-fwd30" class="skip" aria-label="Forward 30 seconds">
+          +30
+        </button>
+      </div>
+    </footer>
+
+    <div id="book-layer" class="book-layer hidden" hidden>
+      <button type="button" id="btn-close-book" class="close-book" aria-label="放回書架">
+        放回
+      </button>
+      <div id="book-stage" class="book-stage"></div>
     </div>
 
     <input
@@ -265,6 +257,7 @@
         </div>
       </div>
     </div>
-    <script type="module" src="./app.js?v=34"></script>
+    <button type="button" id="btn-sort" class="hidden" hidden title="Sort shelf">Sort</button>
+    <script type="module" src="./app.js?v=35"></script>
   </body>
 </html>

@@ -73,6 +73,7 @@ export function auditPwaCache(sources) {
   const shelfJs = sources.shelfJs ?? "";
   const shelfCatalog = sources.shelfCatalog ?? "";
   const shelfCovers = sources.shelfCovers ?? "";
+  const classicHtml = sources.classicHtml ?? "";
 
   for (const [label, source] of [
     ["docs/index.html", html],
@@ -80,6 +81,7 @@ export function auditPwaCache(sources) {
     ["docs/sw.js", sw],
     ["docs/shelf/index.html", shelfHtml],
     ["docs/shelf/shelf.js", shelfJs],
+    ["docs/classic/index.html", classicHtml],
   ]) {
     const versions = queryVersions(source);
     if (versions.length === 0) {
@@ -131,6 +133,7 @@ export function auditPwaCache(sources) {
     ["docs/shelf/shelf.js", "shelf/shelf.js", shelfJs],
     ["docs/shelf/catalog.js", "shelf/catalog.js", shelfCatalog],
     ["docs/shelf/covers.js", "shelf/covers.js", shelfCovers],
+    ["docs/classic/index.html", "classic/index.html", classicHtml],
   ]) {
     const pattern = relFile.endsWith(".html")
       ? /(?:href|src)="((?:\.\.\/|\.\/)[^"]+)"/g
@@ -175,6 +178,7 @@ export function readPlayerSources(docsDir = DOCS) {
     shelfJs: optionalRead(docsDir, "shelf/shelf.js"),
     shelfCatalog: optionalRead(docsDir, "shelf/catalog.js"),
     shelfCovers: optionalRead(docsDir, "shelf/covers.js"),
+    classicHtml: optionalRead(docsDir, "classic/index.html"),
     files: listDocsFiles(docsDir),
   };
 }
@@ -201,7 +205,7 @@ function isShellAsset(rel) {
   if (rel === "sw.js") return false;
   if (rel === "index.html" || rel === "manifest.webmanifest") return true;
   if (rel === "apple-touch-icon.png") return true;
-  if (rel === "shelf/index.html") return true;
+  if (rel === "shelf/index.html" || rel === "classic/index.html") return true;
   if (rel.startsWith("shelf/") && VERSIONED_SHELL.test(rel)) return true;
   if (!rel.includes("/") && VERSIONED_SHELL.test(rel)) return true;
   return rel.startsWith("concepts/") && /\.(jpe?g|png|webp)$/i.test(rel);
@@ -268,7 +272,11 @@ describe("PWA cache-bust", () => {
     );
     assert.ok(
       result.assets.some((a) => stripQuery(a) === "./shelf/index.html"),
-      "ASSETS must include the /shelf/ preview page"
+      "ASSETS must include the /shelf/ redirect page"
+    );
+    assert.ok(
+      result.assets.some((a) => stripQuery(a) === "./classic/index.html"),
+      "ASSETS must include the /classic/ player"
     );
   });
 

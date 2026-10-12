@@ -1,5 +1,5 @@
 /**
- * Google Drive library source for the web player (and later /shelf/).
+ * Google Drive library source for the web player and rice-paper homepage.
  * GIS token + Drive API v3 drive.readonly only. Client ID and Picker key
  * are public browser config (not secrets).
  */
