@@ -79,6 +79,7 @@ import {
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
+const OPEN_INTENT_KEY = "librarylisten.open.v1";
 const RATES = [1, 1.25, 1.5];
 const LIBRARY_KEY = "librarylisten.library.v1";
 const DB_NAME = "library-listen";
@@ -2396,9 +2397,35 @@ async function restoreSession() {
   }
 }
 
+function consumeOpenIntent() {
+  const params = new URLSearchParams(location.search);
+  let bookId = params.get("open");
+  let pane = params.get("pane");
+  if (bookId) {
+    params.delete("open");
+    params.delete("pane");
+    const rest = params.toString();
+    history.replaceState({}, "", `${location.pathname}${rest ? `?${rest}` : ""}${location.hash}`);
+  } else {
+    try {
+      const raw = sessionStorage.getItem(OPEN_INTENT_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        bookId = parsed?.bookId;
+        pane = parsed?.pane;
+        sessionStorage.removeItem(OPEN_INTENT_KEY);
+      }
+    } catch {
+      /* private mode / bad JSON */
+    }
+  }
+  if (!bookId || !findBook(bookId)) return;
+  openBook(bookId, { pane: pane === "read" ? "read" : "audio" });
+}
+
 setupCapabilityHint();
 document.getElementById("btn-sort").textContent = `Sort: ${state.sort}`;
 bind();
 render();
 registerSW();
-restoreSession();
+restoreSession().then(() => consumeOpenIntent());

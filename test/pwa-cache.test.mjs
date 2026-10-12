@@ -69,10 +69,17 @@ export function auditPwaCache(sources) {
   if (!listed.has("./")) errors.push('ASSETS must include "./"');
   if (!listed.has("./index.html")) errors.push('ASSETS must include "./index.html"');
 
+  const shelfHtml = sources.shelfHtml ?? "";
+  const shelfJs = sources.shelfJs ?? "";
+  const shelfCatalog = sources.shelfCatalog ?? "";
+  const shelfCovers = sources.shelfCovers ?? "";
+
   for (const [label, source] of [
     ["docs/index.html", html],
     ["docs/app.js", app],
     ["docs/sw.js", sw],
+    ["docs/shelf/index.html", shelfHtml],
+    ["docs/shelf/shelf.js", shelfJs],
   ]) {
     const versions = queryVersions(source);
     if (versions.length === 0) {
@@ -110,6 +117,33 @@ export function auditPwaCache(sources) {
     }
   }
 
+  if (listed.has("./shelf/index.html")) {
+    if (!listed.has("./shelf/shelf.css")) {
+      errors.push("ASSETS lists shelf/index.html but not ./shelf/shelf.css");
+    }
+    if (!listed.has("./shelf/shelf.js")) {
+      errors.push("ASSETS lists shelf/index.html but not ./shelf/shelf.js");
+    }
+  }
+
+  for (const [label, relFile, source] of [
+    ["docs/shelf/index.html", "shelf/index.html", shelfHtml],
+    ["docs/shelf/shelf.js", "shelf/shelf.js", shelfJs],
+    ["docs/shelf/catalog.js", "shelf/catalog.js", shelfCatalog],
+    ["docs/shelf/covers.js", "shelf/covers.js", shelfCovers],
+  ]) {
+    const pattern = relFile.endsWith(".html")
+      ? /(?:href|src)="((?:\.\.\/|\.\/)[^"]+)"/g
+      : /from\s+"((?:\.\.\/|\.\/)[^"]+)"/g;
+    for (const href of localRefs(source, pattern)) {
+      if (href.startsWith("../sw.js")) continue;
+      const path = resolveDocsAsset(relFile, href);
+      if (!listed.has(path)) {
+        errors.push(`${label} references ${href} which is not in ASSETS (${path})`);
+      }
+    }
+  }
+
   for (const file of localRefs(cards, /file:\s*"([^"]+)"/g)) {
     const asset = `./concepts/immune/${file}`;
     if (!listed.has(asset)) {
@@ -123,12 +157,24 @@ export function auditPwaCache(sources) {
   return { version, assets, errors };
 }
 
+function optionalRead(docsDir, rel) {
+  try {
+    return readFileSync(join(docsDir, rel), "utf8");
+  } catch {
+    return "";
+  }
+}
+
 export function readPlayerSources(docsDir = DOCS) {
   return {
     sw: readFileSync(join(docsDir, "sw.js"), "utf8"),
     html: readFileSync(join(docsDir, "index.html"), "utf8"),
     app: readFileSync(join(docsDir, "app.js"), "utf8"),
     cards: readFileSync(join(docsDir, "immune-cards.js"), "utf8"),
+    shelfHtml: optionalRead(docsDir, "shelf/index.html"),
+    shelfJs: optionalRead(docsDir, "shelf/shelf.js"),
+    shelfCatalog: optionalRead(docsDir, "shelf/catalog.js"),
+    shelfCovers: optionalRead(docsDir, "shelf/covers.js"),
     files: listDocsFiles(docsDir),
   };
 }
@@ -155,6 +201,8 @@ function isShellAsset(rel) {
   if (rel === "sw.js") return false;
   if (rel === "index.html" || rel === "manifest.webmanifest") return true;
   if (rel === "apple-touch-icon.png") return true;
+  if (rel === "shelf/index.html") return true;
+  if (rel.startsWith("shelf/") && VERSIONED_SHELL.test(rel)) return true;
   if (!rel.includes("/") && VERSIONED_SHELL.test(rel)) return true;
   return rel.startsWith("concepts/") && /\.(jpe?g|png|webp)$/i.test(rel);
 }
@@ -174,6 +222,17 @@ function localRefs(source, pattern) {
 
 function stripQuery(value) {
   return value.replace(/\?v=\d+$/, "");
+}
+
+function resolveDocsAsset(fromRel, href) {
+  const path = stripQuery(href);
+  const parts = fromRel.split("/").slice(0, -1);
+  for (const bit of path.split("/")) {
+    if (!bit || bit === ".") continue;
+    if (bit === "..") parts.pop();
+    else parts.push(bit);
+  }
+  return `./${parts.join("/")}`;
 }
 
 function posixDocsPath(rel) {
@@ -198,6 +257,10 @@ describe("PWA cache-bust", () => {
     assert.ok(
       result.assets.some((a) => stripQuery(a) === "./library.js"),
       "ASSETS must include library.js from main"
+    );
+    assert.ok(
+      result.assets.some((a) => stripQuery(a) === "./shelf/index.html"),
+      "ASSETS must include the /shelf/ preview page"
     );
   });
 
