@@ -1,5 +1,5 @@
 /* Shell-only cache. Audiobook files are never cached here. */
-const CACHE = "library-listen-shell-v30";
+const CACHE = "library-listen-shell-v31";
 const DRIVE_MEDIA_PREFIX = "/drive-media/";
 const DRIVE_TOKEN_MESSAGE = "librarylisten.drive-token";
 const DRIVE_UNAUTHORIZED_MESSAGE = "librarylisten.drive-unauthorized";
@@ -15,23 +15,23 @@ self.addEventListener("message", (event) => {
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=30",
-  "./app.js?v=30",
-  "./library.js?v=30",
-  "./drive.js?v=30",
-  "./search.js?v=30",
-  "./markers.js?v=30",
-  "./save-prompt.js?v=30",
-  "./epub.js?v=30",
-  "./immune-cards.js?v=30",
+  "./styles.css?v=31",
+  "./app.js?v=31",
+  "./library.js?v=31",
+  "./drive.js?v=31",
+  "./search.js?v=31",
+  "./markers.js?v=31",
+  "./save-prompt.js?v=31",
+  "./epub.js?v=31",
+  "./immune-cards.js?v=31",
   "./manifest.webmanifest",
-  "./icon.svg?v=30",
-  "./apple-touch-icon.png?v=30",
+  "./icon.svg?v=31",
+  "./apple-touch-icon.png?v=31",
   "./shelf/index.html",
-  "./shelf/shelf.css?v=30",
-  "./shelf/shelf.js?v=30",
-  "./shelf/catalog.js?v=30",
-  "./shelf/covers.js?v=30",
+  "./shelf/shelf.css?v=31",
+  "./shelf/shelf.js?v=31",
+  "./shelf/catalog.js?v=31",
+  "./shelf/covers.js?v=31",
   "./concepts/immune/skin.jpg",
   "./concepts/immune/bacteria.jpg",
   "./concepts/immune/inflammation.jpg",
@@ -88,6 +88,8 @@ async function proxyDriveMedia(request, url) {
   const headers = { Authorization: `Bearer ${driveToken}` };
   const range = request.headers.get("Range");
   if (range) headers.Range = range;
+  /* Keep Range / Authorization / Cache-Control: no-store in lockstep with
+     planDriveMediaProxy + driveMediaProxyOutHeaders in docs/drive.js. */
   const dest = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media&supportsAllDrives=true`;
   const res = await fetch(dest, { headers });
   if (res.status === 401) {

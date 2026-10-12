@@ -1,4 +1,4 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=30";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=31";
 import {
   AUDIO_EXT,
   EBOOK_OFFLINE_KEY,
@@ -17,16 +17,18 @@ import {
   saveTextProgress,
   shelfBadge,
   textProgress,
-} from "./library.js?v=30";
+} from "./library.js?v=31";
 import {
   DRIVE_UNAUTHORIZED_MESSAGE,
   attachDriveMedia,
+  classifyDriveError,
   clearDriveSession,
   downloadDriveFile,
   fetchDriveUser,
   getAccessToken,
   hydrateDriveCovers,
   isDriveFile,
+  isDriveMediaPath,
   isGoogleClientConfigured,
   isPickerConfigured,
   libraryFolderLabel,
@@ -39,7 +41,7 @@ import {
   saveDriveSession,
   signInWithGoogle,
   signOutGoogle,
-} from "./drive.js?v=30";
+} from "./drive.js?v=31";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -47,7 +49,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=30";
+} from "./search.js?v=31";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -62,8 +64,8 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=30";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=30";
+} from "./markers.js?v=31";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=31";
 import {
   applyScrollFraction,
   mimeForPath,
@@ -75,7 +77,7 @@ import {
   spineIndexFromCfi,
   spineLabel,
   zipPath,
-} from "./epub.js?v=30";
+} from "./epub.js?v=31";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -673,9 +675,32 @@ function emptyLibraryMessage(entries, skipped) {
   return msg;
 }
 
+function clearDriveError() {
+  const el = els.driveStatus;
+  if (!el || !el.classList.contains("drive-error")) return;
+  el.classList.remove("drive-error");
+  el.textContent = "";
+  updateDriveStatus();
+}
+
+function showDriveError(err, { silent } = {}) {
+  const classified = classifyDriveError(err);
+  if (classified.kind === "abort" || classified.kind === "coop" || classified.silent) {
+    return classified;
+  }
+  const el = els.driveStatus;
+  if (el) {
+    el.textContent = classified.message;
+    el.classList.add("drive-error");
+  }
+  if (!silent) alert(classified.message);
+  return classified;
+}
+
 function updateDriveStatus() {
   const el = els.driveStatus;
   if (!el) return;
+  if (el.classList.contains("drive-error") && el.textContent) return;
   const session = loadDriveSession();
   if (session?.email || session?.folderName) {
     const who = session.email || "Google";
@@ -751,11 +776,14 @@ async function pickDriveFolderWithPicker() {
 
 async function loadFromDrive({ silent } = {}) {
   if (!isGoogleClientConfigured()) {
-    if (!silent) {
-      alert(
+    const err = Object.assign(
+      new Error(
         "Google sign-in is not configured yet.\n\nPaste a Web application Client ID into GOOGLE_OAUTH_CLIENT_ID in docs/drive.js. Setup steps are in the README.\n\nChoose Library folder still works as a local fallback."
-      );
-    }
+      ),
+      { name: "DriveConfigError" }
+    );
+    if (!silent) showDriveError(err);
+    else showDriveError(err, { silent: true });
     return null;
   }
   let token = getAccessToken();
@@ -763,7 +791,12 @@ async function loadFromDrive({ silent } = {}) {
     try {
       token = silent ? await refreshGoogleToken() : await signInWithGoogle();
     } catch (err) {
-      if (silent || err?.name === "AbortError") return null;
+      if (silent || err?.name === "AbortError" || classifyDriveError(err).kind === "abort") {
+        if (silent && err && classifyDriveError(err).kind !== "abort") {
+          showDriveError(err, { silent: true });
+        }
+        return null;
+      }
       throw err;
     }
   }
@@ -850,6 +883,7 @@ async function loadLibrary(mode) {
       if (!silent) alert(emptyLibraryMessage(entries, skipped));
       return;
     }
+    clearDriveError();
     if (result.handle) await rememberDirectory(result.handle);
 
     // Books saved on this device stay on the shelf even if this pick did not include them.
@@ -886,13 +920,20 @@ async function loadLibrary(mode) {
     saveLibrarySnapshot();
     render();
   } catch (err) {
-    if (silent || err?.name === "AbortError") return;
+    const classified = classifyDriveError(err);
+    if (classified.kind === "abort" || err?.name === "AbortError") return;
+    if (silent) {
+      showDriveError(err, { silent: true });
+      return;
+    }
     console.error(err);
+    if (mode === "drive" || mode === "drive-auto") {
+      showDriveError(err);
+      return;
+    }
     alert(
       (err?.message || "Could not open the library.") +
-        (mode === "drive" || mode === "drive-auto"
-          ? "\n\nAsk Jeff to share the Library folder with this Google account, or Choose Library folder as a local fallback."
-          : "\n\nIf this is iCloud: Download Now on the Library/listen folders, then try again.")
+        "\n\nIf this is iCloud: Download Now on the Library/listen folders, then try again."
     );
   } finally {
     setScanning(false);
@@ -1434,7 +1475,14 @@ async function loadReader(book) {
     console.error(err);
     if (token !== readerToken) return;
     readerSession = null;
-    if (status) status.textContent = "Could not open this EPUB.";
+    const classified = classifyDriveError(err);
+    const driveRead =
+      classified.kind === "expired" ||
+      classified.kind === "no-library" ||
+      classified.kind === "access-denied" ||
+      classified.kind === "test-user";
+    if (status) status.textContent = driveRead ? classified.message : "Could not open this EPUB.";
+    if (driveRead) showDriveError(err, { silent: true });
   } finally {
     if (readerLoadingId === book.id) readerLoadingId = null;
   }
@@ -2165,9 +2213,9 @@ function bind() {
         return pickDriveFolderWithPicker();
       })
       .catch((err) => {
-        if (err?.name === "AbortError") return;
+        if (err?.name === "AbortError" || classifyDriveError(err).kind === "abort") return;
         console.error(err);
-        alert(err?.message || "Google Picker did not open.");
+        showDriveError(err);
       });
   });
   els.btnSheetCancel?.addEventListener("click", () => closeSourceSheet(null));
@@ -2176,6 +2224,7 @@ function bind() {
     await publishDriveToken("");
     clearDriveSession();
     closeSourceSheet(null);
+    els.driveStatus?.classList.remove("drive-error");
     updateDriveStatus();
     showToast("Signed out of Google");
   });
@@ -2326,6 +2375,10 @@ function bind() {
     updateMediaSession();
   });
   audio.addEventListener("durationchange", updatePlayerBar);
+  audio.addEventListener("error", () => {
+    if (!isDriveMediaPath(audio.currentSrc || audio.src || "")) return;
+    showDriveError({ name: "DriveAuthError", status: 401 }, { silent: true });
+  });
   audio.addEventListener("ended", () => {
     persistCurrent();
     if (!playback) return;
@@ -2358,9 +2411,13 @@ function registerSW() {
   navigator.serviceWorker.register("./sw.js").catch(() => {});
   navigator.serviceWorker.addEventListener("message", (event) => {
     if (event.data?.type !== DRIVE_UNAUTHORIZED_MESSAGE) return;
+    showDriveError({ name: "DriveAuthError", status: 401 }, { silent: true });
     refreshGoogleToken()
       .then((token) => publishDriveToken(token))
-      .catch(() => showToast("用 Google 登入 again to keep playing from Drive"));
+      .catch((err) => {
+        if (classifyDriveError(err).kind === "abort") return;
+        showDriveError({ name: "DriveAuthError", status: 401 });
+      });
   });
 }
 

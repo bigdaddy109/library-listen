@@ -28,6 +28,36 @@ export const DRIVE_MEDIA_PREFIX = "/drive-media/";
 export const DRIVE_TOKEN_MESSAGE = "librarylisten.drive-token";
 export const DRIVE_UNAUTHORIZED_MESSAGE = "librarylisten.drive-unauthorized";
 export const DRIVE_SESSION_KEY = "librarylisten.drive.v1";
+export const DRIVE_MEDIA_PASSTHROUGH_HEADERS = [
+  "content-type",
+  "content-length",
+  "content-range",
+  "accept-ranges",
+];
+
+export const DRIVE_ERROR_KIND = {
+  abort: "abort",
+  coop: "coop",
+  config: "config",
+  testUser: "test-user",
+  expired: "expired",
+  noLibrary: "no-library",
+  accessDenied: "access-denied",
+  generic: "generic",
+};
+
+export const DRIVE_ERROR_MESSAGES = {
+  testUser:
+    "This Google account is not a test user for Library Listen. While the OAuth consent screen is in Testing mode, only approved testers can sign in. Ask Jeff to add this account as a test user.",
+  expired:
+    "Google sign-in expired. Tap 用 Google 登入 again to keep streaming or reading from Drive.",
+  noLibrary:
+    "This Google account cannot see a folder named Library. Ask Jeff to share Library (Viewer) with this account, or Choose Library folder as a local fallback.",
+  accessDenied:
+    "Google did not grant Drive access. Sign in with an account Jeff shared Library with, or Choose Library folder as a local fallback.",
+  cancelled: "Google sign-in was cancelled.",
+  coop: "Chrome may log Cross-Origin-Opener-Policy window.closed while the GIS popup is open. That console warning is harmless and does not fail sign-in.",
+};
 
 const PLACEHOLDER_CLIENT = /YOUR_GOOGLE_OAUTH_CLIENT_ID/i;
 const PLACEHOLDER_PICKER = /YOUR_GOOGLE_PICKER_API_KEY/i;
@@ -103,6 +133,216 @@ export function driveProxyHeaders(requestHeaders, token) {
     requestHeaders?.range;
   if (range) headers.Range = range;
   return headers;
+}
+
+/**
+ * Chrome logs this when GIS polls `popup.closed` under COOP. The token still
+ * arrives via postMessage — do not treat it as a sign-in failure.
+ */
+export function isGisCoopWindowClosedWarning(message) {
+  const text = String(message || "");
+  return /Cross-Origin-Opener-Policy/i.test(text) && /window\.closed/i.test(text);
+}
+
+function errorBlobText(input) {
+  if (input == null) return "";
+  if (typeof input === "string") return input;
+  const nested = input.error && typeof input.error === "object" ? input.error : null;
+  return [
+    input.message,
+    input.error,
+    input.error_description,
+    input.errorDescription,
+    input.type,
+    input.name,
+    input.body,
+    input.statusText,
+    nested?.message,
+    nested?.status,
+    nested?.code,
+    nested?.reason,
+  ]
+    .filter((part) => part != null && typeof part !== "object")
+    .map(String)
+    .join(" ");
+}
+
+function looksLikeTestUserDenial(text) {
+  return (
+    /test users?/i.test(text) ||
+    /testing mode/i.test(text) ||
+    /currently being tested/i.test(text) ||
+    /only approved testers/i.test(text) ||
+    /has not completed the Google verification process/i.test(text) ||
+    /development mode/i.test(text)
+  );
+}
+
+export function classifyDriveError(input) {
+  const status = Number(input?.status ?? input?.error?.code ?? input?.error?.status) || 0;
+  const nameIn = input?.name || "";
+  const type = String(input?.type || "");
+  const errorCode = String(
+    typeof input?.error === "string" ? input.error : input?.error?.status || ""
+  ).toLowerCase();
+  const text = errorBlobText(input);
+
+  if (isGisCoopWindowClosedWarning(text)) {
+    return {
+      kind: DRIVE_ERROR_KIND.coop,
+      name: "DriveCoopWarning",
+      message: DRIVE_ERROR_MESSAGES.coop,
+      status,
+      silent: true,
+    };
+  }
+
+  if (nameIn === "DriveConfigError") {
+    return {
+      kind: DRIVE_ERROR_KIND.config,
+      name: "DriveConfigError",
+      message: input.message || "Google sign-in is not configured yet.",
+      status,
+    };
+  }
+
+  if (nameIn === "DriveLibraryMissing") {
+    return {
+      kind: DRIVE_ERROR_KIND.noLibrary,
+      name: "DriveLibraryMissing",
+      message: input.message || DRIVE_ERROR_MESSAGES.noLibrary,
+      status,
+    };
+  }
+
+  if (looksLikeTestUserDenial(text)) {
+    return {
+      kind: DRIVE_ERROR_KIND.testUser,
+      name: "DriveTestUserError",
+      message: DRIVE_ERROR_MESSAGES.testUser,
+      status: status || 403,
+    };
+  }
+
+  if (errorCode === "access_denied" || /access[_ ]denied/i.test(text)) {
+    return {
+      kind: DRIVE_ERROR_KIND.accessDenied,
+      name: "DriveAccessDenied",
+      message: DRIVE_ERROR_MESSAGES.accessDenied,
+      status: status || 403,
+    };
+  }
+
+  if (
+    nameIn === "AbortError" ||
+    type === "popup_closed" ||
+    errorCode === "popup_closed" ||
+    errorCode === "popup_closed_by_user" ||
+    /popup_closed/i.test(text)
+  ) {
+    return {
+      kind: DRIVE_ERROR_KIND.abort,
+      name: "AbortError",
+      message: DRIVE_ERROR_MESSAGES.cancelled,
+      status,
+      silent: true,
+    };
+  }
+
+  if (status === 401 || nameIn === "DriveAuthError" || /expired|invalid[_ ]token|unauthorized/i.test(text)) {
+    return {
+      kind: DRIVE_ERROR_KIND.expired,
+      name: "DriveAuthError",
+      message: DRIVE_ERROR_MESSAGES.expired,
+      status: status || 401,
+    };
+  }
+
+  if (
+    status === 403 ||
+    /insufficientFilePermissions|cannot see a folder named Library|No folder named Library/i.test(text)
+  ) {
+    return {
+      kind: DRIVE_ERROR_KIND.noLibrary,
+      name: "DriveLibraryMissing",
+      message: DRIVE_ERROR_MESSAGES.noLibrary,
+      status: status || 403,
+    };
+  }
+
+  return {
+    kind: DRIVE_ERROR_KIND.generic,
+    name: nameIn || "DriveError",
+    message: (input && input.message) || text || "Could not open Google Drive.",
+    status,
+  };
+}
+
+export function driveErrorFrom(input) {
+  const classified = classifyDriveError(input);
+  const err = new Error(classified.message);
+  err.name = classified.name;
+  err.kind = classified.kind;
+  err.status = classified.status;
+  if (classified.silent) err.silent = true;
+  if (input?.candidates) err.candidates = input.candidates;
+  return err;
+}
+
+/** Ignore COOP `window.closed` noise; abort a real closed popup; classify the rest. */
+export function gisAuthFailure(respOrErr) {
+  if (!respOrErr) return driveErrorFrom({ message: DRIVE_ERROR_MESSAGES.cancelled, name: "AbortError" });
+  if (isGisCoopWindowClosedWarning(respOrErr.message || respOrErr)) return null;
+  return driveErrorFrom(respOrErr);
+}
+
+export function planDriveMediaProxy({ fileId, range, token } = {}) {
+  if (!fileId) return { ok: false, status: 400, body: "Missing Drive file" };
+  if (!token) return { ok: false, status: 401, body: "Sign in with Google" };
+  return {
+    ok: true,
+    dest: driveAltMediaUrl(fileId),
+    headers: driveProxyHeaders({ Range: range }, token),
+  };
+}
+
+export function driveMediaProxyOutHeaders(upstreamHeaders) {
+  const out = { "Cache-Control": "no-store" };
+  for (const name of DRIVE_MEDIA_PASSTHROUGH_HEADERS) {
+    const value =
+      upstreamHeaders?.get?.(name) ||
+      upstreamHeaders?.get?.(name.replace(/(^|-)([a-z])/g, (_, sep, ch) => sep + ch.toUpperCase())) ||
+      upstreamHeaders?.[name];
+    if (value) {
+      const pretty = name.replace(/(^|-)([a-z])/g, (_, sep, ch) => sep + ch.toUpperCase());
+      out[pretty] = value;
+    }
+  }
+  return out;
+}
+
+export function shouldNotifyDriveUnauthorized(status) {
+  return Number(status) === 401;
+}
+
+export async function proxyDriveMediaRequest({ fileId, range, token } = {}, fetchImpl = fetch) {
+  const plan = planDriveMediaProxy({ fileId, range, token });
+  if (!plan.ok) {
+    return {
+      status: plan.status,
+      body: plan.body,
+      headers: { "Cache-Control": "no-store" },
+      notifyUnauthorized: shouldNotifyDriveUnauthorized(plan.status),
+    };
+  }
+  const res = await fetchImpl(plan.dest, { headers: plan.headers });
+  return {
+    status: res.status,
+    statusText: res.statusText || "",
+    headers: driveMediaProxyOutHeaders(res.headers || {}),
+    body: res.body != null ? res.body : await res.arrayBuffer(),
+    notifyUnauthorized: shouldNotifyDriveUnauthorized(res.status),
+  };
 }
 
 export function libraryFolderQuery({ sharedWithMe = false } = {}) {
@@ -254,11 +494,23 @@ export function setDriveRangeFetch(fn) {
 async function rangeBytes(fileId, start, end) {
   if (rangeFetchImpl) return rangeFetchImpl(fileId, start, end);
   const token = getAccessToken();
-  if (!token) throw new Error("Sign in with Google to read this file.");
+  if (!token) throw driveErrorFrom({ name: "DriveAuthError", status: 401 });
   const last = Math.max(start, end - 1);
   const headers = driveProxyHeaders({ Range: `bytes=${start}-${last}` }, token);
   const res = await fetch(driveAltMediaUrl(fileId), { headers });
-  if (!res.ok) throw new Error(`Drive range read failed (${res.status})`);
+  if (!res.ok) {
+    let body = "";
+    try {
+      body = await res.text();
+    } catch {
+      body = "";
+    }
+    throw driveErrorFrom({
+      status: res.status,
+      name: res.status === 401 ? "DriveAuthError" : "",
+      body,
+    });
+  }
   return res.arrayBuffer();
 }
 
@@ -293,6 +545,7 @@ export function makeDriveFile(item) {
     },
     async arrayBuffer() {
       if (!id) return new ArrayBuffer(0);
+      if (rangeFetchImpl) return rangeBytes(id, 0, size || 0);
       return downloadDriveBuffer(id);
     },
     async blob() {
@@ -375,21 +628,36 @@ function driveListUrl({ q, pageToken, fields } = {}) {
 
 export { driveListUrl };
 
+async function readFetchBody(res) {
+  try {
+    return await res.text();
+  } catch {
+    return "";
+  }
+}
+
 async function driveGetJson(url, token, fetchImpl = fetch) {
   const res = await fetchImpl(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (res.status === 401) {
-    const err = new Error("Google sign-in expired. Sign in again.");
-    err.name = "DriveAuthError";
-    throw err;
-  }
+  const body = await readFetchBody(res);
   if (!res.ok) {
-    const err = new Error(`Drive request failed (${res.status})`);
-    err.status = res.status;
-    throw err;
+    let parsed = null;
+    try {
+      parsed = body ? JSON.parse(body) : null;
+    } catch {
+      parsed = null;
+    }
+    throw driveErrorFrom({
+      status: res.status,
+      name: res.status === 401 ? "DriveAuthError" : "",
+      message: parsed?.error?.message || body || res.statusText,
+      error: typeof parsed?.error === "string" ? parsed.error : parsed?.error?.status || parsed?.error,
+      error_description: parsed?.error?.message,
+      body,
+    });
   }
-  return res.json();
+  return body ? JSON.parse(body) : {};
 }
 
 export async function driveListAll(token, q, fetchImpl = fetch) {
@@ -450,11 +718,19 @@ export async function walkDriveFolder(folderId, token, { prefix, fetchImpl = fet
 }
 
 export async function downloadDriveBuffer(fileId, token = getAccessToken(), fetchImpl = fetch) {
-  if (!token) throw new Error("Sign in with Google to download this file.");
+  if (!token) throw driveErrorFrom({ name: "DriveAuthError", status: 401 });
   const res = await fetchImpl(driveAltMediaUrl(fileId), {
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!res.ok) throw new Error(`Drive download failed (${res.status})`);
+  if (!res.ok) {
+    const body = await readFetchBody(res);
+    throw driveErrorFrom({
+      status: res.status,
+      name: res.status === 401 ? "DriveAuthError" : "",
+      message: body || `Drive download failed (${res.status})`,
+      body,
+    });
+  }
   return res.arrayBuffer();
 }
 
@@ -557,7 +833,7 @@ function requireClientId() {
   }
 }
 
-function tokenClientOptions(callback, errorCallback) {
+export function tokenClientOptions(callback, errorCallback) {
   return {
     client_id: GOOGLE_OAUTH_CLIENT_ID,
     scope: DRIVE_READONLY_SCOPE,
@@ -574,21 +850,28 @@ export async function signInWithGoogle({ prompt = "consent" } = {}) {
     throw new Error("Google Identity Services did not load.");
   }
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      fn(value);
+    };
     const client = gis.initTokenClient(
       tokenClientOptions(
         (resp) => {
           if (resp?.error || !resp?.access_token) {
-            reject(new Error(resp?.error || "Google sign-in was cancelled."));
+            finish(reject, gisAuthFailure(resp) || driveErrorFrom(resp));
             return;
           }
           setAccessToken(resp.access_token);
-          resolve(resp.access_token);
+          finish(resolve, resp.access_token);
         },
         (err) => {
-          const msg = err?.message || err?.type || "Google sign-in was cancelled.";
-          const error = new Error(msg);
-          error.name = err?.type === "popup_closed" ? "AbortError" : "DriveAuthError";
-          reject(error);
+          // COOP can make GIS log window.closed; ignore that and keep waiting
+          // for the token callback so we do not break the popup flow.
+          const failure = gisAuthFailure(err);
+          if (!failure) return;
+          finish(reject, failure);
         }
       )
     );
@@ -711,12 +994,11 @@ export async function loadDriveEntries({
       folder = await pickWithPicker();
     }
     if (!folder && !found.length) {
-      const err = new Error(
-        "No folder named Library was found in My Drive or Shared with me.\n\nAsk Jeff to share Library with this Google account, or pick the folder."
-      );
-      err.name = "DriveLibraryMissing";
-      err.candidates = found;
-      throw err;
+      throw driveErrorFrom({
+        name: "DriveLibraryMissing",
+        message: DRIVE_ERROR_MESSAGES.noLibrary,
+        candidates: found,
+      });
     }
     if (!folder) {
       const err = new Error("Pick the shared Library folder to continue.");
