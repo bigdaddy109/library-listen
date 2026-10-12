@@ -1,20 +1,21 @@
 /**
  * Google Drive library source for the web player (and later /shelf/).
- * GIS token + Drive API v3 drive.readonly only. No secrets — Client ID is a
- * public browser config placeholder until Jeff pastes his own.
+ * GIS token + Drive API v3 drive.readonly only. Client ID and Picker key
+ * are public browser config (not secrets).
  */
 
 import { AUDIO_EXT, COVER_EXT, EPUB_EXT, SKIP_FOLDERS, extOf } from "./library.js";
 
-/** Paste a Web application OAuth Client ID here. Not a secret. */
+/** Public Web application OAuth Client ID. Not a secret. */
 export const GOOGLE_OAUTH_CLIENT_ID =
-  "YOUR_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com";
+  "827714015808-hp9o0gl26mbcs8mmipjfu2dtuvv9vdo3.apps.googleusercontent.com";
 
 /**
- * Optional browser API key for Google Picker (HTTP-referrer restricted).
- * Leave empty to pick from Drive-search results only.
+ * Public browser API key for Google Picker (HTTP-referrer restricted to
+ * https://bigdaddy109.github.io/*). Without it, the player still lists
+ * folders named Library from Drive search.
  */
-export const GOOGLE_PICKER_API_KEY = "YOUR_GOOGLE_PICKER_API_KEY";
+export const GOOGLE_PICKER_API_KEY = "AIzaSyBaeZWLYArw6iH-5-ietM3AyI8MNLOYui4";
 
 export const DRIVE_READONLY_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
 export const LIBRARY_FOLDER_NAME = "Library";

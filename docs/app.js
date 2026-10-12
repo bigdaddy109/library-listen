@@ -1,4 +1,4 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=28";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=29";
 import {
   AUDIO_EXT,
   EBOOK_OFFLINE_KEY,
@@ -17,7 +17,7 @@ import {
   saveTextProgress,
   shelfBadge,
   textProgress,
-} from "./library.js?v=28";
+} from "./library.js?v=29";
 import {
   DRIVE_UNAUTHORIZED_MESSAGE,
   attachDriveMedia,
@@ -39,7 +39,7 @@ import {
   saveDriveSession,
   signInWithGoogle,
   signOutGoogle,
-} from "./drive.js?v=28";
+} from "./drive.js?v=29";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -47,7 +47,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=28";
+} from "./search.js?v=29";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -62,8 +62,8 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=28";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=28";
+} from "./markers.js?v=29";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=29";
 import {
   applyScrollFraction,
   mimeForPath,
@@ -75,7 +75,7 @@ import {
   spineIndexFromCfi,
   spineLabel,
   zipPath,
-} from "./epub.js?v=28";
+} from "./epub.js?v=29";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
