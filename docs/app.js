@@ -1,4 +1,4 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=31";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=32";
 import {
   AUDIO_EXT,
   EBOOK_OFFLINE_KEY,
@@ -9,6 +9,7 @@ import {
   bookScreenTabs,
   extOf,
   buildLibrary,
+  emptyLibraryMessage,
   isEbookSavedOffline,
   latestProgressKind,
   loadProgress,
@@ -17,7 +18,7 @@ import {
   saveTextProgress,
   shelfBadge,
   textProgress,
-} from "./library.js?v=31";
+} from "./library.js?v=32";
 import {
   DRIVE_UNAUTHORIZED_MESSAGE,
   attachDriveMedia,
@@ -41,7 +42,7 @@ import {
   saveDriveSession,
   signInWithGoogle,
   signOutGoogle,
-} from "./drive.js?v=31";
+} from "./drive.js?v=32";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -49,7 +50,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=31";
+} from "./search.js?v=32";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -64,8 +65,8 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=31";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=31";
+} from "./markers.js?v=32";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=32";
 import {
   applyScrollFraction,
   mimeForPath,
@@ -77,7 +78,7 @@ import {
   spineIndexFromCfi,
   spineLabel,
   zipPath,
-} from "./epub.js?v=31";
+} from "./epub.js?v=32";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -123,6 +124,7 @@ const els = {
   shelfQuery: document.getElementById("shelf-query"),
   clearSearch: document.getElementById("btn-clear-search"),
   shelfCount: document.getElementById("shelf-count"),
+  libraryStatus: document.getElementById("library-status"),
 };
 
 /** @type {{ bookId: string, chapterIndex: number } | null} */
@@ -657,22 +659,17 @@ function setScanning(active) {
   }
 }
 
-function emptyLibraryMessage(entries, skipped) {
-  const audio = (entries || []).filter((e) => AUDIO_EXT.has(extOf(e.file.name)));
-  const samples = audio
-    .slice(0, 3)
-    .map((e) => e.path || e.file.name)
-    .join("\n");
-  let msg =
-    "No audiobooks found.\n\n" +
-    `Files seen: ${entries?.length || 0} (audio: ${audio.length}` +
-    (skipped ? `, skipped/unread: ${skipped}` : "") +
-    ").\n\n" +
-    "Pick the Library folder (or 門羅-WhatIf / Immune / 上學不容易) that contains listen/ with mp3/m4b.\n" +
-    "On iPhone/iPad: in Files, tap Download Now on listen/ first.\n" +
-    "Or 用 Google 登入 and open the shared Drive Library.";
-  if (samples) msg += `\n\nSample paths:\n${samples}`;
-  return msg;
+function showLibraryStatus(message) {
+  const el = els.libraryStatus;
+  if (!el) return;
+  const text = String(message || "").trim();
+  el.textContent = text;
+  el.hidden = !text;
+  el.classList.toggle("hidden", !text);
+}
+
+function hideLibraryStatus() {
+  showLibraryStatus("");
 }
 
 function clearDriveError() {
@@ -851,6 +848,7 @@ async function loadFromDrive({ silent } = {}) {
  */
 async function loadLibrary(mode) {
   const silent = mode === "auto" || mode === "drive-auto";
+  if (!silent) hideLibraryStatus();
   setScanning(true);
   try {
     let result = null;
@@ -880,7 +878,7 @@ async function loadLibrary(mode) {
     const skipped = result.skipped || 0;
 
     if (!scanned.length) {
-      if (!silent) alert(emptyLibraryMessage(entries, skipped));
+      if (!silent) showLibraryStatus(emptyLibraryMessage(entries, skipped));
       return;
     }
     clearDriveError();
@@ -916,6 +914,7 @@ async function loadLibrary(mode) {
     if (!silent) {
       state.activeBookId = null;
       offerSaveBanner = books.some((b) => isBookOpenable(b) && !isBookOffline(b));
+      hideLibraryStatus();
     }
     saveLibrarySnapshot();
     render();
@@ -931,7 +930,7 @@ async function loadLibrary(mode) {
       showDriveError(err);
       return;
     }
-    alert(
+    showLibraryStatus(
       (err?.message || "Could not open the library.") +
         "\n\nIf this is iCloud: Download Now on the Library/listen folders, then try again."
     );

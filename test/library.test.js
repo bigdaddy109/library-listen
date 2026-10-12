@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   PROGRESS_KEY,
+  KNOWN_COLLECTIONS,
   buildLibrary,
+  emptyLibraryMessage,
+  knownCollectionFolders,
   chapterProgress,
   loadProgress,
   locateBookPath,
@@ -475,5 +478,36 @@ describe("progress", () => {
     assert.equal(isEbookSavedOffline(new Map([[EBOOK_OFFLINE_KEY, { size: 12 }]])), true);
     assert.equal(isEbookSavedOffline(new Map()), false);
     assert.equal(isEbookSavedOffline(null), false);
+  });
+});
+
+describe("emptyLibraryMessage", () => {
+  it("lists only KNOWN_COLLECTIONS folders and never 上學不容易", () => {
+    assert.deepEqual(knownCollectionFolders(), Object.keys(KNOWN_COLLECTIONS));
+    const msg = emptyLibraryMessage([], 0);
+    assert.match(msg, /No audiobooks found/);
+    assert.match(msg, /門羅-WhatIf \/ Immune/);
+    assert.match(msg, /用 Google 登入/);
+    assert.equal(msg.includes("上學不容易"), false);
+    assert.match(msg, /Files seen: 0 \(audio: 0\)/);
+  });
+
+  it("includes skipped counts and sample audio paths", () => {
+    const msg = emptyLibraryMessage(
+      [
+        { path: "Notes/readme.txt", file: { name: "readme.txt", size: 12 } },
+        { path: "Podcast/clip.mp3", file: { name: "clip.mp3", size: 2048 } },
+      ],
+      3
+    );
+    assert.match(msg, /Files seen: 2 \(audio: 1, skipped\/unread: 3\)/);
+    assert.match(msg, /Sample paths:\nPodcast\/clip\.mp3/);
+  });
+
+  it("follows the known-collection map so a later folder can be added without leftover names", () => {
+    const msg = emptyLibraryMessage([], 0, { Immune: { id: "immune" } });
+    assert.match(msg, /or Immune\) that contains listen/);
+    assert.equal(msg.includes("門羅-WhatIf"), false);
+    assert.equal(msg.includes("上學不容易"), false);
   });
 });

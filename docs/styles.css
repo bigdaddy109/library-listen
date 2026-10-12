@@ -322,6 +322,22 @@ button.icon.play:not(.is-paused) .icon-pause {
   font-size: 0.9rem;
 }
 
+.library-status {
+  margin: 1rem 0 0;
+  padding: 0.85rem 0.95rem;
+  border-radius: 12px;
+  border: 1px solid rgba(232, 173, 71, 0.35);
+  background: color-mix(in srgb, var(--card) 82%, #4a2a12);
+  color: var(--ink);
+  white-space: pre-wrap;
+  line-height: 1.45;
+  font-size: 0.92rem;
+}
+
+.library-status:empty {
+  display: none;
+}
+
 body.is-scanning {
   cursor: progress;
 }
