@@ -7,8 +7,8 @@ import {
   buildLibrary,
   extOf,
   shelfBadge,
-} from "../library.js?v=28";
-import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=28";
+} from "../library.js?v=30";
+import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=30";
 import {
   OPEN_INTENT_KEY,
   VIEWS,
@@ -19,6 +19,7 @@ import {
   groupBySeries,
   mediaFlags,
   normalizeView,
+  openBookPhase,
   playerOpenUrl,
   previewProgress,
   seriesChips,
@@ -26,8 +27,8 @@ import {
   seriesMeta,
   shelfStatusLabel,
   volumeNumber,
-} from "./catalog.js?v=28";
-import { coverSvg, spineMetrics, topicMotifSvg } from "./covers.js?v=28";
+} from "./catalog.js?v=30";
+import { coverSvg, spineMetrics, topicMotifSvg } from "./covers.js?v=30";
 
 const VIEW_KEY = "librarylisten.shelfView";
 const SERIES_KEY = "librarylisten.shelfSeries";
@@ -290,27 +291,15 @@ function closeBook() {
   els.bookStage.innerHTML = "";
 }
 
-function openFromShelf(book) {
+function openFromShelf(book, phaseHint) {
   state.selectedId = book.id;
-  state.phase = prefersReducedMotion() ? "open" : "cover";
+  state.phase = phaseHint || openBookPhase({ reducedMotion: prefersReducedMotion() });
   els.layer.classList.remove("hidden");
   els.layer.hidden = false;
-  if (state.phase === "cover") {
-    renderCover(book);
-    coverTimer = window.setTimeout(() => {
-      state.phase = "open";
-      renderSpread(book);
-    }, 520);
-  } else {
-    renderSpread(book);
-  }
+  renderSpread(book, state.phase);
 }
 
-function renderCover(book) {
-  els.bookStage.innerHTML = `<div class="cover-hero">${coverSvg(book, { width: 240, height: 330 })}</div>`;
-}
-
-function renderSpread(book) {
+function renderSpread(book, phase = "open") {
   const series = seriesMeta(book);
   const flags = mediaFlags(book);
   const siblings = state.books.filter((b) => seriesIdForBook(b) === series.id);
@@ -318,29 +307,36 @@ function renderSpread(book) {
   const progress = previewProgress(book);
   const playable = bookHasAudio(book) && book.chapters.some((ch) => ch.file);
   const readable = bookHasEbook(book) && !!book.ebook?.file;
+  const flipClass =
+    phase === "open" ? "is-open" : phase === "flip" ? "is-flipping" : "";
   els.bookStage.innerHTML = `
-    <article class="spread">
-      <section class="page left">
-        <div class="bookplate">
-          <div class="bookplate-card">
-            <div class="seal" style="--accent:${series.accent}">藏</div>
-            <p>藏書票</p>
-            <strong></strong>
-            <p class="vol"></p>
+    <div class="flip-root ${flipClass}">
+      <article class="spread">
+        <section class="page left">
+          <div class="bookplate">
+            <div class="bookplate-card">
+              <div class="seal" style="--accent:${series.accent}">藏</div>
+              <p>藏書票</p>
+              <strong></strong>
+              <p class="vol"></p>
+            </div>
           </div>
-        </div>
-      </section>
-      <section class="page right">
-        <p class="kicker"></p>
-        <h2></h2>
-        <p class="author"></p>
-        <p class="progress"></p>
-        <div class="actions">
-          <button type="button" class="primary" data-open="audio">聽</button>
-          <button type="button" class="primary" data-open="read">讀</button>
-        </div>
-      </section>
-    </article>
+        </section>
+        <section class="page right">
+          <p class="kicker"></p>
+          <h2></h2>
+          <p class="author"></p>
+          <p class="progress"></p>
+          <div class="actions">
+            <button type="button" class="primary" data-open="audio">聽</button>
+            <button type="button" class="primary" data-open="read">讀</button>
+          </div>
+        </section>
+      </article>
+      <div class="flip-cover" aria-hidden="${phase === "open" ? "true" : "false"}">
+        ${coverSvg(book, { width: 240, height: 330 })}
+      </div>
+    </div>
   `;
   els.bookStage.querySelector(".bookplate-card strong").textContent = series.title;
   els.bookStage.querySelector(".vol").textContent = `編號 ${volume}`;
@@ -354,6 +350,16 @@ function renderSpread(book) {
   read.disabled = !flags.read;
   listen.addEventListener("click", () => goToPlayer(book, "audio", playable));
   read.addEventListener("click", () => goToPlayer(book, "read", readable));
+  if (phase === "cover") {
+    window.clearTimeout(coverTimer);
+    coverTimer = window.setTimeout(() => {
+      const root = els.bookStage.querySelector(".flip-root");
+      if (!root) return;
+      root.classList.add("is-open");
+      root.querySelector(".flip-cover")?.setAttribute("aria-hidden", "true");
+      state.phase = "open";
+    }, 40);
+  }
 }
 
 function goToPlayer(book, pane, ready) {
@@ -537,11 +543,14 @@ const previewParams = applyPreviewParams();
 bind();
 render();
 const openId = previewParams.get("book");
-if (openId && findBook(openId) && previewParams.get("spread") === "1") {
+if (openId && findBook(openId) && (previewParams.get("spread") === "1" || previewParams.get("flip") === "1")) {
   const book = findBook(openId);
-  state.selectedId = book.id;
-  state.phase = "open";
-  els.layer.classList.remove("hidden");
-  els.layer.hidden = false;
-  renderSpread(book);
+  openFromShelf(
+    book,
+    openBookPhase({
+      reducedMotion: prefersReducedMotion(),
+      spread: previewParams.get("spread") === "1",
+      flip: previewParams.get("flip") === "1",
+    })
+  );
 }

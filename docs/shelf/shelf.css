@@ -464,18 +464,39 @@ h1 {
   width: min(52rem, 100%);
 }
 
-.cover-hero {
-  width: min(16rem, 70vw);
-  margin: 0 auto;
-  transform-origin: 50% 50%;
-  animation: cover-rise 420ms ease;
+.flip-root {
+  position: relative;
+  perspective: 1600px;
 }
 
-.cover-hero svg {
+.flip-cover {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--paper);
+  transform-origin: left center;
+  transform: rotateY(0deg);
+  transition: transform 720ms cubic-bezier(0.22, 0.72, 0.28, 1);
+  backface-visibility: hidden;
+  z-index: 3;
+}
+
+.flip-cover svg {
   display: block;
-  width: 100%;
+  width: min(16rem, 72vw);
   height: auto;
   box-shadow: 0.4rem 0.7rem 0 rgba(28, 25, 20, 0.08);
+}
+
+.flip-root.is-open .flip-cover {
+  transform: rotateY(-180deg);
+  pointer-events: none;
+}
+
+.flip-root.is-flipping .flip-cover {
+  transform: rotateY(-108deg);
+  transition: none;
 }
 
 .spread {
@@ -486,7 +507,6 @@ h1 {
   border-radius: 0.2rem 0.7rem 0.7rem 0.2rem;
   overflow: hidden;
   box-shadow: 0 18px 40px rgba(28, 25, 20, 0.16);
-  animation: spread-in 380ms ease;
 }
 
 .page {
@@ -605,28 +625,6 @@ h1 {
   display: none;
 }
 
-@keyframes cover-rise {
-  from {
-    transform: translateY(12px) scale(0.96);
-    opacity: 0.2;
-  }
-  to {
-    transform: none;
-    opacity: 1;
-  }
-}
-
-@keyframes spread-in {
-  from {
-    transform: translateY(10px);
-    opacity: 0.15;
-  }
-  to {
-    transform: none;
-    opacity: 1;
-  }
-}
-
 @media (max-width: 640px) {
   .spread {
     grid-template-columns: 1fr;
@@ -644,14 +642,76 @@ h1 {
   h1 {
     font-size: 2.5rem;
   }
+
+  .flip-cover svg {
+    width: min(14rem, 78vw);
+  }
+}
+
+@media (max-width: 400px) {
+  .paper {
+    padding-left: calc(0.8rem + var(--safe-l));
+    padding-right: calc(0.8rem + var(--safe-r));
+  }
+
+  h1 {
+    font-size: 2.15rem;
+  }
+
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .view-toggle {
+    width: 100%;
+  }
+
+  .view-toggle button {
+    flex: 1;
+    padding: 0.45rem 0.35rem;
+    font-size: 0.8rem;
+  }
+
+  .search {
+    max-width: none;
+  }
+
+  .chip {
+    font-size: 0.78rem;
+  }
+
+  .plank {
+    min-height: 11.4rem;
+    padding-top: 2.7rem;
+  }
+
+  .page.right h2 {
+    font-size: 1.5rem;
+  }
+
+  .primary,
+  .ghost {
+    min-height: 2.5rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .spine,
   .spine-tip,
-  .cover-hero,
+  .flip-cover,
   .spread {
     transition: none;
     animation: none;
+  }
+
+  .flip-root {
+    perspective: none;
+  }
+
+  .flip-root.is-open .flip-cover,
+  .flip-root.is-flipping .flip-cover {
+    transform: none;
+    visibility: hidden;
   }
 }

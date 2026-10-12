@@ -24,6 +24,14 @@ export const VIEW_LABELS = {
 
 export const OPEN_INTENT_KEY = "librarylisten.open.v1";
 
+/** cover → flip → open. Reduced motion and ?spread=1 skip straight to the spread. */
+export function openBookPhase({ reducedMotion = false, spread = false, flip = false } = {}) {
+  if (spread) return "open";
+  if (flip) return "flip";
+  if (reducedMotion) return "open";
+  return "cover";
+}
+
 /** One accent per series. Invented for this preview — not copied from another product. */
 export const SERIES = {
   school: {

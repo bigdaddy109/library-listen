@@ -259,6 +259,14 @@ describe("PWA cache-bust", () => {
       "ASSETS must include library.js from main"
     );
     assert.ok(
+      result.assets.some((a) => stripQuery(a) === "./drive.js"),
+      "ASSETS must include drive.js from main"
+    );
+    assert.ok(
+      result.assets.some((a) => stripQuery(a) === "./epub.js"),
+      "ASSETS must include epub.js from main"
+    );
+    assert.ok(
       result.assets.some((a) => stripQuery(a) === "./shelf/index.html"),
       "ASSETS must include the /shelf/ preview page"
     );

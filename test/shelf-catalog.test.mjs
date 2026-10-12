@@ -11,6 +11,7 @@ import {
   groupBySeries,
   mediaFlags,
   normalizeView,
+  openBookPhase,
   parseOpenIntent,
   playerOpenUrl,
   previewProgress,
@@ -107,6 +108,16 @@ describe("preview progress", () => {
     saveTextProgress(book.id, { kind: "epub-cfi", locator: "/6/4", fraction: 0.4, label: "Ch 2" }, store);
     assert.match(previewProgress(book, store).line, /Ch 2/);
     assert.equal(JSON.parse(store.getItem(PROGRESS_KEY))[book.id].text.kind, "epub-cfi");
+  });
+});
+
+describe("openBookPhase", () => {
+  it("skips the flip when motion is reduced or spread is forced", () => {
+    assert.equal(openBookPhase({}), "cover");
+    assert.equal(openBookPhase({ reducedMotion: true }), "open");
+    assert.equal(openBookPhase({ spread: true }), "open");
+    assert.equal(openBookPhase({ flip: true }), "flip");
+    assert.equal(openBookPhase({ spread: true, flip: true }), "open");
   });
 });
 
