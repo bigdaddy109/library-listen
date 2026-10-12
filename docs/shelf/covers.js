@@ -14,8 +14,8 @@ export function escapeXml(value) {
 export function spineMetrics(book) {
   const h = hashString(book?.id || book?.title || "book");
   const chapters = (book?.chapters || []).length;
-  const height = 150 + (h % 54);
-  const thickness = Math.max(12, Math.min(26, 11 + chapters + (h % 5)));
+  const height = 168 + (h % 58);
+  const thickness = Math.max(18, Math.min(34, 16 + Math.min(chapters, 8) + (h % 6)));
   return {
     height,
     thickness,
@@ -41,8 +41,8 @@ function schoolArt(accent, ink) {
       <rect x="28" y="28" width="52" height="38" rx="3" fill="${accent}" fill-opacity="0.12"/>
       <path d="M36 48h36M36 56h28" stroke="${accent}" stroke-width="1.6"/>
       <path d="M108 34c8 0 14 6 14 14v22c-10-4-18-4-28 0V48c0-8 6-14 14-14z" fill="${accent}" fill-opacity="0.18"/>
-      <circle cx="122" cy="148" r="18" fill="${accent}"/>
-      <path d="M116 148h12M122 142v12" stroke="#f7efe4" stroke-width="2"/>
+      <circle cx="122" cy="112" r="18" fill="${accent}"/>
+      <path d="M116 112h12M122 106v12" stroke="#f7efe4" stroke-width="2"/>
     </g>`;
 }
 
@@ -99,8 +99,8 @@ export function coverSvg(book, { width = 160, height = 220 } = {}) {
   <rect x="8" y="8" width="144" height="204" fill="none" stroke="${series.ink}" stroke-opacity="0.18"/>
   <rect x="0" y="0" width="8" height="220" fill="${series.cloth}"/>
   ${seriesArt(seriesId, series.accent, series.ink)}
-  <text x="20" y="176" fill="${series.ink}" font-size="13" font-family="Georgia, 'Iowan Old Style', serif">${title}</text>
-  <text x="20" y="196" fill="${series.ink}" fill-opacity="0.7" font-size="9" font-family="system-ui, sans-serif">${author}</text>
+  <text x="20" y="188" fill="${series.ink}" font-size="13" font-family="Georgia, 'Iowan Old Style', serif">${title}</text>
+  <text x="20" y="206" fill="${series.ink}" fill-opacity="0.7" font-size="9" font-family="system-ui, sans-serif">${author}</text>
 </svg>`;
 }
 

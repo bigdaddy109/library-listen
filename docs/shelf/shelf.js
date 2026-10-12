@@ -516,6 +516,32 @@ function bind() {
   bindDriveHook();
 }
 
+function applyPreviewParams() {
+  const params = new URLSearchParams(location.search);
+  const view = params.get("view");
+  if (VIEWS.includes(view)) state.view = view;
+  const series = params.get("series");
+  if (series) state.seriesId = series;
+  const query = params.get("q");
+  if (query) {
+    state.query = query;
+    if (els.query) els.query.value = query;
+  }
+  const lift = params.get("lift");
+  if (lift) state.liftedId = lift;
+  return params;
+}
+
 restoreChrome();
+const previewParams = applyPreviewParams();
 bind();
 render();
+const openId = previewParams.get("book");
+if (openId && findBook(openId) && previewParams.get("spread") === "1") {
+  const book = findBook(openId);
+  state.selectedId = book.id;
+  state.phase = "open";
+  els.layer.classList.remove("hidden");
+  els.layer.hidden = false;
+  renderSpread(book);
+}

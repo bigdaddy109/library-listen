@@ -32,7 +32,7 @@ describe("generated covers", () => {
     const widths = new Set(metrics.map((m) => m.thickness));
     assert.ok(heights.size > 1);
     assert.ok(widths.size > 1);
-    assert.ok(metrics.every((m) => m.height >= 150 && m.thickness >= 12));
+    assert.ok(metrics.every((m) => m.height >= 168 && m.thickness >= 18));
   });
 
   it("draws topic motifs without external images", () => {
