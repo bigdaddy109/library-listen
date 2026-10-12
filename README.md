@@ -48,10 +48,9 @@ Do this once in [Google Cloud Console](https://console.cloud.google.com/):
 4. **APIs & Services → Credentials → Create credentials → OAuth client ID**
    - Application type: **Web application**
    - Name: `library-listen-web`
-   - **Authorized JavaScript origins** (exact live URLs):
+   - **Authorized JavaScript origins** (host only — no path, no trailing slash):
      - `https://bigdaddy109.github.io`
-     - `https://bigdaddy109.github.io/library-listen`
-   - Google’s origin field is host-only (no path, no trailing slash). The required origin is `https://bigdaddy109.github.io`. Add the `/library-listen` player URL in that list as well so it matches this checklist. For local preview also add:
+   - `/library-listen` is the player path on that origin, not a second origin. For local preview also add:
      - `http://127.0.0.1:8080`
      - `http://localhost:8080`
    - Redirect URIs: not needed for the GIS token client (`initTokenClient`).

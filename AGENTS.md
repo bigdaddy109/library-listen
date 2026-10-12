@@ -30,7 +30,7 @@ Library/
 - Audio: `mp3`, `m4a`, `m4b`, `aac`. Covers: `jpg`, `jpeg`, `png`, `webp`.
 - Files sitting directly in `listen/` are one book (Immune). Subfolders are books (Munroe).
 - Known titles/authors for the live player live in [`docs/library.js`](docs/library.js) (`KNOWN_COLLECTIONS` / `KNOWN_BOOKS`). The same names also exist in paused [`LibraryListen/HubPaths.swift`](LibraryListen/HubPaths.swift) — leave that file alone.
-- Google Drive: [`docs/drive.js`](docs/drive.js) walks a folder named `Library` (My Drive + Shared with me, or Google Picker) and feeds `{path, file}` entries into `buildLibrary`. Do not rewrite pairing rules there. `/shelf/` is not on `main` yet; import this module when it lands.
+- Google Drive: [`docs/drive.js`](docs/drive.js) walks a folder named `Library` (My Drive + Shared with me, or Google Picker) and feeds `{path, file}` entries into `buildLibrary`. Do not rewrite pairing rules there. `/shelf/` is not on `main` yet; import this module when it lands. Authorized JS origin is only `https://bigdaddy109.github.io` (no path). Local preview: `http://127.0.0.1:8080` and `http://localhost:8080`. Client ID stays a placeholder.
 - Never commit real Hub audio or a real OAuth client secret.
 
 ### Web player (`docs/`)
