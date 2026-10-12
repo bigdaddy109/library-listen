@@ -971,8 +971,39 @@ export async function openGooglePicker(token = getAccessToken()) {
 }
 
 /**
+ * Signed-in source sheet: Reload + Sign out, with local picks under Advanced.
+ * Signed-out: Sign in + a local-folder text link. Picker is never a sheet action.
+ */
+export function sourceDialogActions({ signedIn } = {}) {
+  if (signedIn) {
+    return {
+      google: false,
+      reload: true,
+      signout: true,
+      localLink: false,
+      local: true,
+      files: true,
+      picker: false,
+      advanced: true,
+    };
+  }
+  return {
+    google: true,
+    reload: false,
+    signout: false,
+    localLink: true,
+    local: false,
+    files: true,
+    picker: false,
+    advanced: true,
+  };
+}
+
+/**
  * Resolve a Library folder, walk it, and return {path,file} entries for buildLibrary.
- * `chooseFolder` / `pickWithPicker` are UI callbacks supplied by the player or /shelf/.
+ * After sign-in the player auto-loads a folder named Library (My Drive + Shared with
+ * me). `chooseFolder` is optional when several exist. `pickWithPicker` runs only
+ * when no Library folder is found.
  */
 export async function loadDriveEntries({
   token,
@@ -989,6 +1020,9 @@ export async function loadDriveEntries({
     folder = chooseSoleLibraryFolder(found);
     if (!folder && found.length && typeof chooseFolder === "function") {
       folder = await chooseFolder(found);
+    }
+    if (!folder && found.length) {
+      folder = rankLibraryFolders(found)[0] || null;
     }
     if (!folder && typeof pickWithPicker === "function") {
       folder = await pickWithPicker();

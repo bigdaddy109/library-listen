@@ -39,6 +39,7 @@ import {
   libraryFolderQuery,
   loadDriveEntries,
   loadDriveSession,
+  sourceDialogActions,
   makeDriveFile,
   mimeForDriveName,
   planDriveMediaProxy,
@@ -341,6 +342,65 @@ describe("Drive walker feeds the existing library pairing", () => {
     });
     assert.equal(seen.length, 2);
     assert.equal(result.folder.id, "shared-lib");
+  });
+
+  it("auto-loads the ranked Library folder when several exist and no chooser is passed", async () => {
+    const tree = [
+      folder("mine", "Library", undefined, { ownedByMe: true }),
+      folder("shared-lib", "Library", undefined, { shared: true, sharedWithMe: true, ownedByMe: false }),
+    ];
+    let pickerCalls = 0;
+    const result = await loadDriveEntries({
+      token: "tok",
+      fetchImpl: mockDriveFetch(tree),
+      pickWithPicker: async () => {
+        pickerCalls += 1;
+        return { id: "picked", name: "Library" };
+      },
+    });
+    assert.equal(result.folder.id, "mine");
+    assert.equal(pickerCalls, 0);
+  });
+
+  it("falls back to Google Picker only when no Library folder is found", async () => {
+    let pickerCalls = 0;
+    const result = await loadDriveEntries({
+      token: "tok",
+      fetchImpl: mockDriveFetch([]),
+      pickWithPicker: async () => {
+        pickerCalls += 1;
+        return { id: "picked", name: "Library" };
+      },
+    });
+    assert.equal(pickerCalls, 1);
+    assert.equal(result.folder.id, "picked");
+  });
+});
+
+describe("source dialog actions", () => {
+  it("shows Sign in plus a local-folder link when signed out", () => {
+    assert.deepEqual(sourceDialogActions({ signedIn: false }), {
+      google: true,
+      reload: false,
+      signout: false,
+      localLink: true,
+      local: false,
+      files: true,
+      picker: false,
+      advanced: true,
+    });
+  });
+
+  it("shows Reload and Sign out only when signed in, with local picks under Advanced", () => {
+    const actions = sourceDialogActions({ signedIn: true });
+    assert.equal(actions.google, false);
+    assert.equal(actions.reload, true);
+    assert.equal(actions.signout, true);
+    assert.equal(actions.localLink, false);
+    assert.equal(actions.local, true);
+    assert.equal(actions.files, true);
+    assert.equal(actions.picker, false);
+    assert.equal(actions.advanced, true);
   });
 });
 
@@ -680,8 +740,15 @@ describe("Drive audio proxy and EPUB reader", () => {
     const html = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../docs/index.html"), "utf8");
     assert.match(html, /id="btn-google"/);
     assert.match(html, /id="btn-pick-main"/);
+    assert.match(html, /Use a local folder instead/);
     assert.match(html, /Choose Library folder/);
     assert.match(html, /id="btn-pick-files"/);
     assert.match(html, /id="drive-status"/);
+    assert.match(html, /id="btn-sheet-reload"/);
+    assert.match(html, /Reload library/);
+    assert.match(html, /id="source-sheet-advanced"/);
+    assert.match(html, />Advanced</);
+    assert.match(html, /id="btn-sheet-signout"/);
+    assert.match(html, /Sign out/);
   });
 });
