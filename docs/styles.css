@@ -195,6 +195,13 @@ button {
   background: transparent;
 }
 
+button:focus-visible,
+.shelf-search:focus-within,
+input[type="range"]:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 3px;
+}
+
 button:disabled {
   opacity: 0.4;
   cursor: not-allowed;

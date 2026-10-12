@@ -1,4 +1,4 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=32";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=33";
 import {
   AUDIO_EXT,
   EBOOK_OFFLINE_KEY,
@@ -18,7 +18,7 @@ import {
   saveTextProgress,
   shelfBadge,
   textProgress,
-} from "./library.js?v=32";
+} from "./library.js?v=33";
 import {
   DRIVE_UNAUTHORIZED_MESSAGE,
   attachDriveMedia,
@@ -42,7 +42,7 @@ import {
   saveDriveSession,
   signInWithGoogle,
   signOutGoogle,
-} from "./drive.js?v=32";
+} from "./drive.js?v=33";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -50,7 +50,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=32";
+} from "./search.js?v=33";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -65,8 +65,8 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=32";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=32";
+} from "./markers.js?v=33";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=33";
 import {
   applyScrollFraction,
   mimeForPath,
@@ -78,7 +78,7 @@ import {
   spineIndexFromCfi,
   spineLabel,
   zipPath,
-} from "./epub.js?v=32";
+} from "./epub.js?v=33";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -153,6 +153,8 @@ let pendingReaderJump = null;
 let readerLoadingId = null;
 /** @type {((folder: { id: string, name: string } | null) => void) | null} */
 let folderSheetResolve = null;
+/** @type {HTMLElement | null} */
+let sheetReturnFocus = null;
 /** @type {FileSystemDirectoryHandle | null} */
 let savedDirHandle = null;
 let savingBookId = null;
@@ -710,12 +712,32 @@ function updateDriveStatus() {
   }
 }
 
-function closeSourceSheet(folder = null) {
+function firstSheetControl() {
+  const root = els.sourceSheet;
+  if (!root) return null;
+  const nodes = root.querySelectorAll("button");
+  for (const node of nodes) {
+    if (node.hidden || node.classList.contains("hidden") || node.disabled) continue;
+    return node;
+  }
+  return els.btnSheetCancel;
+}
+
+function closeSourceSheet(folder = null, { restoreFocus = true } = {}) {
   const resolve = folderSheetResolve;
   folderSheetResolve = null;
   els.sourceSheet?.classList.add("hidden");
   if (els.sourceSheet) els.sourceSheet.hidden = true;
   if (els.sourceSheetList) els.sourceSheetList.innerHTML = "";
+  const back = sheetReturnFocus;
+  if (restoreFocus) sheetReturnFocus = null;
+  if (restoreFocus && back && typeof back.focus === "function") {
+    try {
+      back.focus();
+    } catch {
+      /* element may have been removed */
+    }
+  }
   resolve?.(folder);
 }
 
@@ -728,7 +750,10 @@ function setSheetActions({ google, local, files, picker, signout } = {}) {
 }
 
 function openSourceSheet({ title, copy, folders = [], actions = {} } = {}) {
-  closeSourceSheet(null);
+  closeSourceSheet(null, { restoreFocus: false });
+  if (!sheetReturnFocus && document.activeElement instanceof HTMLElement) {
+    sheetReturnFocus = document.activeElement;
+  }
   if (els.sourceSheetTitle) els.sourceSheetTitle.textContent = title || "Library source";
   if (els.sourceSheetCopy) els.sourceSheetCopy.textContent = copy || "";
   if (els.sourceSheetList) {
@@ -746,6 +771,7 @@ function openSourceSheet({ title, copy, folders = [], actions = {} } = {}) {
   setSheetActions(actions);
   els.sourceSheet?.classList.remove("hidden");
   if (els.sourceSheet) els.sourceSheet.hidden = false;
+  queueMicrotask(() => firstSheetControl()?.focus());
   return new Promise((resolve) => {
     folderSheetResolve = resolve;
   });
@@ -2050,9 +2076,9 @@ function updatePlayerBar() {
   setCover(document.getElementById("player-cover"), book);
   document.getElementById("player-title").textContent = book.title;
   document.getElementById("player-chapter").textContent = chapter.title;
-  document
-    .getElementById("btn-play")
-    .classList.toggle("is-paused", audio.paused);
+  const playBtn = document.getElementById("btn-play");
+  playBtn.classList.toggle("is-paused", audio.paused);
+  playBtn.setAttribute("aria-label", audio.paused ? "Play" : "Pause");
 
   const { pos, dur } = displayClock();
   document.getElementById("player-pos").textContent = formatClock(pos);
@@ -2188,6 +2214,12 @@ function bind() {
   });
   document.getElementById("btn-change").addEventListener("click", () => {
     showChangeSourceSheet();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    if (!els.sourceSheet || els.sourceSheet.hidden) return;
+    event.preventDefault();
+    closeSourceSheet(null);
   });
   document.getElementById("btn-pick-main").addEventListener("click", pickDirectory);
   els.btnSheetGoogle?.addEventListener("click", () => {

@@ -104,7 +104,7 @@ Do not invent a paid CI service. Keep tests local (`node --test` for extracted J
 
 ## Cache-bust (web)
 
-The PWA cache version is a hand-maintained integer. Today it is **32**. When you change `docs/index.html`, `docs/app.js`, `docs/styles.css`, `docs/drive.js`, `docs/immune-cards.js`, icons, or concept images, bump **all** of:
+The PWA cache version is a hand-maintained integer. Today it is **33**. When you change `docs/index.html`, `docs/app.js`, `docs/styles.css`, `docs/drive.js`, `docs/immune-cards.js`, icons, or concept images, bump **all** of:
 
 1. `?v=N` on every asset link in [`docs/index.html`](docs/index.html)
 2. `import … from "./….js?v=N"` in [`docs/app.js`](docs/app.js) (including `drive.js`)
