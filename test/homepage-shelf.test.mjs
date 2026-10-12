@@ -54,7 +54,20 @@ describe("homepage is the rice-paper shelf", () => {
     assert.match(classic, /href="\.\.\/"/);
     assert.match(home, /href="\.\/classic\/index\.html"/);
     assert.match(shelf, /location\.replace\("\.\.\/"\)/);
-    assert.match(sw, /library-listen-shell-v35/);
+    assert.match(sw, /library-listen-shell-v36/);
     assert.match(sw, /"\.\/classic\/index\.html"/);
+  });
+
+  it("defines the 3D draw and honors reduced motion in shelf CSS", () => {
+    const css = readFileSync(join(ROOT, "docs/shelf/shelf.css"), "utf8");
+    assert.match(css, /\.book-3d\b/);
+    assert.match(css, /\.draw-root\b/);
+    assert.match(css, /transform-origin:\s*100% 50%/);
+    assert.match(css, /prefers-reduced-motion:\s*reduce/);
+    assert.match(css, /\.book-3d,/);
+    assert.match(css, /\.spine-fore/);
+    assert.match(home, /id="btn-google"/);
+    assert.match(home, /id="source-sheet"/);
+    assert.match(home, /href="\.\/classic\/index\.html"/);
   });
 });

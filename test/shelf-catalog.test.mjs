@@ -12,6 +12,9 @@ import {
   mediaFlags,
   normalizeView,
   openBookPhase,
+  PULL_TIMING,
+  pullOriginFromRect,
+  pullTransformVars,
   parseOpenIntent,
   playerOpenUrl,
   previewProgress,
@@ -112,12 +115,38 @@ describe("preview progress", () => {
 });
 
 describe("openBookPhase", () => {
-  it("skips the flip when motion is reduced or spread is forced", () => {
-    assert.equal(openBookPhase({}), "cover");
+  it("draws by default and skips to the spread when motion is reduced", () => {
+    assert.equal(openBookPhase({}), "draw");
     assert.equal(openBookPhase({ reducedMotion: true }), "open");
     assert.equal(openBookPhase({ spread: true }), "open");
     assert.equal(openBookPhase({ flip: true }), "flip");
+    assert.equal(openBookPhase({ pull: true }), "pull");
     assert.equal(openBookPhase({ spread: true, flip: true }), "open");
+    assert.equal(openBookPhase({ reducedMotion: true, pull: true }), "open");
+  });
+});
+
+describe("pull transform", () => {
+  it("keeps the draw under 900ms and maps a spine rect to CSS vars", () => {
+    assert.equal(PULL_TIMING.totalMs, 820);
+    assert.ok(PULL_TIMING.totalMs >= 600 && PULL_TIMING.totalMs <= 900);
+    assert.equal(PULL_TIMING.extractMs + PULL_TIMING.openMs, PULL_TIMING.totalMs);
+    assert.equal(pullOriginFromRect(null).valid, false);
+    const origin = pullOriginFromRect({ left: 40, top: 200, width: 24, height: 180 });
+    assert.equal(origin.valid, true);
+    assert.equal(origin.x, 52);
+    assert.equal(origin.y, 290);
+    const vars = pullTransformVars(
+      { left: 40, top: 200, width: 24, height: 180 },
+      { width: 390, height: 844 }
+    );
+    assert.equal(vars.fromX, "-143px");
+    assert.equal(vars.fromY, "-132px");
+    assert.equal(vars.fromYaw, "76deg");
+    assert.equal(
+      pullTransformVars(null, { width: 390, height: 844, yaw: 8 }).fromYaw,
+      "8deg"
+    );
   });
 });
 

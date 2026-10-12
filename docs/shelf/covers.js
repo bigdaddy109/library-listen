@@ -20,6 +20,7 @@ export function spineMetrics(book) {
     height,
     thickness,
     lift: 8 + (h % 5),
+    lean: (h % 11) - 5,
     hueShift: h % 17,
   };
 }
