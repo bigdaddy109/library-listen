@@ -13,7 +13,7 @@ Read this before changing code. Keep [README.md](README.md), [SHARE-library-list
 | **Web player (live)** | [`docs/`](docs/) | **Active.** GitHub Pages from `/docs` on `main`: https://bigdaddy109.github.io/library-listen/ |
 | **Native iOS/iPadOS app** | [`LibraryListen/`](LibraryListen/) + [`LibraryListen.xcodeproj`](LibraryListen.xcodeproj) | **Paused.** Sideload-via-Xcode code is still here. Do not treat it as a second product to maintain. |
 
-Recent merged PRs (#1–#23) are almost all web-player work. That is the deploy path. Open leftover: rice-paper `/shelf/` preview (#21) — do not merge it from overnight backlog work.
+Recent merged PRs (#1–#24) are almost all web-player work. That is the deploy path. `/shelf/` preview shipped as #21 (not the homepage).
 
 ## Architecture
 
@@ -30,7 +30,7 @@ Library/
 - Audio: `mp3`, `m4a`, `m4b`, `aac`. Covers: `jpg`, `jpeg`, `png`, `webp`.
 - Files sitting directly in `listen/` are one book (Immune). Subfolders are books (Munroe).
 - Known titles/authors for the live player live in [`docs/library.js`](docs/library.js) (`KNOWN_COLLECTIONS` / `KNOWN_BOOKS`). The same names also exist in paused [`LibraryListen/HubPaths.swift`](LibraryListen/HubPaths.swift) — leave that file alone.
-- Google Drive: [`docs/drive.js`](docs/drive.js) walks a folder named `Library` (My Drive + Shared with me, or Google Picker) and feeds `{path, file}` entries into `buildLibrary`. Do not rewrite pairing rules there. `/shelf/` is still an open preview PR (#21), not on `main`. Authorized JS origin is only `https://bigdaddy109.github.io` (no path). Local preview: `http://127.0.0.1:8080` and `http://localhost:8080`. Client ID is pasted public browser config (not a secret).
+- Google Drive: [`docs/drive.js`](docs/drive.js) walks a folder named `Library` (My Drive + Shared with me, or Google Picker) and feeds `{path, file}` entries into `buildLibrary`. Do not rewrite pairing rules there. `/shelf/` is a rice-paper preview on `main` (PR #21); do not replace the homepage with it. Authorized JS origin is only `https://bigdaddy109.github.io` (no path). Local preview: `http://127.0.0.1:8080` and `http://localhost:8080`. Client ID is pasted public browser config (not a secret).
 - Never commit real Hub audio or a real OAuth client secret.
 
 ### Web player (`docs/`)
@@ -92,7 +92,7 @@ Recorded on a Linux agent against `main` @ `b0e0b6c` (after Drive OAuth #23):
 
 | Check | Result |
 | --- | --- |
-| GitHub Pages live site | **Pass** — https://bigdaddy109.github.io/library-listen/ serves Drive onboarding + player chrome (`library-listen-shell-v29`). Pages source `main` `/docs`. |
+| GitHub Pages live site | **Pass** — https://bigdaddy109.github.io/library-listen/ serves Drive onboarding + player chrome. Shell cache version is the integer in `docs/sw.js` (v32 after empty-library status). Pages source `main` `/docs`. |
 | `node --check` on `docs/{app,drive,immune-cards,sw}.js` | **Pass** |
 | `node --test` | **Pass** |
 | `docs/manifest.webmanifest` JSON | **Pass** |
@@ -104,7 +104,7 @@ Do not invent a paid CI service. Keep tests local (`node --test` for extracted J
 
 ## Cache-bust (web)
 
-The PWA cache version is a hand-maintained integer. Today it is **29**. When you change `docs/index.html`, `docs/app.js`, `docs/styles.css`, `docs/drive.js`, `docs/immune-cards.js`, icons, or concept images, bump **all** of:
+The PWA cache version is a hand-maintained integer. Today it is **32**. When you change `docs/index.html`, `docs/app.js`, `docs/styles.css`, `docs/drive.js`, `docs/immune-cards.js`, icons, or concept images, bump **all** of:
 
 1. `?v=N` on every asset link in [`docs/index.html`](docs/index.html)
 2. `import … from "./….js?v=N"` in [`docs/app.js`](docs/app.js) (including `drive.js`)

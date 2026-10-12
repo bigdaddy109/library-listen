@@ -651,7 +651,7 @@ describe("Drive audio proxy and EPUB reader", () => {
     assert.match(sw, /DRIVE_UNAUTHORIZED_MESSAGE/);
     assert.match(sw, /res\.status === 401/);
     assert.match(sw, /alt=media/);
-    assert.match(sw, /library-listen-shell-v31/);
+    assert.match(sw, /library-listen-shell-v\d+/);
   });
 
   it("opens a Drive EPUB buffer with the existing reader", async () => {

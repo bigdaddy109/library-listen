@@ -24,9 +24,9 @@ Items 1–2 below shipped. Further web work is one small PR at a time. Do not me
 
 ## Now — leftover small web items
 
-Ship these one PR at a time. Do not start a new homepage, `/shelf/`, Drive walker, PDF reader, or native work from this list.
+Ship these one PR at a time. Do not start a new homepage, Drive walker, PDF reader, or native work from this list. `/shelf/` preview shipped as [PR #21](https://github.com/bigdaddy109/library-listen/pull/21).
 
-- **Empty-library copy mentions `上學不容易`.** [`docs/app.js`](docs/app.js) `emptyLibraryMessage` lists that collection; it is not in `KNOWN_COLLECTIONS`. Either add it when that folder exists, or drop the name so the copy matches the two collections the player knows. Prefer an in-page status over a blocking `alert()`.
+- **Empty-library copy + in-page status.** **Shipped** — `emptyLibraryMessage` lives in [`docs/library.js`](docs/library.js) and lists only `KNOWN_COLLECTIONS`. An empty or failed local scan writes `#library-status` instead of `alert()`.
 
 ---
 
@@ -38,12 +38,12 @@ These shipped after 1–2 (do not re-do them):
 - **Web reads m4b chapter markers.** [PR #15](https://github.com/bigdaddy109/library-listen/pull/15) — [`docs/markers.js`](docs/markers.js). Silent fixtures only; do not copy Hub m4b files.
 - **Save `confirm()` gated.** [PR #16](https://github.com/bigdaddy109/library-listen/pull/16) — [`docs/save-prompt.js`](docs/save-prompt.js). Phones without a folder handle only.
 - **EPUB Read tab + pairing badges.** [PR #17](https://github.com/bigdaddy109/library-listen/pull/17)–[#20](https://github.com/bigdaddy109/library-listen/pull/20). PDF still later.
-- **Google Drive library source.** [PR #22](https://github.com/bigdaddy109/library-listen/pull/22)–[#23](https://github.com/bigdaddy109/library-listen/pull/23). Do not reinvent the walker or replace the OAuth client.
+- **Google Drive library source.** [PR #22](https://github.com/bigdaddy109/library-listen/pull/22)–[#23](https://github.com/bigdaddy109/library-listen/pull/23), hardened in [#25](https://github.com/bigdaddy109/library-listen/pull/25). Do not reinvent the walker or replace the OAuth client.
 
 Still later (optional):
 
 - **Hardcoded known books only.** New folders get `humanize(folder)` titles. That’s OK. Adding a book means editing `KNOWN_BOOKS` / `KNOWN_COLLECTIONS` in [`docs/library.js`](docs/library.js). A later optional `folder.jpg` + filename is enough; do not add a metadata service. Do not also edit the paused Swift tables unless Jeff un-pauses native.
-- **Rice-paper `/shelf/` preview.** Open as [PR #21](https://github.com/bigdaddy109/library-listen/pull/21). Leave it; do not merge from leftover-backlog work.
+- **Rice-paper `/shelf/` preview.** Shipped as [PR #21](https://github.com/bigdaddy109/library-listen/pull/21) at `/shelf/`. Do not replace the homepage with it.
 - **PDF reader.** Jeff said later. EPUB MVP is live.
 
 ## Dropped while native is paused

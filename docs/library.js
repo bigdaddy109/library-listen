@@ -59,6 +59,37 @@ export function humanize(value) {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+export function knownCollectionFolders(known = KNOWN_COLLECTIONS) {
+  return Object.keys(known || {});
+}
+
+/**
+ * Copy for an empty scan. Folder names come from KNOWN_COLLECTIONS so a
+ * preview-only title (上學不容易 on /shelf/) is not listed until that
+ * folder is a known player collection.
+ */
+export function emptyLibraryMessage(entries, skipped, known = KNOWN_COLLECTIONS) {
+  const list = Array.isArray(entries) ? entries : [];
+  const audio = list.filter((e) => AUDIO_EXT.has(extOf(e?.file?.name || "")));
+  const samples = audio
+    .slice(0, 3)
+    .map((e) => e.path || e.file?.name)
+    .filter(Boolean)
+    .join("\n");
+  const folders = knownCollectionFolders(known);
+  const folderHint = folders.length ? ` (or ${folders.join(" / ")})` : "";
+  let msg =
+    "No audiobooks found.\n\n" +
+    `Files seen: ${list.length} (audio: ${audio.length}` +
+    (skipped ? `, skipped/unread: ${skipped}` : "") +
+    ").\n\n" +
+    `Pick the Library folder${folderHint} that contains listen/ with mp3/m4b.\n` +
+    "On iPhone/iPad: in Files, tap Download Now on listen/ first.\n" +
+    "Or 用 Google 登入 and open the shared Drive Library.";
+  if (samples) msg += `\n\nSample paths:\n${samples}`;
+  return msg;
+}
+
 export function collectionMeta(folder) {
   return (
     KNOWN_COLLECTIONS[folder] || {
