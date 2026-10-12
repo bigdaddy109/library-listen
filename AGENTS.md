@@ -1,6 +1,6 @@
 # Library Listen — agent notes
 
-Offline audiobook player for files that already live in a shared iCloud Drive `Library` folder. Local files only. No TTS. No upload of books. No paid external APIs.
+Offline audiobook player for a shared `Library` folder. Google Drive (GIS + drive.readonly) is the web source; local-folder pick stays as fallback. No TTS. No upload of books. No paid external APIs. Client ID is a placeholder in [`docs/drive.js`](docs/drive.js) — see README for Google Cloud setup.
 
 Read this before changing code. Keep [README.md](README.md), [SHARE-library-listen.md](SHARE-library-listen.md), and [INSTALL-zh.md](INSTALL-zh.md) as the user-facing docs — do not replace them with this file.
 
@@ -29,21 +29,22 @@ Library/
 - Skip `ebooks/`, `_source/`, and any name starting with `_`.
 - Audio: `mp3`, `m4a`, `m4b`, `aac`. Covers: `jpg`, `jpeg`, `png`, `webp`.
 - Files sitting directly in `listen/` are one book (Immune). Subfolders are books (Munroe).
-- Known titles/authors for the live player live in [`docs/app.js`](docs/app.js) (`KNOWN_COLLECTIONS` / `KNOWN_BOOKS`). The same names also exist in paused [`LibraryListen/HubPaths.swift`](LibraryListen/HubPaths.swift) — leave that file alone.
-- Never commit real Hub audio.
+- Known titles/authors for the live player live in [`docs/library.js`](docs/library.js) (`KNOWN_COLLECTIONS` / `KNOWN_BOOKS`). The same names also exist in paused [`LibraryListen/HubPaths.swift`](LibraryListen/HubPaths.swift) — leave that file alone.
+- Google Drive: [`docs/drive.js`](docs/drive.js) walks a folder named `Library` (My Drive + Shared with me, or Google Picker) and feeds `{path, file}` entries into `buildLibrary`. Do not rewrite pairing rules there. `/shelf/` is not on `main` yet; import this module when it lands.
+- Never commit real Hub audio or a real OAuth client secret.
 
 ### Web player (`docs/`)
 
 Vanilla ES modules. No bundler, no `package.json`, no framework.
 
-- [`docs/index.html`](docs/index.html) + [`docs/app.js`](docs/app.js) + [`docs/styles.css`](docs/styles.css)
-- [`docs/sw.js`](docs/sw.js) — shell-only service worker. **Audiobook bytes are never cached here.**
+- [`docs/index.html`](docs/index.html) + [`docs/app.js`](docs/app.js) + [`docs/styles.css`](docs/styles.css) + [`docs/drive.js`](docs/drive.js)
+- [`docs/sw.js`](docs/sw.js) — shell-only service worker. **Audiobook bytes are never cached here.** Same-origin `/drive-media/<id>` is proxied to Drive `alt=media` with Range and is never written to the cache.
 - [`docs/immune-cards.js`](docs/immune-cards.js) + `docs/concepts/immune/*.jpg` — original Immune concept cards (not book text), shown only for the Immune book.
 - Progress: `localStorage` key `librarylisten.progress.v1` (per-book last chapter **and** a per-chapter map).
 - Shelf snapshot: `librarylisten.library.v1`.
 - Sort / rate: `librarylisten.shelfSort`, `librarylisten.rate`.
 - IndexedDB `library-listen`: `handles` (desktop File System Access directory handle) and `offline` (copied chapter/cover blobs).
-- Folder pick: `showDirectoryPicker` when present (desktop Chromium); otherwise `<input webkitdirectory>` / file list. iPhone Safari cannot keep folder permission across launches — after restart the user re-picks or plays books saved with **Save to this device**.
+- Folder pick: **用 Google 登入** (GIS token, Drive API v3 `drive.readonly`) or `showDirectoryPicker` / `<input webkitdirectory>` as the local fallback. iPhone Safari cannot keep local folder permission across launches — Drive reconnect or **Save to this device** is the workaround.
 - Playback extras on the web player: sleep timer (15/30/45/60), −30/+30, next-chapter toast, save-to-device, Immune Concepts tab. No shelf search yet (see [fix_plan.md](fix_plan.md)).
 - A chaptered `m4b` is **one chapter** on the web (`buildLibrary` does not read markers).
 
@@ -74,6 +75,7 @@ python3 -m http.server 8080 --directory docs
 ```bash
 # syntax only — there is no test runner
 node --check docs/app.js
+node --check docs/drive.js
 node --check docs/immune-cards.js
 node --check docs/sw.js
 ```
@@ -101,10 +103,10 @@ Do not invent a paid CI service. If you add tests, keep them local (`node --test
 
 ## Cache-bust (web)
 
-The PWA cache version is a hand-maintained integer. Today it is **20**. When you change `docs/index.html`, `docs/app.js`, `docs/styles.css`, `docs/immune-cards.js`, icons, or concept images, bump **all** of:
+The PWA cache version is a hand-maintained integer. Today it is **28**. When you change `docs/index.html`, `docs/app.js`, `docs/styles.css`, `docs/drive.js`, `docs/immune-cards.js`, icons, or concept images, bump **all** of:
 
 1. `?v=N` on every asset link in [`docs/index.html`](docs/index.html)
-2. `import { IMMUNE_CARDS } from "./immune-cards.js?v=N"` in [`docs/app.js`](docs/app.js)
+2. `import … from "./….js?v=N"` in [`docs/app.js`](docs/app.js) (including `drive.js`)
 3. `const CACHE = "library-listen-shell-vN"` **and** every `?v=N` path in [`docs/sw.js`](docs/sw.js) `ASSETS`
 
 Miss one and phones keep a stale shell. HTML navigations are network-first; other assets are cache-first.
@@ -132,7 +134,7 @@ Miss one and phones keep a stale shell. HTML navigations are network-first; othe
 ## Suggested first command when you open the repo
 
 ```bash
-node --check docs/app.js && node --check docs/immune-cards.js && node --check docs/sw.js
+node --check docs/app.js && node --check docs/drive.js && node --check docs/immune-cards.js && node --check docs/sw.js && node --test
 ```
 
 Then read [fix_plan.md](fix_plan.md) and do only the top unchecked item.

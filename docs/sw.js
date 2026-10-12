@@ -1,19 +1,32 @@
 /* Shell-only cache. Audiobook files are never cached here. */
-const CACHE = "library-listen-shell-v27";
+const CACHE = "library-listen-shell-v28";
+const DRIVE_MEDIA_PREFIX = "/drive-media/";
+const DRIVE_TOKEN_MESSAGE = "librarylisten.drive-token";
+const DRIVE_UNAUTHORIZED_MESSAGE = "librarylisten.drive-unauthorized";
+/** In-memory only. The page posts the GIS access token; never cached. */
+let driveToken = "";
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === DRIVE_TOKEN_MESSAGE) {
+    driveToken = event.data.token || "";
+  }
+});
+
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=27",
-  "./app.js?v=27",
-  "./library.js?v=27",
-  "./search.js?v=27",
-  "./markers.js?v=27",
-  "./save-prompt.js?v=27",
-  "./epub.js?v=27",
-  "./immune-cards.js?v=27",
+  "./styles.css?v=28",
+  "./app.js?v=28",
+  "./library.js?v=28",
+  "./drive.js?v=28",
+  "./search.js?v=28",
+  "./markers.js?v=28",
+  "./save-prompt.js?v=28",
+  "./epub.js?v=28",
+  "./immune-cards.js?v=28",
   "./manifest.webmanifest",
-  "./icon.svg?v=27",
-  "./apple-touch-icon.png?v=27",
+  "./icon.svg?v=28",
+  "./apple-touch-icon.png?v=28",
   "./concepts/immune/skin.jpg",
   "./concepts/immune/bacteria.jpg",
   "./concepts/immune/inflammation.jpg",
@@ -48,10 +61,57 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+function isDriveMediaUrl(url) {
+  return url.origin === self.location.origin && url.pathname.includes(DRIVE_MEDIA_PREFIX);
+}
+
+function driveFileIdFromPath(pathname) {
+  const at = pathname.lastIndexOf(DRIVE_MEDIA_PREFIX);
+  if (at < 0) return "";
+  const raw = pathname.slice(at + DRIVE_MEDIA_PREFIX.length).split("/")[0];
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+async function proxyDriveMedia(request, url) {
+  const fileId = driveFileIdFromPath(url.pathname);
+  if (!fileId) return new Response("Missing Drive file", { status: 400 });
+  if (!driveToken) return new Response("Sign in with Google", { status: 401 });
+  const headers = { Authorization: `Bearer ${driveToken}` };
+  const range = request.headers.get("Range");
+  if (range) headers.Range = range;
+  const dest = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media&supportsAllDrives=true`;
+  const res = await fetch(dest, { headers });
+  if (res.status === 401) {
+    const clients = await self.clients.matchAll({ includeUncontrolled: true });
+    for (const client of clients) {
+      client.postMessage({ type: DRIVE_UNAUTHORIZED_MESSAGE });
+    }
+  }
+  const out = new Headers();
+  for (const name of ["content-type", "content-length", "content-range", "accept-ranges"]) {
+    const value = res.headers.get(name);
+    if (value) out.set(name, value);
+  }
+  out.set("Cache-Control", "no-store");
+  return new Response(res.body, {
+    status: res.status,
+    statusText: res.statusText,
+    headers: out,
+  });
+}
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
   const url = new URL(request.url);
+  if (isDriveMediaUrl(url)) {
+    event.respondWith(proxyDriveMedia(request, url));
+    return;
+  }
   if (url.origin !== self.location.origin) return;
 
   // Always network-first for HTML so logo/UI updates show up.

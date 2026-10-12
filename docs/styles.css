@@ -308,6 +308,15 @@ button.icon.play:not(.is-paused) .icon-pause {
   gap: 0.6rem;
 }
 
+.cta-stack {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.cta-stack button.large {
+  width: 100%;
+}
+
 .hint {
   margin: 1rem 0 0;
   font-size: 0.9rem;
@@ -319,6 +328,7 @@ body.is-scanning {
 
 body.is-scanning .primary,
 body.is-scanning #btn-change,
+body.is-scanning #btn-google,
 body.is-scanning #btn-pick-main,
 body.is-scanning #btn-pick-files {
   opacity: 0.65;
@@ -871,4 +881,56 @@ button.skip {
     width: min(720px, 100%);
     border-radius: 1rem 1rem 0 0;
   }
+}
+
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: end center;
+  padding: 1rem;
+  padding-bottom: calc(1rem + var(--safe-b));
+  background: rgba(8, 7, 5, 0.62);
+}
+
+.sheet-card {
+  width: min(32rem, 100%);
+  max-height: min(80vh, 36rem);
+  overflow: auto;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius) + 4px);
+  padding: 1.15rem 1.1rem 1.2rem;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+}
+
+.sheet-card h2 {
+  margin: 0 0 0.4rem;
+  font-size: 1.2rem;
+}
+
+.sheet-card .hint {
+  margin: 0 0 0.85rem;
+}
+
+.source-list {
+  list-style: none;
+  margin: 0 0 0.9rem;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.source-list button {
+  width: 100%;
+  text-align: left;
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  padding: 0.7rem 0.85rem;
+}
+
+#drive-status:empty {
+  display: none;
 }
