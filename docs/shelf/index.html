@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#f3eee4" />
+    <meta
+      name="description"
+      content="Library Listen — rice-paper shelf preview. Does not replace the player."
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="書架" />
+    <link rel="manifest" href="../manifest.webmanifest" />
+    <link rel="icon" href="../icon.svg?v=30" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="../apple-touch-icon.png?v=30" />
+    <link rel="stylesheet" href="./shelf.css?v=30" />
+    <title>書架 · Library Listen</title>
+  </head>
+  <body>
+    <div id="app" class="paper">
+      <header class="mast">
+        <p class="eyebrow">Library Listen · 預覽</p>
+        <div class="mast-row">
+          <h1>書架</h1>
+          <a class="player-link" href="../index.html">回播放器</a>
+        </div>
+        <p class="lede">紙色、書脊、打開的書。示範頁，不取代現在的首頁。</p>
+        <div class="load-row">
+          <button type="button" id="btn-pick-folder" class="ghost">選擇資料夾</button>
+          <button type="button" id="btn-pick-files" class="ghost">選擇檔案</button>
+          <button type="button" id="btn-drive-load" class="ghost" hidden>
+            Drive
+          </button>
+          <p id="load-hint" class="hint">尚未選庫時顯示示範書。聽／讀會打開現有播放器。</p>
+        </div>
+      </header>
+
+      <div class="toolbar">
+        <div class="view-toggle" role="tablist" aria-label="檢視">
+          <button type="button" data-view="spines" aria-pressed="true">書架</button>
+          <button type="button" data-view="topics" aria-pressed="false">主題卡片</button>
+          <button type="button" data-view="covers" aria-pressed="false">封面牆</button>
+        </div>
+        <div class="search" role="search">
+          <label class="visually-hidden" for="shelf-query">搜尋書名、作者或章節</label>
+          <input
+            id="shelf-query"
+            type="search"
+            placeholder="搜尋書名、作者、章節"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="none"
+            spellcheck="false"
+            enterkeyhint="search"
+          />
+          <button type="button" id="btn-clear-search" class="search-clear hidden" aria-label="清除搜尋">
+            ×
+          </button>
+        </div>
+      </div>
+
+      <div id="series-chips" class="chips" aria-label="系列"></div>
+      <p id="shelf-count" class="count"></p>
+
+      <main id="stage" class="stage" aria-live="polite"></main>
+    </div>
+
+    <div id="book-layer" class="book-layer hidden" hidden>
+      <button type="button" id="btn-close-book" class="close-book" aria-label="放回書架">
+        放回
+      </button>
+      <div id="book-stage" class="book-stage"></div>
+    </div>
+
+    <input
+      id="file-input-dir"
+      type="file"
+      webkitdirectory
+      directory
+      multiple
+      hidden
+    />
+    <input
+      id="file-input-files"
+      type="file"
+      accept="audio/*,image/jpeg,image/png,image/webp,.mp3,.m4a,.m4b,.aac,.epub,.jpg,.jpeg,.png,.webp"
+      multiple
+      hidden
+    />
+    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+    <script type="module" src="./shelf.js?v=30"></script>
+  </body>
+</html>

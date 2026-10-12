@@ -1,4 +1,4 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=29";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=30";
 import {
   AUDIO_EXT,
   EBOOK_OFFLINE_KEY,
@@ -17,7 +17,7 @@ import {
   saveTextProgress,
   shelfBadge,
   textProgress,
-} from "./library.js?v=29";
+} from "./library.js?v=30";
 import {
   DRIVE_UNAUTHORIZED_MESSAGE,
   attachDriveMedia,
@@ -39,7 +39,7 @@ import {
   saveDriveSession,
   signInWithGoogle,
   signOutGoogle,
-} from "./drive.js?v=29";
+} from "./drive.js?v=30";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -47,7 +47,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=29";
+} from "./search.js?v=30";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -62,8 +62,8 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=29";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=29";
+} from "./markers.js?v=30";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=30";
 import {
   applyScrollFraction,
   mimeForPath,
@@ -75,10 +75,11 @@ import {
   spineIndexFromCfi,
   spineLabel,
   zipPath,
-} from "./epub.js?v=29";
+} from "./epub.js?v=30";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
+const OPEN_INTENT_KEY = "librarylisten.open.v1";
 const RATES = [1, 1.25, 1.5];
 const LIBRARY_KEY = "librarylisten.library.v1";
 const DB_NAME = "library-listen";
@@ -2396,9 +2397,35 @@ async function restoreSession() {
   }
 }
 
+function consumeOpenIntent() {
+  const params = new URLSearchParams(location.search);
+  let bookId = params.get("open");
+  let pane = params.get("pane");
+  if (bookId) {
+    params.delete("open");
+    params.delete("pane");
+    const rest = params.toString();
+    history.replaceState({}, "", `${location.pathname}${rest ? `?${rest}` : ""}${location.hash}`);
+  } else {
+    try {
+      const raw = sessionStorage.getItem(OPEN_INTENT_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        bookId = parsed?.bookId;
+        pane = parsed?.pane;
+        sessionStorage.removeItem(OPEN_INTENT_KEY);
+      }
+    } catch {
+      /* private mode / bad JSON */
+    }
+  }
+  if (!bookId || !findBook(bookId)) return;
+  openBook(bookId, { pane: pane === "read" ? "read" : "audio" });
+}
+
 setupCapabilityHint();
 document.getElementById("btn-sort").textContent = `Sort: ${state.sort}`;
 bind();
 render();
 registerSW();
-restoreSession();
+restoreSession().then(() => consumeOpenIntent());
