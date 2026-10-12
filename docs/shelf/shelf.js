@@ -7,8 +7,8 @@ import {
   buildLibrary,
   extOf,
   shelfBadge,
-} from "../library.js?v=35";
-import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=35";
+} from "../library.js?v=36";
+import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=36";
 import {
   OPEN_INTENT_KEY,
   VIEWS,
@@ -20,6 +20,8 @@ import {
   mediaFlags,
   normalizeView,
   openBookPhase,
+  PULL_TIMING,
+  pullTransformVars,
   playerOpenUrl,
   previewProgress,
   seriesChips,
@@ -27,8 +29,8 @@ import {
   seriesMeta,
   shelfStatusLabel,
   volumeNumber,
-} from "./catalog.js?v=35";
-import { coverSvg, spineMetrics, topicMotifSvg } from "./covers.js?v=35";
+} from "./catalog.js?v=36";
+import { coverSvg, spineMetrics, topicMotifSvg } from "./covers.js?v=36";
 
 const VIEW_KEY = "librarylisten.shelfView";
 const SERIES_KEY = "librarylisten.shelfSeries";
@@ -186,11 +188,16 @@ function spineButton(book) {
   btn.style.setProperty("--w", `${metrics.thickness}px`);
   btn.style.setProperty("--h", `${metrics.height}px`);
   btn.style.setProperty("--cloth", series.cloth);
+  btn.style.setProperty("--lean", `${metrics.lean}deg`);
   btn.setAttribute("aria-label", `${book.title} · ${shelfBadge(book)}`);
   btn.innerHTML = `
-    <span class="spine-cloth">
-      <span class="spine-label"></span>
-      <span class="spine-title"></span>
+    <span class="spine-box">
+      <span class="spine-cloth">
+        <span class="spine-label"></span>
+        <span class="spine-title"></span>
+      </span>
+      <span class="spine-fore" aria-hidden="true"></span>
+      <span class="spine-head" aria-hidden="true"></span>
     </span>
     <span class="spine-tip"><strong></strong><span></span></span>
   `;
@@ -267,6 +274,7 @@ function renderCovers(books) {
     const card = document.createElement("button");
     card.type = "button";
     card.className = "cover-card";
+    card.dataset.id = book.id;
     card.innerHTML = `<span class="cover-art"></span><h3></h3><p></p>`;
     card.querySelector(".cover-art").innerHTML = coverSvg(book);
     card.querySelector("h3").textContent = book.title;
@@ -299,8 +307,24 @@ function prefersReducedMotion() {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
+function markDrawnSpine(bookId, drawn) {
+  for (const el of els.stage?.querySelectorAll(".spine, .cover-card") || []) {
+    el.classList.toggle("is-drawn", Boolean(drawn) && el.dataset.id === bookId);
+  }
+}
+
+function originRectForBook(book) {
+  if (!book?.id || !els.stage) return null;
+  const id = book.id;
+  for (const el of els.stage.querySelectorAll(".spine, .cover-card")) {
+    if (el.dataset.id === id) return el.getBoundingClientRect();
+  }
+  return null;
+}
+
 function closeBook() {
   window.clearTimeout(coverTimer);
+  markDrawnSpine(state.selectedId, false);
   state.selectedId = null;
   state.phase = "shelf";
   els.layer.classList.add("hidden");
@@ -311,9 +335,54 @@ function closeBook() {
 function openFromShelf(book, phaseHint) {
   state.selectedId = book.id;
   state.phase = phaseHint || openBookPhase({ reducedMotion: prefersReducedMotion() });
+  markDrawnSpine(book.id, true);
   els.layer.classList.remove("hidden");
   els.layer.hidden = false;
   renderSpread(book, state.phase);
+}
+
+function drawRootClass(phase) {
+  if (phase === "open") return "is-open";
+  if (phase === "flip") return "is-facing is-opening is-flipping is-frozen";
+  if (phase === "pull") return "is-facing is-frozen";
+  return "is-drawing";
+}
+
+function applyPullVars(root, book) {
+  if (!root) return;
+  const rect = originRectForBook(book);
+  const vars = pullTransformVars(rect, {
+    width: window.innerWidth,
+    height: window.innerHeight,
+    yaw: state.view === "covers" ? 8 : 76,
+  });
+  root.style.setProperty("--from-x", vars.fromX);
+  root.style.setProperty("--from-y", vars.fromY);
+  root.style.setProperty("--from-w", vars.fromW);
+  root.style.setProperty("--from-h", vars.fromH);
+  root.style.setProperty("--from-yaw", vars.fromYaw);
+}
+
+function playDraw(root) {
+  window.clearTimeout(coverTimer);
+  if (!root || prefersReducedMotion()) {
+    root?.classList.add("is-open");
+    state.phase = "open";
+    return;
+  }
+  const start = () => {
+    root.classList.remove("is-drawing");
+    root.classList.add("is-facing");
+    coverTimer = window.setTimeout(() => {
+      root.classList.add("is-opening");
+      coverTimer = window.setTimeout(() => {
+        root.classList.add("is-open");
+        root.querySelector(".book-3d")?.setAttribute("aria-hidden", "true");
+        state.phase = "open";
+      }, PULL_TIMING.openMs);
+    }, PULL_TIMING.extractMs);
+  };
+  window.requestAnimationFrame(() => window.requestAnimationFrame(start));
 }
 
 function renderSpread(book, phase = "open") {
@@ -324,10 +393,17 @@ function renderSpread(book, phase = "open") {
   const progress = previewProgress(book);
   const playable = bookHasAudio(book) && book.chapters.some((ch) => ch.file);
   const readable = bookHasEbook(book) && !!book.ebook?.file;
-  const flipClass =
-    phase === "open" ? "is-open" : phase === "flip" ? "is-flipping" : "";
+  const rootClass = drawRootClass(phase);
   els.bookStage.innerHTML = `
-    <div class="flip-root ${flipClass}">
+    <div class="draw-root ${rootClass}">
+      <div class="book-3d" aria-hidden="${phase === "open" ? "true" : "false"}">
+        <div class="book-3d-cover">${coverSvg(book, { width: 240, height: 330 })}</div>
+        <div class="book-3d-spine"><span class="book-3d-spine-title"></span></div>
+        <div class="book-3d-fore" aria-hidden="true"></div>
+        <div class="book-3d-top" aria-hidden="true"></div>
+        <div class="book-3d-bottom" aria-hidden="true"></div>
+        <div class="book-3d-back" aria-hidden="true"></div>
+      </div>
       <article class="spread">
         <section class="page left">
           <div class="bookplate">
@@ -350,11 +426,13 @@ function renderSpread(book, phase = "open") {
           </div>
         </section>
       </article>
-      <div class="flip-cover" aria-hidden="${phase === "open" ? "true" : "false"}">
-        ${coverSvg(book, { width: 240, height: 330 })}
-      </div>
     </div>
   `;
+  const root = els.bookStage.querySelector(".draw-root");
+  root.style.setProperty("--cloth", series.cloth);
+  root.style.setProperty("--accent", series.accent);
+  applyPullVars(root, book);
+  els.bookStage.querySelector(".book-3d-spine-title").textContent = book.title;
   els.bookStage.querySelector(".bookplate-card strong").textContent = series.title;
   els.bookStage.querySelector(".vol").textContent = `編號 ${volume}`;
   els.bookStage.querySelector(".kicker").textContent = `${series.title} · ${flags.badge}`;
@@ -367,16 +445,7 @@ function renderSpread(book, phase = "open") {
   read.disabled = !flags.read;
   listen.addEventListener("click", () => goToPlayer(book, "audio", playable));
   read.addEventListener("click", () => goToPlayer(book, "read", readable));
-  if (phase === "cover") {
-    window.clearTimeout(coverTimer);
-    coverTimer = window.setTimeout(() => {
-      const root = els.bookStage.querySelector(".flip-root");
-      if (!root) return;
-      root.classList.add("is-open");
-      root.querySelector(".flip-cover")?.setAttribute("aria-hidden", "true");
-      state.phase = "open";
-    }, 40);
-  }
+  if (phase === "draw") playDraw(root);
 }
 
 function goToPlayer(book, pane, ready) {
@@ -566,6 +635,14 @@ function applyPreviewParams() {
   return params;
 }
 
+function previewWantsOpen(params) {
+  return (
+    params.get("spread") === "1" ||
+    params.get("flip") === "1" ||
+    params.get("pull") === "1"
+  );
+}
+
 export function isRiceShelfPage() {
   return document.body?.classList.contains("shell-shelf") && !!document.getElementById("stage");
 }
@@ -602,7 +679,7 @@ export function initRiceShelf(options = {}) {
   if (!state.books.length) setLibrary(demoCatalog(), "demo");
   else render();
   const openId = previewParams.get("book");
-  if (openId && findBook(openId) && (previewParams.get("spread") === "1" || previewParams.get("flip") === "1")) {
+  if (openId && findBook(openId) && previewWantsOpen(previewParams)) {
     const book = findBook(openId);
     openFromShelf(
       book,
@@ -610,6 +687,7 @@ export function initRiceShelf(options = {}) {
         reducedMotion: prefersReducedMotion(),
         spread: previewParams.get("spread") === "1",
         flip: previewParams.get("flip") === "1",
+        pull: previewParams.get("pull") === "1",
       })
     );
   }

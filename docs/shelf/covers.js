@@ -15,11 +15,12 @@ export function spineMetrics(book) {
   const h = hashString(book?.id || book?.title || "book");
   const chapters = (book?.chapters || []).length;
   const height = 168 + (h % 58);
-  const thickness = Math.max(18, Math.min(34, 16 + Math.min(chapters, 8) + (h % 6)));
+  const thickness = Math.max(22, Math.min(36, 20 + Math.min(chapters, 8) + (h % 6)));
   return {
     height,
     thickness,
     lift: 8 + (h % 5),
+    lean: (h % 11) - 5,
     hueShift: h % 17,
   };
 }

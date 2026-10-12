@@ -24,12 +24,55 @@ export const VIEW_LABELS = {
 
 export const OPEN_INTENT_KEY = "librarylisten.open.v1";
 
-/** cover → flip → open. Reduced motion and ?spread=1 skip straight to the spread. */
-export function openBookPhase({ reducedMotion = false, spread = false, flip = false } = {}) {
-  if (spread) return "open";
+/**
+ * Own motion — not a Gloss/Nutlope clone.
+ * draw: pull off the plank + yaw spine→cover, then the front board uncases from the RIGHT.
+ * pull: freeze after the yaw (cover faces the camera, still closed).
+ * flip: freeze mid-uncase. open / reduced motion / ?spread=1 skip to the spread.
+ */
+export const PULL_TIMING = {
+  totalMs: 820,
+  extractMs: 420,
+  openMs: 400,
+};
+
+export function openBookPhase({
+  reducedMotion = false,
+  spread = false,
+  flip = false,
+  pull = false,
+} = {}) {
+  if (spread || reducedMotion) return "open";
   if (flip) return "flip";
-  if (reducedMotion) return "open";
-  return "cover";
+  if (pull) return "pull";
+  return "draw";
+}
+
+export function pullOriginFromRect(rect) {
+  if (!rect || !Number.isFinite(rect.width) || rect.width <= 0 || rect.height <= 0) {
+    return { x: 0, y: 0, w: 24, h: 180, valid: false };
+  }
+  return {
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2,
+    w: rect.width,
+    h: rect.height,
+    valid: true,
+  };
+}
+
+export function pullTransformVars(rect, viewport = {}) {
+  const width = Number(viewport.width) > 0 ? Number(viewport.width) : 390;
+  const height = Number(viewport.height) > 0 ? Number(viewport.height) : 844;
+  const origin = pullOriginFromRect(rect);
+  const yaw = Number.isFinite(viewport.yaw) ? viewport.yaw : origin.valid ? 76 : 0;
+  return {
+    fromX: `${Math.round(origin.x - width / 2)}px`,
+    fromY: `${Math.round(origin.y - height / 2)}px`,
+    fromW: `${Math.round(origin.w)}px`,
+    fromH: `${Math.round(origin.h)}px`,
+    fromYaw: `${yaw}deg`,
+  };
 }
 
 /** One accent per series. Invented for this preview — not copied from another product. */
