@@ -61,8 +61,9 @@ export const COVER_MORPH = {
   openMs: 420,
   closeMs: 360,
   easing: "cubic-bezier(0.32, 0.72, 0, 1)",
-  flipMs: 680,
-  flipCloseMs: 560,
+  flipDelayMs: 120,
+  flipMs: 860,
+  flipCloseMs: 640,
   flipEasing: "cubic-bezier(0.45, 0.05, 0.2, 1)",
 };
 
@@ -94,6 +95,11 @@ export function bookFlipFrames(opening = true) {
       { opacity: 0, offset: 0.5 },
       { opacity: 1, offset: 0.5 },
       { opacity: 1, offset: 1 },
+    ],
+    pageShade: [
+      { opacity: 1, offset: 0 },
+      { opacity: 0.85, offset: 0.35 },
+      { opacity: 0, offset: 1 },
     ],
     frontShade: [{ opacity: 0 }, { opacity: 0.35 }],
     backShade: [{ opacity: 0.35 }, { opacity: 0 }],

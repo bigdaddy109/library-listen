@@ -252,8 +252,13 @@ describe("cover wall shared-element zoom", () => {
         if (frame.transform) assert.doesNotMatch(frame.transform, /rotate[XZ]|translate3d|matrix3d|scale/);
       }
     }
-    assert.ok(COVER_MORPH.flipMs >= 500 && COVER_MORPH.flipMs <= 900);
-    assert.ok(COVER_MORPH.openMs + COVER_MORPH.flipMs <= 1200, "zoom + swing stays under 1.2s");
+    assert.ok(COVER_MORPH.flipMs >= 600 && COVER_MORPH.flipMs <= 1000);
+    assert.ok(COVER_MORPH.flipDelayMs > 0 && COVER_MORPH.flipDelayMs <= 200, "a beat between zoom and swing");
+    assert.ok(
+      COVER_MORPH.openMs + COVER_MORPH.flipDelayMs + COVER_MORPH.flipMs <= 1500,
+      "zoom + beat + swing stays under 1.5s"
+    );
+    assert.deepEqual(open.pageShade.map((k) => k.opacity), [1, 0.85, 0]);
   });
 });
 

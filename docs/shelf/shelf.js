@@ -8,8 +8,8 @@ import {
   extOf,
   isBookPlayable,
   shelfBadge,
-} from "../library.js?v=42";
-import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=42";
+} from "../library.js?v=43";
+import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=43";
 import {
   COVER_MORPH,
   bookFlipFrames,
@@ -35,8 +35,8 @@ import {
   seriesMeta,
   shelfStatusLabel,
   volumeNumber,
-} from "./catalog.js?v=42";
-import { coverSvg, spineMetrics, topicMotifSvg } from "./covers.js?v=42";
+} from "./catalog.js?v=43";
+import { coverSvg, spineMetrics, topicMotifSvg } from "./covers.js?v=43";
 
 /* v2: the cover wall became the default; the old key mostly held the old default. */
 const VIEW_KEY = "librarylisten.shelfView.v2";
@@ -411,7 +411,9 @@ function flipBook(opening) {
   const frames = bookFlipFrames(opening);
   const timing = {
     duration: opening ? COVER_MORPH.flipMs : COVER_MORPH.flipCloseMs,
+    delay: opening ? COVER_MORPH.flipDelayMs : 0,
     easing: COVER_MORPH.flipEasing,
+    fill: "backwards",
   };
   const parts = [
     [".cover-leaf", frames.leaf],
@@ -419,6 +421,7 @@ function flipBook(opening) {
     [".page.left", frames.endpaper],
     [".leaf-front", frames.front],
     [".leaf-back", frames.back],
+    [".page.right .page-shade", frames.pageShade],
     [".leaf-front .leaf-shade", frames.frontShade],
     [".leaf-back .leaf-shade", frames.backShade],
   ];
@@ -709,7 +712,7 @@ function renderSpread(book, phase = "open", { cover = false, opened = true } = {
       <article class="spread">
         <section class="page left">${leftPage}
         </section>
-        <section class="page right">
+        <section class="page right">${cover ? '<span class="page-shade" aria-hidden="true"></span>' : ""}
           <p class="kicker"></p>
           <h2></h2>
           <p class="author"></p>
