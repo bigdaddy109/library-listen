@@ -29,9 +29,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Install Playwright Chromium
+      - name: Install Playwright Chromium + WebKit
         run: |
           npm install --no-save @playwright/test
-          npx playwright install --with-deps chromium
-      - name: Jeff Drive listen+ebook fixture
+          npx playwright install --with-deps chromium webkit
+      - name: Acceptance (Jeff Drive fixture; Chromium desktop, WebKit iPhone 390, Chromium iPhone-UA 390; old shell upgrade)
         run: npx playwright test
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
