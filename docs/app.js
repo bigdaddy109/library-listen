@@ -1,4 +1,4 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=39";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=40";
 import {
   AUDIO_EXT,
   EBOOK_OFFLINE_KEY,
@@ -12,6 +12,7 @@ import {
   booksFromLibrarySnapshot,
   buildLibrary,
   emptyLibraryMessage,
+  isBookPlayable,
   isEbookSavedOffline,
   mergeLibraryScans,
   latestProgressKind,
@@ -21,13 +22,14 @@ import {
   saveTextProgress,
   shelfBadge,
   textProgress,
-} from "./library.js?v=39";
+} from "./library.js?v=40";
 import {
   DRIVE_UNAUTHORIZED_MESSAGE,
   attachDriveMedia,
   classifyDriveError,
   clearDriveSession,
   downloadDriveFile,
+  driveMediaUrl,
   fetchDriveUser,
   getAccessToken,
   hydrateDriveCovers,
@@ -45,7 +47,7 @@ import {
   signInWithGoogle,
   signOutGoogle,
   sourceDialogActions,
-} from "./drive.js?v=39";
+} from "./drive.js?v=40";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -53,7 +55,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=39";
+} from "./search.js?v=40";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -68,8 +70,8 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=39";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=39";
+} from "./markers.js?v=40";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=40";
 import {
   applyScrollFraction,
   mimeForPath,
@@ -81,14 +83,14 @@ import {
   spineIndexFromCfi,
   spineLabel,
   zipPath,
-} from "./epub.js?v=39";
-import { demoCatalog } from "./shelf/catalog.js?v=39";
+} from "./epub.js?v=40";
+import { demoCatalog } from "./shelf/catalog.js?v=40";
 import {
   closeRiceBook,
   initRiceShelf,
   isRiceShelfPage,
   setRiceShelfLibrary,
-} from "./shelf/shelf.js?v=39";
+} from "./shelf/shelf.js?v=40";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -229,9 +231,21 @@ function isBookOffline(book) {
   return chapters.length > 0 || bookHasEbook(book);
 }
 
-function isBookPlayable(book) {
-  const chapters = book.chapters || [];
-  return chapters.length > 0 && chapters.every((ch) => !!ch.file);
+function ensureChapterPlayableUrl(chapter) {
+  if (chapter?.url) return chapter.url;
+  const driveId = chapter?.driveId || chapter?.file?.driveId;
+  if (!driveId) return null;
+  if (!chapter.file) {
+    chapter.file = restoreDriveFile({
+      driveId,
+      name: String(chapter.id || "audio").split("#")[0],
+      size: chapter.size,
+      type: chapter.type,
+    });
+  }
+  chapter.driveId = driveId;
+  chapter.url = driveMediaUrl(driveId);
+  return chapter.url;
 }
 
 function saveLibrarySnapshot() {
@@ -1855,7 +1869,7 @@ async function playChapter(bookId, chapterIndex, { resumeIfSame = false, forceSt
   if (!book) return;
   const chapter = book.chapters[chapterIndex];
   if (!chapter) return;
-  if (!chapter.url) {
+  if (!ensureChapterPlayableUrl(chapter)) {
     loadLibrary("reconnect");
     return;
   }
@@ -2580,7 +2594,7 @@ if (isRiceShelfPage()) {
   initRiceShelf({
     onOpenBook(book, pane) {
       openBook(book.id, { pane });
-      if (pane === "audio" && bookHasAudio(book) && book.chapters?.some((ch) => ch.file || ch.url)) {
+      if (pane === "audio" && isBookPlayable(book)) {
         const p = loadProgress()[book.id];
         const idx = Math.max(
           0,

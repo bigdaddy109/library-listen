@@ -20,6 +20,12 @@ DerivedData/
 /Library/
 **/*.m4b.bak
 
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
 # Editor / cloud leftovers
 /node_modules/
 /.next/

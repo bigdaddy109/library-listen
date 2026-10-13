@@ -4,6 +4,8 @@ Offline audiobook player for a shared `Library` folder. Google Drive (GIS + driv
 
 Read this before changing code. Keep [README.md](README.md), [SHARE-library-listen.md](SHARE-library-listen.md), and [INSTALL-zh.md](INSTALL-zh.md) as the user-facing docs — do not replace them with this file.
 
+**Do not merge or report live** until [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md) is fully checked (play + read on every series, 390px iPhone UA and desktop, stale SW, screenshots).
+
 **iOS / native is paused (Jeff, 2026-10-11).** The SwiftUI tree in `LibraryListen/` remains in the repo for history. Do not change it, do not add XCTest, do not run `./start.sh` as part of web work, and do not keep Swift metadata tables in sync unless he un-pauses native. Active work is the web player only. See [fix_plan.md](fix_plan.md).
 
 ## What it is
@@ -86,7 +88,7 @@ Do not run `./start.sh`, `scripts/generate-fixtures.sh`, or `xcodebuild` for cur
 
 ## Tests (as of 2026-10-12)
 
-Local `node --test` covers scan/title/progress (`test/library.test.js`), PWA cache lockstep (`test/pwa-cache.test.mjs`), shelf search, m4b markers, save-prompt gating, Drive helpers, and EPUB parse. There is **no** GitHub Actions workflow and **no** paid CI. Do not add either.
+Local `node --test` covers scan/title/progress (`test/library.test.js`), PWA cache lockstep (`test/pwa-cache.test.mjs`), shelf search, m4b markers, save-prompt gating, Drive helpers, EPUB parse, and the Jeff Drive listen+ebook fixture. GitHub Actions (`.github/workflows/acceptance.yml`) runs `node --test` plus Playwright against that fixture. That is not a paid device farm. Do not add App Store / XCTest CI. Live merge still requires [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md).
 
 Recorded on a Linux agent against `main` @ `b0e0b6c` (after Drive OAuth #23):
 
@@ -98,13 +100,14 @@ Recorded on a Linux agent against `main` @ `b0e0b6c` (after Drive OAuth #23):
 | `docs/manifest.webmanifest` JSON | **Pass** |
 | Service-worker asset list vs files on disk | **Pass** (CACHE / `?v=` / ASSETS kept in lockstep by `test/pwa-cache.test.mjs`) |
 | Immune concept image files vs `immune-cards.js` | **Pass** |
-| `xcodebuild` / XCTest / `.github/workflows` | **Absent.** Native is paused; do not add a Swift test target or a paid device farm. |
+| `xcodebuild` / XCTest | **Absent.** Native is paused; do not add a Swift test target or a paid device farm. |
+| `.github/workflows/acceptance.yml` | **Present.** `node --test` + Playwright fixture only. |
 
-Do not invent a paid CI service. Keep tests local (`node --test` for extracted JS helpers).
+Do not invent a paid CI service. Keep the workflow free and fixture-only.
 
 ## Cache-bust (web)
 
-The PWA cache version is a hand-maintained integer. Today it is **35**. When you change `docs/index.html`, `docs/app.js`, `docs/styles.css`, `docs/drive.js`, `docs/immune-cards.js`, icons, or concept images, bump **all** of:
+The PWA cache version is a hand-maintained integer. Today it is **40**. When you change `docs/index.html`, `docs/app.js`, `docs/styles.css`, `docs/drive.js`, `docs/immune-cards.js`, icons, or concept images, bump **all** of:
 
 1. `?v=N` on every asset link in [`docs/index.html`](docs/index.html)
 2. `import … from "./….js?v=N"` in [`docs/app.js`](docs/app.js) (including `drive.js`)

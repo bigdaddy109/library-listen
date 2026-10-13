@@ -1,0 +1,35 @@
+name: acceptance
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  node-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Syntax + unit tests
+        run: |
+          node --check docs/app.js
+          node --check docs/drive.js
+          node --check docs/immune-cards.js
+          node --check docs/sw.js
+          node --test
+
+  playwright-fixture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save @playwright/test
+          npx playwright install --with-deps chromium
+      - name: Jeff Drive listen+ebook fixture
+        run: npx playwright test

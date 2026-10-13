@@ -6,10 +6,13 @@ import {
   bookHasDriveMedia,
   booksFromLibrarySnapshot,
   buildLibrary,
+  chapterIsPlayable,
   emptyLibraryMessage,
+  isBookPlayable,
   isChapterPartName,
   knownCollectionFolders,
   listenFileBookFolder,
+  mergeBookRecords,
   mergeLibraryScans,
   chapterProgress,
   loadProgress,
@@ -30,6 +33,11 @@ import {
   EBOOK_OFFLINE_KEY,
   isEbookSavedOffline,
 } from "../docs/library.js";
+import {
+  ebookOnlyPage,
+  jeffDriveLibraryEntries,
+  jeffLibraryRootEbookEntries,
+} from "./acceptance-fixture.mjs";
 
 /** In-memory file for scan tests. Not a real audiobook. */
 function file(name, size = 2048) {
@@ -301,18 +309,63 @@ describe("buildLibrary scan", () => {
     assert.equal(books[0].title, "Solo Title");
   });
 
-  it("does not cross-pair Library-root ebooks with a collection listen folder", () => {
+  it("pairs Library-root ebooks/<book>.epub onto the collection listen book", () => {
     const books = buildLibrary([
       entry("Library/Immune/listen/Immune-Part01.mp3"),
       entry("Library/ebooks/immune.epub"),
     ]);
     assert.deepEqual(
-      books.map((b) => [b.id, shelfBadge(b)]),
-      [
-        ["immune/immune", "Audio"],
-        ["library/immune", "Read"],
-      ]
+      books.map((b) => [b.id, shelfBadge(b), b.ebook?.name, b.chapters.length]),
+      [["immune/immune", "Both", "immune.epub", 1]]
     );
+  });
+});
+
+describe("Jeff Drive fixture: every series has listen/ + ebooks/", () => {
+  it("builds playable Both books for 上學不容易, 門羅-WhatIf, Immune, Thing Explainer", () => {
+    const books = buildLibrary(jeffDriveLibraryEntries());
+    const expected = [
+      "immune/immune",
+      "munroe/how-to",
+      "munroe/what-if-1",
+      "munroe/what-if-2",
+      "school/middle-school-01-first-day",
+      "school/middle-school-02-get-me",
+      "school/middle-school-03-homework",
+      "school/middle-school-04-summer",
+      "thing-explainer/thing-explainer",
+    ];
+    assert.deepEqual(books.map((b) => b.id).sort(), expected);
+    for (const book of books) {
+      assert.equal(shelfBadge(book), "Both", book.id);
+      assert.equal(isBookPlayable(book), true, book.id);
+      assert.ok(book.ebook?.file, book.id);
+      assert.ok(book.chapters.every((ch) => chapterIsPlayable(ch)), book.id);
+    }
+  });
+
+  it("pairs Library/ebooks/<slug>.epub to collection listen/ audio", () => {
+    const books = buildLibrary(jeffLibraryRootEbookEntries());
+    assert.equal(books.length, 4);
+    for (const book of books) {
+      assert.equal(shelfBadge(book), "Both", book.id);
+      assert.equal(isBookPlayable(book), true, book.id);
+    }
+    assert.ok(books.every((b) => b.id !== "library/immune"));
+  });
+});
+
+describe("isBookPlayable streams Drive stubs without a saved Blob", () => {
+  it("treats driveId-only chapters as playable", () => {
+    const stub = {
+      id: "munroe/what-if-1",
+      chapters: [{ id: "01.mp3", title: "Introduction", driveId: "d-wi1-01", file: null, url: null }],
+      ebook: { id: "what-if-1.epub", name: "what-if-1.epub", driveId: "d-wi1-epub", file: null },
+    };
+    assert.equal(chapterIsPlayable(stub.chapters[0]), true);
+    assert.equal(isBookPlayable(stub), true);
+    assert.equal(isBookPlayable({ id: "x", chapters: [{ id: "01.mp3", file: null }] }), false);
+    assert.equal(isBookPlayable({ id: "x", chapters: [] }), false);
   });
 });
 
@@ -572,6 +625,40 @@ describe("snapshot restore does not hide the last full scan", () => {
     assert.ok(merged.some((b) => b.id === "munroe/what-if-1"));
     assert.ok(merged.some((b) => b.id === "school/middle-school-01-first-day"));
     assert.ok(merged.some((b) => b.id === "thing-explainer/thing-explainer"));
+  });
+
+  it("does not let an ebooks/ page replace listen/ audio on the same id", () => {
+    const full = buildLibrary(jeffDriveLibraryEntries());
+    const ebookPage = buildLibrary(ebookOnlyPage());
+    const whatIfEbook = ebookPage.find((b) => b.id === "munroe/what-if-1");
+    assert.ok(whatIfEbook);
+    assert.equal(whatIfEbook.chapters.length, 0);
+    const merged = mergeLibraryScans(ebookPage, full);
+    const whatIf = merged.find((b) => b.id === "munroe/what-if-1");
+    assert.ok(whatIf.chapters.length >= 2);
+    assert.equal(isBookPlayable(whatIf), true);
+    assert.ok(whatIf.ebook?.name);
+    assert.equal(merged.filter((b) => isBookPlayable(b)).length, full.length);
+  });
+
+  it("mergeBookRecords keeps previous Drive chapters when the new row is Read-only", () => {
+    const audio = {
+      id: "school/middle-school-02-get-me",
+      chapters: [{ id: "01.mp3", driveId: "d-ms02", file: { name: "01.mp3", driveId: "d-ms02" } }],
+      ebook: null,
+      source: "drive",
+    };
+    const readOnly = {
+      id: "school/middle-school-02-get-me",
+      chapters: [],
+      ebook: { id: "Middle School 02 Get Me.epub", name: "Middle School 02 Get Me.epub", driveId: "d-ms02-epub" },
+      source: "drive",
+    };
+    const merged = mergeBookRecords(readOnly, audio);
+    assert.equal(merged.chapters.length, 1);
+    assert.equal(merged.chapters[0].driveId, "d-ms02");
+    assert.equal(merged.ebook?.driveId, "d-ms02-epub");
+    assert.equal(isBookPlayable(merged), true);
   });
 });
 

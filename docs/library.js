@@ -145,6 +145,18 @@ export function pairingKey(collectionFolder, bookFolder) {
   return `${collectionFolder}::${slug(bookFolder)}`;
 }
 
+/** Exact collection sibling first; then any ebooks/<same-slug> (Library root or other). */
+function ebookGroupForListen(ebookGroups, collectionFolder, bookFolder) {
+  const exactKey = pairingKey(collectionFolder, bookFolder);
+  const exact = ebookGroups.get(exactKey);
+  if (exact) return { key: exactKey, group: exact };
+  const want = slug(bookFolder);
+  for (const [key, group] of ebookGroups) {
+    if (slug(group.bookFolder) === want) return { key, group };
+  }
+  return { key: null, group: null };
+}
+
 /** Immune-style chapter files share one listen/ folder. Whole-book m4b names do not. */
 export function isChapterPartName(value) {
   const base = String(value || "")
@@ -178,18 +190,123 @@ export function bookHasDriveMedia(book) {
   return (book.chapters || []).some((ch) => ch.driveId || ch.file?.driveId);
 }
 
+/** A listen chapter can stream from a Blob, a Drive id, or an already-attached URL. */
+export function chapterIsPlayable(ch) {
+  if (!ch) return false;
+  if (ch.url) return true;
+  if (ch.driveId || ch.file?.driveId) return true;
+  return !!ch.file;
+}
+
+/**
+ * Books that came from listen/ stay playable when Drive can stream, not only
+ * when a Blob was already saved on-device.
+ */
+export function isBookPlayable(book) {
+  const chapters = book?.chapters || [];
+  return chapters.length > 0 && chapters.some(chapterIsPlayable);
+}
+
+function chapterMergeKey(ch) {
+  return String(ch?.id || "");
+}
+
+function preferPlayableChapter(scanned, previous) {
+  if (!scanned) return previous || null;
+  if (!previous) return scanned;
+  const scannedOk = chapterIsPlayable(scanned);
+  const previousOk = chapterIsPlayable(previous);
+  if (previousOk && !scannedOk) return { ...scanned, ...previous, ...keepChapterMedia(previous, scanned) };
+  return { ...previous, ...scanned, ...keepChapterMedia(scanned, previous) };
+}
+
+function keepChapterMedia(primary, fallback) {
+  return {
+    file: primary?.file || fallback?.file || null,
+    driveId: primary?.driveId || primary?.file?.driveId || fallback?.driveId || fallback?.file?.driveId || null,
+    url: primary?.url || fallback?.url || null,
+    size: primary?.size || primary?.file?.size || fallback?.size || fallback?.file?.size || null,
+    type: primary?.type || primary?.file?.type || fallback?.type || fallback?.file?.type || null,
+  };
+}
+
+function preferEbook(scanned, previous) {
+  if (scanned?.file || scanned?.driveId || scanned?.id || scanned?.name) {
+    return {
+      ...previous,
+      ...scanned,
+      file: scanned.file || previous?.file || null,
+      driveId: scanned.driveId || scanned.file?.driveId || previous?.driveId || previous?.file?.driveId || null,
+    };
+  }
+  return previous || scanned || null;
+}
+
+/** Same shelf id: keep listen/ audio when a later ebooks/ page would drop it. */
+export function mergeBookRecords(scanned, previous) {
+  if (!scanned) return previous || null;
+  if (!previous) return scanned;
+  const scannedChapters = Array.isArray(scanned.chapters) ? scanned.chapters : [];
+  const previousChapters = Array.isArray(previous.chapters) ? previous.chapters : [];
+  const coverDriveId =
+    scanned.coverDriveId ||
+    scanned.coverFile?.driveId ||
+    previous.coverDriveId ||
+    previous.coverFile?.driveId ||
+    null;
+  if (!scannedChapters.length && previousChapters.length) {
+    return {
+      ...previous,
+      ...scanned,
+      chapters: previousChapters,
+      ebook: preferEbook(scanned.ebook, previous.ebook),
+      coverFile: scanned.coverFile || previous.coverFile || null,
+      coverDriveId,
+      source: scanned.source || previous.source || null,
+    };
+  }
+  const previousById = new Map(previousChapters.map((ch) => [chapterMergeKey(ch), ch]));
+  const merged = scannedChapters.map((ch) => preferPlayableChapter(ch, previousById.get(chapterMergeKey(ch))));
+  const seen = new Set(merged.map((ch) => chapterMergeKey(ch)));
+  for (const ch of previousChapters) {
+    if (seen.has(chapterMergeKey(ch))) continue;
+    merged.push(ch);
+    seen.add(chapterMergeKey(ch));
+  }
+  return {
+    ...previous,
+    ...scanned,
+    chapters: merged,
+    ebook: preferEbook(scanned.ebook, previous.ebook),
+    coverFile: scanned.coverFile || previous.coverFile || null,
+    coverDriveId,
+    source: scanned.source || previous.source || null,
+  };
+}
+
+export function bookFolderSlug(book) {
+  return slug(book?.folder || String(book?.id || "").split("/")[1] || "");
+}
+
 /**
  * Union a fresh scan with the previous shelf. A partial Drive page or a
  * phone that only rehydrated recently-played blobs must not hide the rest.
+ * Same-id rows merge so an ebooks/ page cannot replace listen/ audio.
  */
 export function mergeLibraryScans(scanned, previous, { keep } = {}) {
   const list = Array.isArray(scanned) ? scanned : [];
   const prior = Array.isArray(previous) ? previous : [];
-  const ids = new Set(list.map((b) => b?.id).filter(Boolean));
+  const priorById = new Map(prior.filter((book) => book?.id).map((book) => [book.id, book]));
+  const out = list.map((book) => {
+    if (!book?.id) return book;
+    const older = priorById.get(book.id);
+    return older ? mergeBookRecords(book, older) : book;
+  });
+  const ids = new Set(out.map((b) => b?.id).filter(Boolean));
   const shouldKeep =
     typeof keep === "function" ? keep : (book) => bookHasDriveMedia(book);
   const kept = prior.filter((book) => book?.id && !ids.has(book.id) && shouldKeep(book));
-  return [...list, ...kept];
+  return [...out, ...kept];
 }
 
 /**
@@ -547,10 +664,15 @@ export function buildLibrary(entries) {
   for (const group of listenGroups.values()) {
     const audioFiles = group.files.filter((f) => AUDIO_EXT.has(extOf(f.file.name))).sort(nameSort);
     if (!audioFiles.length) continue;
-    const key = pairingKey(group.collectionFolder, group.bookFolder);
-    const ebookGroup = ebookGroups.get(key);
+    const exactKey = pairingKey(group.collectionFolder, group.bookFolder);
+    const { key: ebookKey, group: ebookGroup } = ebookGroupForListen(
+      ebookGroups,
+      group.collectionFolder,
+      group.bookFolder
+    );
     const ebook = ebookRecord(pickEbookEntry(ebookGroup?.files || []));
-    if (ebook) pairedEbookKeys.add(key);
+    if (ebook && ebookKey) pairedEbookKeys.add(ebookKey);
+    if (ebook) pairedEbookKeys.add(exactKey);
     books.push(
       makeBook({
         collectionFolder: group.collectionFolder,
@@ -566,6 +688,14 @@ export function buildLibrary(entries) {
     if (pairedEbookKeys.has(key)) continue;
     const ebook = ebookRecord(pickEbookEntry(group.files));
     if (!ebook) continue;
+    const want = slug(group.bookFolder);
+    const listenBook = books.find((b) => bookFolderSlug(b) === want);
+    if (listenBook) {
+      if (!bookHasEbook(listenBook)) listenBook.ebook = ebook;
+      if (!listenBook.coverFile) listenBook.coverFile = pickCoverFile(group.files);
+      pairedEbookKeys.add(key);
+      continue;
+    }
     books.push(
       makeBook({
         collectionFolder: group.collectionFolder,
