@@ -66,7 +66,8 @@ GitHub Actions runs `node --test` plus Playwright on every push and PR, in three
 - every series on the shelf, no `listen/` book Read-only (Drive `driveId` stubs, no saved audio Blob, `/drive-media/` stream);
 - for **each** of the four series: tap cover → book opens → 聽 → `audio.currentTime` advances → 讀 → EPUB renders;
 - leftover 2-book `librarylisten.library.v1` → full shelf;
-- **old shell upgrade**: `e2e/server.mjs` serves the previous release (`library-listen-shell-v(N-1)`, `?v=N-1`) while the cookie `ll-shell=old` is set; the test installs that service worker and cache, drops the cookie, and requires the cache to become only `vN`, the app to load `?v=N`, and the full shelf to return. In Chromium it also plays through the SW `/drive-media/` proxy (WebKit can't stub requests made by a service worker);
+- **old shell upgrade on launch**: `e2e/server.mjs` serves the previous release (`library-listen-shell-v(N-1)`, `?v=N-1`) after `GET /__test/shell/old`; the test installs that service worker and cache plus a 2-book snapshot, switches the server back, and requires the cache to become only `vN`, the app to load `?v=N`, and the full shelf to return. In Chromium it also plays through the SW `/drive-media/` proxy (WebKit can't stub requests made by a service worker);
+- **old shell upgrade on return to foreground** (Chromium desktop, WebKit 390): a page left open on `v(N-1)` with a chapter playing does **not** reload when it comes back to the foreground; after pause it reloads into `vN` (header, cache, `?v=`);
 - cover-wall open/close motion (transform/opacity only), reduced motion, `/classic/`.
 
 A green CI run is required but does **not** replace section 4: after merge, run the checklist on the live site and attach live screenshots.

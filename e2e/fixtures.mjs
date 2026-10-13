@@ -34,11 +34,17 @@ export const STALE_SNAPSHOT = [
  * Every test runs in a persistent profile: WebKit's ephemeral contexts refuse
  * Blobs in IndexedDB, and the saved-EPUB path is part of what we accept.
  */
+export async function setShell(mode) {
+  const res = await fetch(`${ORIGIN}/__test/shell/${mode}`);
+  if (!res.ok) throw new Error(`shell switch ${mode} failed: ${res.status}`);
+}
+
 export const test = base.extend({
   context: async (
     { playwright, browserName, viewport, userAgent, isMobile, hasTouch, deviceScaleFactor, serviceWorkers },
     use
   ) => {
+    await setShell("current");
     const dir = mkdtempSync(join(tmpdir(), "ll-e2e-"));
     const context = await playwright[browserName].launchPersistentContext(dir, {
       viewport,
@@ -50,6 +56,7 @@ export const test = base.extend({
     });
     await use(context);
     await context.close();
+    await setShell("current");
     rmSync(dir, { recursive: true, force: true });
   },
   page: async ({ context }, use) => {
@@ -164,7 +171,42 @@ export async function shellState(page) {
     appScript: document.querySelector('script[type="module"]')?.getAttribute("src") || "",
     view: document.querySelector(".view-toggle [aria-pressed=true]")?.dataset.view || "",
     covers: document.querySelectorAll(".cover-card[data-id]").length,
+    header: document.getElementById("app-version")?.textContent || "",
+    origin: performance.timeOrigin,
+    playing: (() => {
+      const audio = document.getElementById("audio");
+      return Boolean(audio && !audio.paused && !audio.ended);
+    })(),
   }));
+}
+
+/** Saved-on-device audio for one book, so it plays without the Drive proxy. */
+export async function seedOfflineAudio(page, bookId) {
+  const book = SNAPSHOT.find((b) => b.id === bookId);
+  await page.evaluate(
+    async ({ bookId, chapterIds, b64 }) => {
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      await new Promise((resolve, reject) => {
+        const req = indexedDB.open("library-listen", 1);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains("offline")) db.createObjectStore("offline");
+          if (!db.objectStoreNames.contains("handles")) db.createObjectStore("handles");
+        };
+        req.onerror = () => reject(req.error);
+        req.onsuccess = () => {
+          const tx = req.result.transaction("offline", "readwrite");
+          for (const chapterId of chapterIds) {
+            const blob = new Blob([bytes], { type: "audio/mpeg" });
+            tx.objectStore("offline").put({ bookId, chapterId, blob }, [bookId, chapterId]);
+          }
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        };
+      });
+    },
+    { bookId, chapterIds: book.chapters.map((c) => c.id), b64: MP3.toString("base64") }
+  );
 }
 
 /** shellState that tolerates the app's own controllerchange reload. */
@@ -178,4 +220,22 @@ export async function settledShellState(page) {
     }
   }
   return shellState(page);
+}
+
+/** Wait until the page is SW-controlled and has stopped reloading itself. */
+export async function waitShellSettled(page) {
+  let last = null;
+  await expect
+    .poll(
+      async () => {
+        const s = await settledShellState(page);
+        const same = last && s.controller && last.origin === s.origin;
+        last = s;
+        if (!same) await page.waitForTimeout(1_000);
+        return Boolean(same);
+      },
+      { timeout: 30_000 }
+    )
+    .toBe(true);
+  return last;
 }

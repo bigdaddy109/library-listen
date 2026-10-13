@@ -1,8 +1,9 @@
 /**
  * Static server for the Playwright acceptance suite. Serves docs/ like Pages.
- * With the cookie `ll-shell=old` it serves the same tree as the previous shell
- * release (cache name and ?v= one lower), so a test can install the "old"
- * service worker, drop the cookie, and watch the real upgrade happen.
+ * GET /__test/shell/old switches every response to the previous shell release
+ * (cache name and ?v= one lower) until GET /__test/shell/current. A global
+ * switch, not a cookie: WebKit sends no cookies on service-worker update
+ * checks. The suite runs one test at a time, and each test resets it.
  */
 import { createServer } from "node:http";
 import { readFileSync, statSync } from "node:fs";
@@ -36,9 +37,7 @@ export function asOldShell(text, version) {
     .replaceAll(`?v=${version}`, `?v=${old}`);
 }
 
-function wantsOld(req) {
-  return /(?:^|;\s*)ll-shell=old(?:;|$)/.test(req.headers.cookie || "");
-}
+let mode = "current";
 
 function resolveFile(urlPath) {
   const path = decodeURIComponent(urlPath.split("?")[0]);
@@ -55,6 +54,13 @@ function resolveFile(urlPath) {
 
 const version = shellVersion();
 createServer((req, res) => {
+  const control = (req.url || "").match(/^\/__test\/shell\/(old|current)$/);
+  if (control) {
+    mode = control[1];
+    res.writeHead(200, { "Content-Type": "text/plain", "Cache-Control": "no-store" });
+    res.end(mode);
+    return;
+  }
   const file = resolveFile(req.url || "/");
   if (!file) {
     res.writeHead(404, { "Content-Type": "text/plain" });
@@ -63,7 +69,7 @@ createServer((req, res) => {
   }
   const ext = extname(file);
   let body = readFileSync(file);
-  const old = wantsOld(req) && REWRITE.has(ext);
+  const old = mode === "old" && REWRITE.has(ext);
   if (old) body = Buffer.from(asOldShell(body.toString("utf8"), version));
   res.writeHead(200, {
     "Content-Type": TYPES[ext] || "application/octet-stream",
@@ -72,5 +78,5 @@ createServer((req, res) => {
   });
   res.end(req.method === "HEAD" ? undefined : body);
 }).listen(PORT, "127.0.0.1", () => {
-  console.log(`docs/ on http://127.0.0.1:${PORT} (shell v${version}; cookie ll-shell=old → v${version - 1})`);
+  console.log(`docs/ on http://127.0.0.1:${PORT} (shell v${version}; /__test/shell/old → v${version - 1})`);
 });
