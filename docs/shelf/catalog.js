@@ -14,12 +14,14 @@ import {
   trimQuery,
 } from "../search.js";
 
-export const VIEWS = ["spines", "topics", "covers"];
+export const VIEWS = ["covers", "spines", "topics"];
+
+export const DEFAULT_VIEW = "covers";
 
 export const VIEW_LABELS = {
+  covers: "封面牆",
   spines: "書架",
   topics: "主題卡片",
-  covers: "封面牆",
 };
 
 export const OPEN_INTENT_KEY = "librarylisten.open.v1";
@@ -48,6 +50,47 @@ export function openBookPhase({
   if (flip) return "flip";
   if (pull) return "pull";
   return "draw";
+}
+
+/**
+ * Cover wall → spread: a 2D shared-element zoom. Transform + opacity only, no 3D.
+ * View Transitions API when present, FLIP otherwise, nothing under reduced motion.
+ */
+export const COVER_MORPH = {
+  openMs: 460,
+  closeMs: 400,
+  easing: "cubic-bezier(0.32, 0.72, 0, 1)",
+};
+
+export function coverTransitionMode({ reducedMotion = false, viewTransitions = false } = {}) {
+  if (reducedMotion) return "none";
+  return viewTransitions ? "view-transition" : "flip";
+}
+
+function usableRect(rect) {
+  return (
+    !!rect &&
+    [rect.left, rect.top, rect.width, rect.height].every((n) => Number.isFinite(n)) &&
+    rect.width > 0 &&
+    rect.height > 0
+  );
+}
+
+/** Transform (origin 0 0) that draws an element laid out at `to` over the `from` box. */
+export function coverMorphTransform(from, to) {
+  if (!usableRect(from) || !usableRect(to)) return null;
+  const x = from.left - to.left;
+  const y = from.top - to.top;
+  const sx = from.width / to.width;
+  const sy = from.height / to.height;
+  const r = (n) => Math.round(n * 1000) / 1000;
+  return {
+    x: r(x),
+    y: r(y),
+    sx: r(sx),
+    sy: r(sy),
+    css: `translate(${r(x)}px, ${r(y)}px) scale(${r(sx)}, ${r(sy)})`,
+  };
 }
 
 export function pullOriginFromRect(rect) {
@@ -157,7 +200,7 @@ export function seriesMeta(bookOrId) {
 }
 
 export function normalizeView(view) {
-  return VIEWS.includes(view) ? view : "spines";
+  return VIEWS.includes(view) ? view : DEFAULT_VIEW;
 }
 
 function demoBook({

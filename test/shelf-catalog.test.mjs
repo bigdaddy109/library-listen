@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  COVER_MORPH,
+  DEFAULT_VIEW,
   OPEN_INTENT_KEY,
   SERIES,
   SERIES_ORDER,
   VIEWS,
+  coverMorphTransform,
+  coverTransitionMode,
   demoCatalog,
   emptyShelfMessage,
   filterShelf,
@@ -75,8 +79,11 @@ describe("series + views", () => {
   });
 
   it("normalizes views and chips", () => {
-    assert.deepEqual(VIEWS, ["spines", "topics", "covers"]);
-    assert.equal(normalizeView("map"), "spines");
+    assert.deepEqual(VIEWS, ["covers", "spines", "topics"]);
+    assert.equal(DEFAULT_VIEW, "covers");
+    assert.equal(normalizeView("map"), "covers");
+    assert.equal(normalizeView(null), "covers");
+    assert.equal(normalizeView("spines"), "spines");
     const chips = seriesChips(demoCatalog());
     assert.equal(chips[0].id, "all");
     assert.equal(chips.find((c) => c.id === "school").count, 3);
@@ -196,6 +203,35 @@ describe("pull transform", () => {
     );
     assert.equal(far.fromY, "802px");
     assert.equal(pullTransformVars(null, { width: 390, height: 844 }).fromX, "0px");
+  });
+});
+
+describe("cover wall shared-element zoom", () => {
+  it("uses View Transitions, falls back to FLIP, and stops for reduced motion", () => {
+    assert.equal(coverTransitionMode({ viewTransitions: true }), "view-transition");
+    assert.equal(coverTransitionMode({ viewTransitions: false }), "flip");
+    assert.equal(coverTransitionMode({}), "flip");
+    assert.equal(coverTransitionMode({ reducedMotion: true, viewTransitions: true }), "none");
+    assert.equal(coverTransitionMode({ reducedMotion: true }), "none");
+  });
+
+  it("maps a 390px cover card onto the spread cover with translate + scale only", () => {
+    const card = { left: 13, top: 400, width: 160, height: 220 };
+    const spread = { left: 103, top: 120, width: 184, height: 253 };
+    const t = coverMorphTransform(card, spread);
+    assert.equal(t.x, -90);
+    assert.equal(t.y, 280);
+    assert.equal(t.sx, 0.87);
+    assert.equal(t.sy, 0.87);
+    assert.equal(t.css, "translate(-90px, 280px) scale(0.87, 0.87)");
+    assert.doesNotMatch(t.css, /rotate|3d|perspective|matrix3d/);
+    assert.equal(coverMorphTransform(null, spread), null);
+    assert.equal(coverMorphTransform(card, { ...spread, width: 0 }), null);
+  });
+
+  it("keeps the zoom quick", () => {
+    assert.ok(COVER_MORPH.openMs >= 300 && COVER_MORPH.openMs <= 600);
+    assert.ok(COVER_MORPH.closeMs <= COVER_MORPH.openMs);
   });
 });
 

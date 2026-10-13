@@ -90,6 +90,49 @@ test.describe("Jeff Drive fixture plays every series without saved audio Blobs",
     await expect.poll(async () => page.locator(".spine[data-id], .cover-card[data-id]").count()).toBe(9);
   });
 
+  test("cover wall is the default and a cover zooms into the spread and back", async ({ page }) => {
+    await page.goto(`${ORIGIN}/`);
+    await expect(page.locator('.view-toggle [data-view="covers"]')).toHaveAttribute("aria-pressed", "true");
+    await expect.poll(async () => page.locator(".cover-card[data-id]").count()).toBe(9);
+    const id = "munroe/what-if-1";
+    const card = page.locator(`.cover-card[data-id="${id}"]`);
+    await card.scrollIntoViewIfNeeded();
+    const animated = page.evaluate(async () => {
+      const props = new Set();
+      const t0 = performance.now();
+      while (performance.now() - t0 < 600) {
+        for (const a of document.getAnimations()) {
+          for (const frame of a.effect?.getKeyframes?.() || []) {
+            for (const key of Object.keys(frame)) props.add(key);
+          }
+        }
+        await new Promise((r) => requestAnimationFrame(r));
+      }
+      return [...props].filter((k) => !["offset", "computedOffset", "easing", "composite"].includes(k));
+    });
+    await card.click();
+    const props = await animated;
+    expect(props).toContain("transform");
+    expect(props.every((p) => p === "transform" || p === "opacity")).toBe(true);
+    await expect(page.locator("#book-layer .draw-root.is-cover .spread-cover svg")).toBeVisible();
+    await expect(page.locator("#book-layer .book-3d")).toHaveCount(0);
+    await expect(page.locator("#book-layer .page.right h2")).toHaveText("What If?");
+    await page.locator("#btn-close-book").click();
+    await expect(page.locator("#book-layer")).toBeHidden();
+    await expect(page.locator(`.cover-card[data-id="${id}"] .cover-art svg`)).toHaveCSS("opacity", "1");
+    await expect.poll(async () => page.evaluate(() => document.documentElement.className)).not.toMatch(/cover-morph/);
+  });
+
+  test("reduced motion opens and closes the cover spread instantly", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto(`${ORIGIN}/`);
+    await page.locator('.cover-card[data-id="immune/immune"]').click();
+    await expect(page.locator("#book-layer .spread-cover svg")).toBeVisible();
+    expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#book-layer")).toBeHidden();
+  });
+
   for (const book of SERIES_BOOKS) {
     test(`${book.series}: play advances currentTime and Read opens`, async ({ page }) => {
       await page.goto(`${ORIGIN}/?open=${encodeURIComponent(book.id)}&pane=audio`);
