@@ -1,4 +1,4 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=42";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=43";
 import {
   AUDIO_EXT,
   EBOOK_OFFLINE_KEY,
@@ -22,7 +22,7 @@ import {
   saveTextProgress,
   shelfBadge,
   textProgress,
-} from "./library.js?v=42";
+} from "./library.js?v=43";
 import {
   DRIVE_UNAUTHORIZED_MESSAGE,
   attachDriveMedia,
@@ -47,7 +47,7 @@ import {
   signInWithGoogle,
   signOutGoogle,
   sourceDialogActions,
-} from "./drive.js?v=42";
+} from "./drive.js?v=43";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -55,7 +55,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=42";
+} from "./search.js?v=43";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -70,8 +70,8 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=42";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=42";
+} from "./markers.js?v=43";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=43";
 import {
   applyScrollFraction,
   mimeForPath,
@@ -83,14 +83,14 @@ import {
   spineIndexFromCfi,
   spineLabel,
   zipPath,
-} from "./epub.js?v=42";
-import { demoCatalog } from "./shelf/catalog.js?v=42";
+} from "./epub.js?v=43";
+import { demoCatalog } from "./shelf/catalog.js?v=43";
 import {
   closeRiceBook,
   initRiceShelf,
   isRiceShelfPage,
   setRiceShelfLibrary,
-} from "./shelf/shelf.js?v=42";
+} from "./shelf/shelf.js?v=43";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -182,6 +182,8 @@ let offerSaveBanner = false;
 const savePrompted = new Set();
 let toastTimer = null;
 let swReloading = false;
+const SW_CHECK_MS = 60_000;
+const APP_VERSION = new URL(import.meta.url).searchParams.get("v") || "";
 
 let dbPromise = null;
 function openDb() {
@@ -2498,23 +2500,48 @@ function bind() {
   applyPlaybackRate();
 }
 
+/** Reload into a new shell, but never cut off a chapter that is playing. */
+function reloadWhenIdle() {
+  if (!audio.paused && !audio.ended) {
+    audio.addEventListener("pause", () => location.reload(), { once: true });
+    return;
+  }
+  location.reload();
+}
+
 function registerSW() {
   if (!("serviceWorker" in navigator)) return;
   const hadController = Boolean(navigator.serviceWorker.controller);
+  let lastCheck = 0;
+  /* A home-screen app resumed from the background never navigates, so it
+     would keep an old shell forever without these foreground checks. */
+  const checkForUpdate = () => {
+    const now = Date.now();
+    if (now - lastCheck < SW_CHECK_MS) return;
+    lastCheck = now;
+    navigator.serviceWorker
+      .getRegistration()
+      .then((reg) => reg?.update())
+      .catch(() => {});
+  };
   navigator.serviceWorker
     .register(new URL("./sw.js", import.meta.url).href)
     .then((reg) => {
-      try {
-        reg.update();
-      } catch {
-        /* ignore */
-      }
+      lastCheck = Date.now();
+      return reg.update();
     })
     .catch(() => {});
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") checkForUpdate();
+  });
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) checkForUpdate();
+  });
+  window.addEventListener("focus", checkForUpdate);
   navigator.serviceWorker.addEventListener("controllerchange", () => {
     if (!hadController || swReloading) return;
     swReloading = true;
-    location.reload();
+    reloadWhenIdle();
   });
   navigator.serviceWorker.addEventListener("message", (event) => {
     if (event.data?.type !== DRIVE_UNAUTHORIZED_MESSAGE) return;
@@ -2588,6 +2615,8 @@ function consumeOpenIntent() {
 }
 
 setupCapabilityHint();
+const versionEl = document.getElementById("app-version");
+if (versionEl && APP_VERSION) versionEl.textContent = `v${APP_VERSION}`;
 const sortBtn = document.getElementById("btn-sort");
 if (sortBtn) sortBtn.textContent = `Sort: ${state.sort}`;
 if (isRiceShelfPage()) {
