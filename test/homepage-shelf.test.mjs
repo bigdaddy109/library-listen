@@ -54,20 +54,23 @@ describe("homepage is the rice-paper shelf", () => {
     assert.match(classic, /href="\.\.\/"/);
     assert.match(home, /href="\.\/classic\/index\.html"/);
     assert.match(shelf, /location\.replace\("\.\.\/"\)/);
-    assert.match(sw, /library-listen-shell-v38/);
+    assert.match(sw, /library-listen-shell-v39/);
     assert.match(sw, /"\.\/classic\/index\.html"/);
   });
 
   it("defines the 3D draw and honors reduced motion in shelf CSS", () => {
     const css = readFileSync(join(ROOT, "docs/shelf/shelf.css"), "utf8");
     assert.match(css, /\.book-3d\b/);
+    assert.match(css, /\.book-3d-scene\b/);
     assert.match(css, /\.draw-root\b/);
     assert.match(css, /transform-origin:\s*100% 50%/);
     assert.match(css, /prefers-reduced-motion:\s*reduce/);
     assert.match(css, /\.book-3d,/);
     assert.match(css, /\.spine-fore/);
     assert.match(css, /html\.no-book-3d/);
-    assert.match(css, /-webkit-touch-callout/);
+    assert.doesNotMatch(css, /-webkit-touch-callout/);
+    assert.doesNotMatch(css, /\.draw-root\s*\{[^}]*transform-style:\s*preserve-3d/);
+    assert.match(css, /\.book-3d-scene\s*\{[^}]*perspective:/);
     assert.match(home, /id="btn-google"/);
     assert.match(home, /id="source-sheet"/);
     assert.match(home, /href="\.\/classic\/index\.html"/);
@@ -82,6 +85,6 @@ describe("homepage is the rice-paper shelf", () => {
     assert.match(install[0], /skipWaiting/);
     assert.match(activate[0], /waitUntil/);
     assert.match(activate[0], /clients\.claim/);
-    assert.match(sw, /library-listen-shell-v38/);
+    assert.match(sw, /library-listen-shell-v39/);
   });
 });

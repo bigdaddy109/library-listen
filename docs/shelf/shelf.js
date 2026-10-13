@@ -7,8 +7,8 @@ import {
   buildLibrary,
   extOf,
   shelfBadge,
-} from "../library.js?v=38";
-import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=38";
+} from "../library.js?v=39";
+import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=39";
 import {
   OPEN_INTENT_KEY,
   VIEWS,
@@ -19,7 +19,6 @@ import {
   groupBySeries,
   mediaFlags,
   normalizeView,
-  isWebKitBook3dUnsafe,
   openBookPhase,
   PULL_TIMING,
   pullTransformVars,
@@ -30,8 +29,8 @@ import {
   seriesMeta,
   shelfStatusLabel,
   volumeNumber,
-} from "./catalog.js?v=38";
-import { coverSvg, spineMetrics, topicMotifSvg } from "./covers.js?v=38";
+} from "./catalog.js?v=39";
+import { coverSvg, spineMetrics, topicMotifSvg } from "./covers.js?v=39";
 
 const VIEW_KEY = "librarylisten.shelfView";
 const SERIES_KEY = "librarylisten.shelfSeries";
@@ -309,18 +308,12 @@ function prefersReducedMotion() {
 }
 
 function book3dDisabled() {
-  const nav = typeof navigator !== "undefined" ? navigator : null;
-  return (
-    prefersReducedMotion() ||
-    isWebKitBook3dUnsafe(nav?.userAgent || "", {
-      touchMacPad: nav?.platform === "MacIntel" && nav.maxTouchPoints > 1,
-    })
-  );
+  return prefersReducedMotion();
 }
 
 function applyNoBook3dClass() {
-  if (typeof document === "undefined" || !book3dDisabled()) return;
-  document.documentElement.classList.add("no-book-3d");
+  if (typeof document === "undefined") return;
+  document.documentElement.classList.toggle("no-book-3d", book3dDisabled());
 }
 
 function markDrawnSpine(bookId, drawn) {
@@ -369,9 +362,12 @@ function drawRootClass(phase) {
 function applyPullVars(root, book) {
   if (!root) return;
   const rect = originRectForBook(book);
+  const scene = root.querySelector(".book-3d-scene")?.getBoundingClientRect();
   const vars = pullTransformVars(rect, {
-    width: window.innerWidth,
-    height: window.innerHeight,
+    width: scene?.width || window.innerWidth,
+    height: scene?.height || window.innerHeight,
+    left: scene?.left || 0,
+    top: scene?.top || 0,
     yaw: state.view === "covers" ? 8 : 76,
   });
   root.style.setProperty("--from-x", vars.fromX);
@@ -414,13 +410,15 @@ function renderSpread(book, phase = "open") {
   const rootClass = drawRootClass(phase);
   els.bookStage.innerHTML = `
     <div class="draw-root ${rootClass}">
-      <div class="book-3d" aria-hidden="${phase === "open" ? "true" : "false"}">
-        <div class="book-3d-cover">${coverSvg(book, { width: 240, height: 330 })}</div>
-        <div class="book-3d-spine"><span class="book-3d-spine-title"></span></div>
-        <div class="book-3d-fore" aria-hidden="true"></div>
-        <div class="book-3d-top" aria-hidden="true"></div>
-        <div class="book-3d-bottom" aria-hidden="true"></div>
-        <div class="book-3d-back" aria-hidden="true"></div>
+      <div class="book-3d-scene" aria-hidden="true">
+        <div class="book-3d" aria-hidden="${phase === "open" ? "true" : "false"}">
+          <div class="book-3d-cover">${coverSvg(book, { width: 240, height: 330 })}</div>
+          <div class="book-3d-spine"><span class="book-3d-spine-title"></span></div>
+          <div class="book-3d-fore" aria-hidden="true"></div>
+          <div class="book-3d-top" aria-hidden="true"></div>
+          <div class="book-3d-bottom" aria-hidden="true"></div>
+          <div class="book-3d-back" aria-hidden="true"></div>
+        </div>
       </div>
       <article class="spread">
         <section class="page left">

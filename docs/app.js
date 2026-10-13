@@ -1,4 +1,4 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=38";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=39";
 import {
   AUDIO_EXT,
   EBOOK_OFFLINE_KEY,
@@ -21,7 +21,7 @@ import {
   saveTextProgress,
   shelfBadge,
   textProgress,
-} from "./library.js?v=38";
+} from "./library.js?v=39";
 import {
   DRIVE_UNAUTHORIZED_MESSAGE,
   attachDriveMedia,
@@ -45,7 +45,7 @@ import {
   signInWithGoogle,
   signOutGoogle,
   sourceDialogActions,
-} from "./drive.js?v=38";
+} from "./drive.js?v=39";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -53,7 +53,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=38";
+} from "./search.js?v=39";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -68,8 +68,8 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=38";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=38";
+} from "./markers.js?v=39";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=39";
 import {
   applyScrollFraction,
   mimeForPath,
@@ -81,14 +81,14 @@ import {
   spineIndexFromCfi,
   spineLabel,
   zipPath,
-} from "./epub.js?v=38";
-import { demoCatalog } from "./shelf/catalog.js?v=38";
+} from "./epub.js?v=39";
+import { demoCatalog } from "./shelf/catalog.js?v=39";
 import {
   closeRiceBook,
   initRiceShelf,
   isRiceShelfPage,
   setRiceShelfLibrary,
-} from "./shelf/shelf.js?v=38";
+} from "./shelf/shelf.js?v=39";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";

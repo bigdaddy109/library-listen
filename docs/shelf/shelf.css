@@ -502,6 +502,13 @@ h1 {
     calc(0.8rem + var(--safe-r))
     calc(1rem + var(--safe-b))
     calc(0.8rem + var(--safe-l));
+  overflow: visible;
+  background: transparent;
+}
+
+.book-layer:has(.is-opening),
+.book-layer:has(.is-open),
+.book-layer:has(.is-flipping) {
   background:
     radial-gradient(70% 55% at 50% 40%, rgba(255, 250, 240, 0.35), transparent 64%),
     rgba(243, 238, 228, 0.92);
@@ -515,35 +522,50 @@ h1 {
   position: absolute;
   top: calc(0.7rem + var(--safe-t));
   right: calc(0.7rem + var(--safe-r));
+  z-index: 6;
   background: var(--paper);
 }
 
 .book-stage {
   width: min(52rem, 100%);
+  overflow: visible;
 }
 
 .draw-root {
   position: relative;
   min-height: min(28rem, 72vh);
-  perspective: 1400px;
-  transform-style: preserve-3d;
+  overflow: visible;
+}
+
+.book-3d-scene {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  overflow: visible;
+  perspective: min(1400px, 240vw);
+  perspective-origin: 50% 46%;
+  -webkit-perspective: min(1400px, 240vw);
+  -webkit-perspective-origin: 50% 46%;
 }
 
 .book-3d {
   --thick: 22px;
   position: absolute;
-  left: 50%;
-  top: 50%;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  margin: auto;
   width: min(15rem, 68vw);
   height: min(20.6rem, 58vh);
   transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
   transform:
-    translate(-50%, -50%)
     translate3d(var(--from-x, 0px), var(--from-y, 0px), 0)
     rotateY(var(--from-yaw, 76deg))
     rotateX(8deg)
     scale(0.26);
-  will-change: transform;
   z-index: 4;
   pointer-events: none;
 }
@@ -551,8 +573,7 @@ h1 {
 .draw-root.is-facing .book-3d,
 .draw-root.is-opening .book-3d {
   transform:
-    translate(-50%, -50%)
-    translate3d(0, 0, 72px)
+    translate3d(0, 0, 48px)
     rotateY(0deg)
     rotateX(0deg)
     scale(1);
@@ -561,8 +582,7 @@ h1 {
 
 .draw-root.is-open .book-3d {
   transform:
-    translate(-50%, -50%)
-    translate3d(0, 0, 72px)
+    translate3d(0, 0, 48px)
     rotateY(0deg)
     scale(1);
   opacity: 0;
@@ -579,7 +599,6 @@ h1 {
 .book-3d-bottom,
 .book-3d-back {
   position: absolute;
-  backface-visibility: hidden;
 }
 
 .book-3d-cover {
@@ -588,6 +607,8 @@ h1 {
   transform: translateZ(calc(var(--thick) / 2)) rotateY(0deg);
   background: var(--paper);
   box-shadow: 0 14px 28px rgba(28, 25, 20, 0.18);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 .book-3d-cover svg {
@@ -703,7 +724,8 @@ h1 {
   transition: none;
 }
 
-.draw-root.is-open:not(.is-opening) .book-3d {
+.draw-root.is-open:not(.is-opening) .book-3d,
+.draw-root.is-open:not(.is-opening) .book-3d-scene {
   display: none;
 }
 
@@ -853,6 +875,20 @@ h1 {
   }
 }
 
+@media (max-width: 430px) {
+  .book-3d-scene {
+    perspective: min(1100px, 280vw);
+    perspective-origin: 50% 42%;
+    -webkit-perspective: min(1100px, 280vw);
+    -webkit-perspective-origin: 50% 42%;
+  }
+
+  .book-3d {
+    width: min(12.25rem, 70vw);
+    height: min(16.8rem, 46vh);
+  }
+}
+
 @media (max-width: 400px) {
   .paper {
     padding-left: calc(0.8rem + var(--safe-l));
@@ -912,6 +948,7 @@ h1 {
   }
 
   .draw-root,
+  .book-3d-scene,
   .plank,
   .spine,
   .spine-box {
@@ -919,6 +956,7 @@ h1 {
     transform-style: flat;
   }
 
+  .book-3d-scene,
   .book-3d,
   .spine-fore,
   .spine-head {
@@ -935,12 +973,14 @@ h1 {
   }
 }
 
-/* WebKit/iOS: skip the 3D pull-out. Spines stay 2D cloth; open is instant. */
-html.no-book-3d .draw-root {
+/* Reduced motion (and html.no-book-3d): instant 2D spread. iPhone keeps 3D. */
+html.no-book-3d .draw-root,
+html.no-book-3d .book-3d-scene {
   perspective: none;
   transform-style: flat;
 }
 
+html.no-book-3d .book-3d-scene,
 html.no-book-3d .book-3d {
   display: none !important;
 }
@@ -953,27 +993,6 @@ html.no-book-3d .draw-root.is-flipping .spread,
 html.no-book-3d .draw-root.is-open .spread {
   opacity: 1;
   transform: none;
-}
-
-@supports (-webkit-touch-callout: none) {
-  .draw-root {
-    perspective: none;
-    transform-style: flat;
-  }
-
-  .book-3d {
-    display: none !important;
-  }
-
-  .draw-root .spread,
-  .draw-root.is-drawing .spread,
-  .draw-root.is-facing .spread,
-  .draw-root.is-opening .spread,
-  .draw-root.is-flipping .spread,
-  .draw-root.is-open .spread {
-    opacity: 1;
-    transform: none;
-  }
 }
 
 /* Homepage is the rice-paper shelf; player chrome keeps the dark tokens. */
