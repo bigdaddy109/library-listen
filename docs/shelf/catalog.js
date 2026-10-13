@@ -53,14 +53,54 @@ export function openBookPhase({
 }
 
 /**
- * Cover wall → spread: a 2D shared-element zoom. Transform + opacity only, no 3D.
- * View Transitions API when present, FLIP otherwise, nothing under reduced motion.
+ * Cover wall → book: a 2D shared-element zoom onto the closed book, then the
+ * front board swings open on its spine (rotateY, the only 3D). Closing runs it
+ * backwards. Transform + opacity only; reduced motion switches instantly.
  */
 export const COVER_MORPH = {
-  openMs: 460,
-  closeMs: 400,
+  openMs: 420,
+  closeMs: 360,
   easing: "cubic-bezier(0.32, 0.72, 0, 1)",
+  flipMs: 680,
+  flipCloseMs: 560,
+  flipEasing: "cubic-bezier(0.45, 0.05, 0.2, 1)",
 };
+
+function reverseFrames(frames) {
+  return [...frames]
+    .reverse()
+    .map((f) => (f.offset == null ? f : { ...f, offset: 1 - f.offset }));
+}
+
+/**
+ * Keyframes for the board swing; `opening: false` is the exact reverse.
+ * The faces swap by opacity at offset 0.5, which (same duration + easing as
+ * the leaf) is the edge-on rotateY(-90deg) moment, so engines that flatten 3D
+ * and ignore backface-visibility still never show the mirrored side.
+ */
+export function bookFlipFrames(opening = true) {
+  const frames = {
+    leaf: [{ transform: "rotateY(0deg)" }, { transform: "rotateY(-180deg)" }],
+    spread: [{ transform: "translateX(-25%)" }, { transform: "translateX(0)" }],
+    endpaper: [{ opacity: 0 }, { opacity: 1 }],
+    front: [
+      { opacity: 1, offset: 0 },
+      { opacity: 1, offset: 0.5 },
+      { opacity: 0, offset: 0.5 },
+      { opacity: 0, offset: 1 },
+    ],
+    back: [
+      { opacity: 0, offset: 0 },
+      { opacity: 0, offset: 0.5 },
+      { opacity: 1, offset: 0.5 },
+      { opacity: 1, offset: 1 },
+    ],
+    frontShade: [{ opacity: 0 }, { opacity: 0.35 }],
+    backShade: [{ opacity: 0.35 }, { opacity: 0 }],
+  };
+  if (opening) return frames;
+  return Object.fromEntries(Object.entries(frames).map(([k, f]) => [k, reverseFrames(f)]));
+}
 
 export function coverTransitionMode({ reducedMotion = false, viewTransitions = false } = {}) {
   if (reducedMotion) return "none";

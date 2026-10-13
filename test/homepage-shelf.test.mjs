@@ -54,7 +54,7 @@ describe("homepage is the rice-paper shelf", () => {
     assert.match(classic, /href="\.\.\/"/);
     assert.match(home, /href="\.\/classic\/index\.html"/);
     assert.match(shelf, /location\.replace\("\.\.\/"\)/);
-    assert.match(sw, /library-listen-shell-v41/);
+    assert.match(sw, /library-listen-shell-v42/);
     assert.match(sw, /"\.\/classic\/index\.html"/);
   });
 
@@ -87,9 +87,27 @@ describe("homepage is the rice-paper shelf", () => {
     assert.match(js, /viewTransitionName/);
     assert.match(css, /::view-transition-group\(book-cover\)/);
     assert.match(css, /\.cover-ghost\b/);
-    const zoom = css.slice(css.indexOf("/* Cover wall → spread"), css.indexOf("\n.book-layer {"));
-    assert.ok(zoom.length > 100, "zoom block present");
+    const zoomAt = css.indexOf("/* Cover wall → book");
+    const flipAt = css.indexOf("/* Book flip:");
+    assert.ok(zoomAt > 0 && flipAt > zoomAt, "zoom block then flip block");
+    const zoom = css.slice(zoomAt, flipAt);
     assert.doesNotMatch(zoom, /perspective|rotate[XYZ3]|preserve-3d|translate3d/);
+  });
+
+  it("opens the book by swinging the front board on its spine (rotateY only)", () => {
+    const css = readFileSync(join(ROOT, "docs/shelf/shelf.css"), "utf8");
+    const js = readFileSync(join(ROOT, "docs/shelf/shelf.js"), "utf8");
+    const flip = css.slice(css.indexOf("/* Book flip:"), css.indexOf("\n.book-layer {"));
+    assert.match(flip, /\.cover-leaf\s*\{[^}]*transform-origin:\s*0 50%/);
+    assert.match(flip, /\.cover-leaf\s*\{[^}]*transform-style:\s*preserve-3d/);
+    assert.match(flip, /is-opened \.cover-leaf\s*\{[^}]*rotateY\(-180deg\)/);
+    assert.match(flip, /-webkit-backface-visibility:\s*hidden/);
+    assert.match(flip, /\.leaf-back\s*\{[^}]*rotateY\(180deg\)/);
+    assert.match(flip, /perspective:/);
+    assert.doesNotMatch(flip, /rotate[XZ]\(|translate3d|matrix3d|transition:/);
+    assert.match(js, /class="cover-leaf"/);
+    assert.match(js, /leaf-front/);
+    assert.match(js, /leaf-back/);
   });
 
   it("activates the new shell with skipWaiting and clients.claim inside waitUntil", () => {
@@ -101,6 +119,6 @@ describe("homepage is the rice-paper shelf", () => {
     assert.match(install[0], /skipWaiting/);
     assert.match(activate[0], /waitUntil/);
     assert.match(activate[0], /clients\.claim/);
-    assert.match(sw, /library-listen-shell-v41/);
+    assert.match(sw, /library-listen-shell-v42/);
   });
 });

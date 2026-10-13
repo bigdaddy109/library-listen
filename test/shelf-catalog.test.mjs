@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   COVER_MORPH,
   DEFAULT_VIEW,
+  bookFlipFrames,
   OPEN_INTENT_KEY,
   SERIES,
   SERIES_ORDER,
@@ -232,6 +233,27 @@ describe("cover wall shared-element zoom", () => {
   it("keeps the zoom quick", () => {
     assert.ok(COVER_MORPH.openMs >= 300 && COVER_MORPH.openMs <= 600);
     assert.ok(COVER_MORPH.closeMs <= COVER_MORPH.openMs);
+  });
+
+  it("swings the board on rotateY only, and closing is the exact reverse", () => {
+    const open = bookFlipFrames(true);
+    const shut = bookFlipFrames(false);
+    assert.deepEqual(open.leaf, [{ transform: "rotateY(0deg)" }, { transform: "rotateY(-180deg)" }]);
+    assert.deepEqual(open.spread, [{ transform: "translateX(-25%)" }, { transform: "translateX(0)" }]);
+    const mirror = (f) => [...f].reverse().map((k) => (k.offset == null ? k : { ...k, offset: 1 - k.offset }));
+    assert.deepEqual(open.front.map((k) => [k.offset, k.opacity]), [[0, 1], [0.5, 1], [0.5, 0], [1, 0]]);
+    assert.deepEqual(open.back.map((k) => [k.offset, k.opacity]), [[0, 0], [0.5, 0], [0.5, 1], [1, 1]]);
+    for (const key of Object.keys(open)) {
+      assert.deepEqual(shut[key], mirror(open[key]), key);
+      const offsets = shut[key].map((k) => k.offset).filter((o) => o != null);
+      assert.deepEqual(offsets, [...offsets].sort((a, b) => a - b), `${key} offsets ascend`);
+      for (const frame of open[key]) {
+        for (const prop of Object.keys(frame)) assert.ok(["transform", "opacity", "offset"].includes(prop), prop);
+        if (frame.transform) assert.doesNotMatch(frame.transform, /rotate[XZ]|translate3d|matrix3d|scale/);
+      }
+    }
+    assert.ok(COVER_MORPH.flipMs >= 500 && COVER_MORPH.flipMs <= 900);
+    assert.ok(COVER_MORPH.openMs + COVER_MORPH.flipMs <= 1200, "zoom + swing stays under 1.2s");
   });
 });
 
