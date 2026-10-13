@@ -92,6 +92,12 @@ html.book-open .paper {
   color: var(--muted);
 }
 
+.app-version {
+  margin-left: 0.35rem;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+
 .eyebrow {
   margin: 0 0 0.35rem;
   font-size: 0.78rem;
@@ -596,8 +602,8 @@ html.cover-morph-exit::view-transition-old(book-cover) {
   background: none;
   border-radius: 0;
   box-shadow: none;
-  perspective: 2200px;
-  -webkit-perspective: 2200px;
+  perspective: 1300px;
+  -webkit-perspective: 1300px;
 }
 
 .draw-root.is-cover.is-closed .spread {
@@ -616,11 +622,37 @@ html.cover-morph-exit::view-transition-old(book-cover) {
   border-radius: 0.7rem 0.12rem 0.12rem 0.7rem;
 }
 
+/* Inner page: cream paper, a gutter shadow at the spine, and the page block's
+   edges on the fore-edge so the closed book reads as a book, not a card. */
 .draw-root.is-cover .page.right {
+  position: relative;
   display: flex;
   flex-direction: column;
   justify-content: center;
   border-radius: 0.12rem 0.7rem 0.7rem 0.12rem;
+  background:
+    linear-gradient(90deg, rgba(28, 25, 20, 0.1), rgba(28, 25, 20, 0.02) 9%, transparent 16%),
+    #f8f0e1;
+  box-shadow:
+    1px 0 0 #e8dcc6,
+    2px 1px 0 #f8f0e1,
+    3px 1px 0 #e3d6be,
+    4px 2px 0 #f6eedd,
+    5px 2px 0 #ddcfb5,
+    0 18px 40px rgba(28, 25, 20, 0.16);
+}
+
+.page-shade {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(28, 25, 20, 0.38), rgba(28, 25, 20, 0.12) 45%, transparent 80%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.draw-root.is-cover.is-closed .page-shade {
+  opacity: 1;
 }
 
 .draw-root.is-cover.is-closed .page.left {
@@ -710,6 +742,16 @@ html.cover-morph-exit::view-transition-old(book-cover) {
 }
 
 @media (max-width: 640px) {
+  .draw-root.is-cover .spread {
+    perspective: 900px;
+    -webkit-perspective: 900px;
+  }
+
+  body.shell-shelf .book-layer:has(.is-cover) {
+    padding-left: calc(0.4rem + var(--safe-l));
+    padding-right: calc(0.4rem + var(--safe-r));
+  }
+
   .draw-root.is-cover .page {
     padding: 0.85rem 0.75rem;
   }

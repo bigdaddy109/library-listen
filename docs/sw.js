@@ -1,5 +1,5 @@
 /* Shell-only cache. Audiobook files are never cached here. */
-const CACHE = "library-listen-shell-v42";
+const CACHE = "library-listen-shell-v43";
 const DRIVE_MEDIA_PREFIX = "/drive-media/";
 const DRIVE_TOKEN_MESSAGE = "librarylisten.drive-token";
 const DRIVE_UNAUTHORIZED_MESSAGE = "librarylisten.drive-unauthorized";
@@ -15,24 +15,24 @@ self.addEventListener("message", (event) => {
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=42",
-  "./app.js?v=42",
-  "./library.js?v=42",
-  "./drive.js?v=42",
-  "./search.js?v=42",
-  "./markers.js?v=42",
-  "./save-prompt.js?v=42",
-  "./epub.js?v=42",
-  "./immune-cards.js?v=42",
+  "./styles.css?v=43",
+  "./app.js?v=43",
+  "./library.js?v=43",
+  "./drive.js?v=43",
+  "./search.js?v=43",
+  "./markers.js?v=43",
+  "./save-prompt.js?v=43",
+  "./epub.js?v=43",
+  "./immune-cards.js?v=43",
   "./manifest.webmanifest",
-  "./icon.svg?v=42",
-  "./apple-touch-icon.png?v=42",
+  "./icon.svg?v=43",
+  "./apple-touch-icon.png?v=43",
   "./classic/index.html",
   "./shelf/index.html",
-  "./shelf/shelf.css?v=42",
-  "./shelf/shelf.js?v=42",
-  "./shelf/catalog.js?v=42",
-  "./shelf/covers.js?v=42",
+  "./shelf/shelf.css?v=43",
+  "./shelf/shelf.js?v=43",
+  "./shelf/catalog.js?v=43",
+  "./shelf/covers.js?v=43",
   "./concepts/immune/skin.jpg",
   "./concepts/immune/bacteria.jpg",
   "./concepts/immune/inflammation.jpg",
@@ -122,10 +122,11 @@ self.addEventListener("fetch", (event) => {
   }
   if (url.origin !== self.location.origin) return;
 
-  // Always network-first for HTML so logo/UI updates show up.
+  // Network-first for HTML, revalidated past the HTTP cache (Pages sends
+  // max-age=600), so a new release is picked up on the next launch.
   if (request.mode === "navigate" || url.pathname.endsWith(".html") || url.pathname.endsWith("/")) {
     event.respondWith(
-      fetch(request)
+      fetch(request, { cache: "no-cache" })
         .then((response) => {
           const copy = response.clone();
           caches.open(CACHE).then((cache) => cache.put(request, copy));

@@ -54,7 +54,7 @@ describe("homepage is the rice-paper shelf", () => {
     assert.match(classic, /href="\.\.\/"/);
     assert.match(home, /href="\.\/classic\/index\.html"/);
     assert.match(shelf, /location\.replace\("\.\.\/"\)/);
-    assert.match(sw, /library-listen-shell-v42/);
+    assert.match(sw, /library-listen-shell-v43/);
     assert.match(sw, /"\.\/classic\/index\.html"/);
   });
 
@@ -110,6 +110,28 @@ describe("homepage is the rice-paper shelf", () => {
     assert.match(js, /leaf-back/);
   });
 
+  it("picks up a new release: HTML revalidated, update checks on resume, no reload mid-chapter", () => {
+    const app = readFileSync(join(ROOT, "docs/app.js"), "utf8");
+    const fetchHtml = sw.slice(sw.indexOf('request.mode === "navigate"'));
+    assert.match(fetchHtml.slice(0, 400), /fetch\(request, \{ cache: "no-cache" \}\)/);
+    assert.match(app, /addEventListener\("visibilitychange"[\s\S]{0,120}checkForUpdate\(\)/);
+    assert.match(app, /addEventListener\("pageshow"/);
+    assert.match(app, /reg\?\.update\(\)/);
+    assert.match(app, /function reloadWhenIdle\(\)[\s\S]{0,160}audio\.paused/);
+    assert.match(app, /controllerchange[\s\S]{0,120}reloadWhenIdle\(\)/);
+    assert.match(home, /id="app-version"/);
+    assert.match(app, /searchParams\.get\("v"\)/);
+  });
+
+  it("dresses the open book as paper: lifting shadow, gutter, page-block edges", () => {
+    const css = readFileSync(join(ROOT, "docs/shelf/shelf.css"), "utf8");
+    const js = readFileSync(join(ROOT, "docs/shelf/shelf.js"), "utf8");
+    assert.match(js, /class="page-shade"/);
+    assert.match(js, /\.page\.right \.page-shade/);
+    assert.match(css, /\.draw-root\.is-cover\.is-closed \.page-shade\s*\{[^}]*opacity:\s*1/);
+    assert.match(css, /\.draw-root\.is-cover \.page\.right\s*\{[^}]*#f8f0e1/);
+  });
+
   it("activates the new shell with skipWaiting and clients.claim inside waitUntil", () => {
     const install = sw.match(/addEventListener\("install",[\s\S]*?\n\}\);/);
     const activate = sw.match(/addEventListener\("activate",[\s\S]*?\n\}\);/);
@@ -119,6 +141,6 @@ describe("homepage is the rice-paper shelf", () => {
     assert.match(install[0], /skipWaiting/);
     assert.match(activate[0], /waitUntil/);
     assert.match(activate[0], /clients\.claim/);
-    assert.match(sw, /library-listen-shell-v42/);
+    assert.match(sw, /library-listen-shell-v43/);
   });
 });
