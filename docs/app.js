@@ -1,4 +1,4 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=43";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=44";
 import {
   AUDIO_EXT,
   EBOOK_OFFLINE_KEY,
@@ -22,7 +22,7 @@ import {
   saveTextProgress,
   shelfBadge,
   textProgress,
-} from "./library.js?v=43";
+} from "./library.js?v=44";
 import {
   DRIVE_UNAUTHORIZED_MESSAGE,
   attachDriveMedia,
@@ -47,7 +47,7 @@ import {
   signInWithGoogle,
   signOutGoogle,
   sourceDialogActions,
-} from "./drive.js?v=43";
+} from "./drive.js?v=44";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -55,7 +55,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=43";
+} from "./search.js?v=44";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -70,8 +70,8 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=43";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=43";
+} from "./markers.js?v=44";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=44";
 import {
   applyScrollFraction,
   mimeForPath,
@@ -83,14 +83,16 @@ import {
   spineIndexFromCfi,
   spineLabel,
   zipPath,
-} from "./epub.js?v=43";
-import { demoCatalog } from "./shelf/catalog.js?v=43";
+} from "./epub.js?v=44";
+import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=44";
+import { coverSvg } from "./shelf/covers.js?v=44";
+import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=44";
 import {
   closeRiceBook,
   initRiceShelf,
   isRiceShelfPage,
   setRiceShelfLibrary,
-} from "./shelf/shelf.js?v=43";
+} from "./shelf/shelf.js?v=44";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -1821,6 +1823,32 @@ function updatePositionState() {
   }
 }
 
+/** bookId → PNG blob URL (or the pending render) of the generated cover. */
+const generatedArtwork = new Map();
+
+function generatedArtworkFor(book) {
+  const known = generatedArtwork.get(book.id);
+  if (known !== undefined) return known;
+  const pending = svgCoverToPngUrl(coverSvg(book), { background: seriesMeta(book).paper })
+    .catch(() => "")
+    .then((url) => {
+      generatedArtwork.set(book.id, url);
+      if (url && playback?.bookId === book.id) updateMediaSession();
+      return url;
+    });
+  generatedArtwork.set(book.id, pending);
+  return pending;
+}
+
+function artworkFor(book) {
+  if (book.coverUrl) {
+    return [{ src: book.coverUrl, sizes: "512x512", type: coverMime(book.coverFile) }];
+  }
+  const generated = generatedArtworkFor(book);
+  if (typeof generated !== "string" || !generated) return null;
+  return [{ src: generated, sizes: `${ARTWORK_SIZE}x${ARTWORK_SIZE}`, type: "image/png" }];
+}
+
 function updateMediaSession() {
   if (!("mediaSession" in navigator) || !playback) return;
   const book = findBook(playback.bookId);
@@ -1835,22 +1863,8 @@ function updateMediaSession() {
     navigator.mediaSession.metadata = metadata;
   };
   try {
-    if (book.coverUrl) {
-      assign(
-        new MediaMetadata({
-          ...base,
-          artwork: [
-            {
-              src: book.coverUrl,
-              sizes: "512x512",
-              type: coverMime(book.coverFile),
-            },
-          ],
-        })
-      );
-    } else {
-      assign(new MediaMetadata(base));
-    }
+    const artwork = artworkFor(book);
+    assign(new MediaMetadata(artwork ? { ...base, artwork } : base));
   } catch {
     try {
       assign(new MediaMetadata(base));
@@ -2238,23 +2252,24 @@ function bindMediaSession() {
       /* this action is not supported */
     }
   };
-  setHandler("play", () => {
-    audio.play().catch(() => {});
-  });
-  setHandler("pause", () => audio.pause());
-  setHandler("previoustrack", () => skipToPrevious());
-  setHandler("nexttrack", () => skipToNext());
-  setHandler("seekbackward", (details) => {
-    seekBy(-(details?.seekOffset || SKIP_SECONDS));
-  });
-  setHandler("seekforward", (details) => {
-    seekBy(details?.seekOffset || SKIP_SECONDS);
-  });
-  setHandler("seekto", (details) => {
-    if (typeof details?.seekTime === "number" && Number.isFinite(details.seekTime)) {
-      seekDisplay(details.seekTime);
-    }
-  });
+  const handlers = {
+    play: () => {
+      audio.play().catch(() => {});
+    },
+    pause: () => audio.pause(),
+    previoustrack: () => skipToPrevious(),
+    nexttrack: () => skipToNext(),
+    seekbackward: (details) => seekBy(-(details?.seekOffset || SKIP_SECONDS)),
+    seekforward: (details) => seekBy(details?.seekOffset || SKIP_SECONDS),
+    seekto: (details) => {
+      if (typeof details?.seekTime === "number" && Number.isFinite(details.seekTime)) {
+        seekDisplay(details.seekTime);
+      }
+    },
+  };
+  const { register, clear } = lockScreenActions({ ios: isIOSDevice(navigator) });
+  for (const name of register) setHandler(name, handlers[name]);
+  for (const name of clear) setHandler(name, null);
 }
 
 function bind() {
