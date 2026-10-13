@@ -116,13 +116,16 @@ test.describe("Jeff Drive fixture: every series plays and reads", () => {
 
 test.describe("lock screen (Media Session)", () => {
   test.beforeEach(async ({ page }) => {
+    // Recorded in sessionStorage: WebKit doesn't always run init scripts
+    // before the app's modules on a reload, so keep what the first load saw.
     await page.addInitScript(() => {
-      window.__actions = {};
       const ms = navigator.mediaSession;
       if (!ms) return;
       const original = ms.setActionHandler.bind(ms);
       ms.setActionHandler = (name, fn) => {
-        window.__actions[name] = typeof fn === "function" ? "set" : "cleared";
+        const seen = JSON.parse(sessionStorage.getItem("__actions") || "{}");
+        seen[name] = typeof fn === "function" ? "set" : "cleared";
+        sessionStorage.setItem("__actions", JSON.stringify(seen));
         try {
           original(name, fn);
         } catch {
@@ -156,7 +159,7 @@ test.describe("lock screen (Media Session)", () => {
 
   test("iPhone gets ±30 s skip buttons, desktop keeps chapter arrows", async ({ page, isMobile }) => {
     test.skip(!(await page.evaluate(() => "mediaSession" in navigator)), "no Media Session in this engine");
-    const actions = await page.evaluate(() => window.__actions);
+    const actions = await page.evaluate(() => JSON.parse(sessionStorage.getItem("__actions") || "{}"));
     expect(actions.seekbackward).toBe("set");
     expect(actions.seekforward).toBe("set");
     expect(actions.play).toBe("set");
