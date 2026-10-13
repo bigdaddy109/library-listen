@@ -28,6 +28,8 @@ export const DRIVE_MEDIA_PREFIX = "/drive-media/";
 export const DRIVE_TOKEN_MESSAGE = "librarylisten.drive-token";
 export const DRIVE_UNAUTHORIZED_MESSAGE = "librarylisten.drive-unauthorized";
 export const DRIVE_SESSION_KEY = "librarylisten.drive.v1";
+/** Drive files.list default. Tests pass a smaller pageSize to force nextPageToken. */
+export const DRIVE_LIST_PAGE_SIZE = 1000;
 export const DRIVE_MEDIA_PASSTHROUGH_HEADERS = [
   "content-type",
   "content-length",
@@ -610,13 +612,14 @@ function defaultStore() {
   return null;
 }
 
-function driveListUrl({ q, pageToken, fields } = {}) {
+function driveListUrl({ q, pageToken, fields, pageSize = DRIVE_LIST_PAGE_SIZE, corpora = "user" } = {}) {
   const url = new URL(`${DRIVE_API}/files`);
+  const size = Math.min(1000, Math.max(1, Number(pageSize) || DRIVE_LIST_PAGE_SIZE));
   url.searchParams.set("q", q);
-  url.searchParams.set("pageSize", "1000");
+  url.searchParams.set("pageSize", String(size));
   url.searchParams.set("includeItemsFromAllDrives", "true");
   url.searchParams.set("supportsAllDrives", "true");
-  url.searchParams.set("corpora", "user");
+  url.searchParams.set("corpora", corpora || "user");
   url.searchParams.set(
     "fields",
     fields ||
@@ -660,13 +663,41 @@ async function driveGetJson(url, token, fetchImpl = fetch) {
   return body ? JSON.parse(body) : {};
 }
 
-export async function driveListAll(token, q, fetchImpl = fetch) {
+function isTransientDriveListError(err) {
+  const status = Number(err?.status);
+  if (status === 429 || status === 500 || status === 502 || status === 503) return true;
+  const text = String(err?.message || err?.body || "");
+  return status === 403 && /rateLimit|userRateLimit|backendError/i.test(text);
+}
+
+function waitDriveRetry(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function driveListAll(token, q, fetchImpl = fetch, { pageSize, corpora } = {}) {
   const files = [];
   let pageToken = "";
   do {
-    const body = await driveGetJson(driveListUrl({ q, pageToken }), token, fetchImpl);
+    let body = null;
+    let lastErr = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        body = await driveGetJson(
+          driveListUrl({ q, pageToken, pageSize, corpora }),
+          token,
+          fetchImpl
+        );
+        lastErr = null;
+        break;
+      } catch (err) {
+        lastErr = err;
+        if (!isTransientDriveListError(err) || attempt === 2) throw err;
+        await waitDriveRetry(200 * (attempt + 1));
+      }
+    }
+    if (!body && lastErr) throw lastErr;
     files.push(...(body.files || []));
-    pageToken = body.nextPageToken || "";
+    pageToken = body.nextPageToken || body.next_page_token || "";
   } while (pageToken);
   return files.map(resolveDriveItem).filter(Boolean);
 }
@@ -679,14 +710,21 @@ export async function findLibraryFolders(token, fetchImpl = fetch) {
   return rankLibraryFolders([...mine, ...shared]);
 }
 
-export async function walkDriveFolder(folderId, token, { prefix, fetchImpl = fetch } = {}) {
+export async function walkDriveFolder(
+  folderId,
+  token,
+  { prefix, fetchImpl = fetch, pageSize, corpora = "allDrives" } = {}
+) {
   const rootPrefix = prefix || [LIBRARY_FOLDER_NAME];
   /** @type {{ path: string, file: ReturnType<typeof makeDriveFile> }[]} */
   const entries = [];
   let skipped = 0;
 
   const walk = async (id, parts) => {
-    const children = await driveListAll(token, childrenQuery(id), fetchImpl);
+    const children = await driveListAll(token, childrenQuery(id), fetchImpl, {
+      pageSize,
+      corpora,
+    });
     for (const raw of children) {
       const item = resolveDriveItem(raw);
       if (!item?.name || shouldSkipDriveName(item.name)) {

@@ -23,6 +23,7 @@ import {
   driveAltMediaUrl,
   driveFileIdFromPath,
   driveFilesToEntries,
+  DRIVE_LIST_PAGE_SIZE,
   driveListUrl,
   driveMediaPath,
   driveMediaProxyOutHeaders,
@@ -119,6 +120,8 @@ function mockDriveFetch(tree) {
     const u = new URL(url, "https://www.googleapis.com");
     const q = u.searchParams.get("q") || "";
     const parent = q.match(/'([^']+)' in parents/);
+    const pageSize = Math.max(1, Number(u.searchParams.get("pageSize") || 1000));
+    const start = Number(u.searchParams.get("pageToken") || 0) || 0;
     let files = tree;
     if (parent) {
       files = tree.filter((item) => (item.parents || [])[0] === parent[1]);
@@ -128,13 +131,48 @@ function mockDriveFetch(tree) {
         files = files.filter((item) => item.sharedWithMe || item.shared);
       }
     }
+    const slice = files.slice(start, start + pageSize);
+    const next = start + pageSize < files.length ? String(start + pageSize) : "";
+    const body = { files: slice };
+    if (next) body.nextPageToken = next;
     return {
       ok: true,
       status: 200,
-      json: async () => ({ files }),
-      text: async () => JSON.stringify({ files }),
+      json: async () => body,
+      text: async () => JSON.stringify(body),
     };
   };
+}
+
+function multiSeriesDriveTree() {
+  return [
+    folder("lib", "Library"),
+    folder("munroe", "門羅-WhatIf", ["lib"]),
+    folder("mlisten", "listen", ["munroe"]),
+    folder("w1", "what-if-1", ["mlisten"]),
+    audio("w1a", "01 - Introduction.mp3", ["w1"]),
+    folder("ht", "how-to", ["mlisten"]),
+    audio("hta", "001 - How To.mp3", ["ht"]),
+    folder("w2", "what-if-2", ["mlisten"]),
+    audio("w2a", "What If 2.m4b", ["w2"]),
+    folder("immune", "Immune", ["lib"]),
+    folder("ilisten", "listen", ["immune"]),
+    audio("p1", "Immune-Part01.mp3", ["ilisten"]),
+    audio("p2", "Immune-Part02.mp3", ["ilisten"]),
+    folder("school", "上學不容易", ["lib"]),
+    folder("slisten", "listen", ["school"]),
+    folder("s1", "Middle School 01 First Day", ["slisten"]),
+    audio("s1a", "01.mp3", ["s1"]),
+    folder("s2", "Middle School 02 Get Me", ["slisten"]),
+    audio("s2a", "01.mp3", ["s2"]),
+    folder("s3", "Middle School 03 Homework", ["slisten"]),
+    audio("s3a", "01.mp3", ["s3"]),
+    audio("s4", "Middle School 04 Summer.m4b", ["slisten"]),
+    folder("extra", "Thing Explainer", ["lib"]),
+    folder("elisten", "listen", ["extra"]),
+    folder("eb", "Thing Explainer", ["elisten"]),
+    audio("ea", "01.mp3", ["eb"]),
+  ];
 }
 
 describe("Google Drive public client config", () => {
@@ -178,11 +216,17 @@ describe("Drive queries and media URLs", () => {
     assert.match(childrenQuery("abc"), /'abc' in parents/);
   });
 
-  it("builds Drive list URLs with all-drives flags", () => {
+  it("builds Drive list URLs with all-drives flags and pageSize", () => {
     const url = new URL(driveListUrl({ q: libraryFolderQuery() }));
     assert.equal(url.searchParams.get("includeItemsFromAllDrives"), "true");
     assert.equal(url.searchParams.get("supportsAllDrives"), "true");
     assert.equal(url.searchParams.get("corpora"), "user");
+    assert.equal(url.searchParams.get("pageSize"), String(DRIVE_LIST_PAGE_SIZE));
+    const paged = new URL(driveListUrl({ q: childrenQuery("lib"), pageSize: 2, pageToken: "2", corpora: "allDrives" }));
+    assert.equal(paged.searchParams.get("pageSize"), "2");
+    assert.equal(paged.searchParams.get("pageToken"), "2");
+    assert.equal(paged.searchParams.get("corpora"), "allDrives");
+    assert.match(paged.searchParams.get("fields"), /nextPageToken/);
   });
 
   it("maps same-origin /drive-media/ paths to a file id and forwards Range", () => {
@@ -282,6 +326,26 @@ describe("Drive walker feeds the existing library pairing", () => {
     assert.equal(whatIf.coverFile?.driveId, "c1");
     assert.equal(whatIf.ebook?.file?.driveId, "e1");
     assert.equal(shelfBadge(whatIf), "Both");
+  });
+
+  it("follows nextPageToken so a paged Library still lists every series", async () => {
+    const { entries } = await walkDriveFolder("lib", "tok", {
+      prefix: ["Library"],
+      pageSize: 2,
+      fetchImpl: mockDriveFetch(multiSeriesDriveTree()),
+    });
+    const books = buildLibrary(entries);
+    const ids = books.map((b) => b.id).sort();
+    assert.ok(ids.includes("immune/immune"));
+    assert.ok(ids.includes("munroe/what-if-1"));
+    assert.ok(ids.includes("munroe/how-to"));
+    assert.ok(ids.includes("munroe/what-if-2"));
+    assert.ok(ids.includes("school/middle-school-01-first-day"));
+    assert.ok(ids.includes("school/middle-school-02-get-me"));
+    assert.ok(ids.includes("school/middle-school-03-homework"));
+    assert.ok(ids.includes("school/middle-school-04-summer"));
+    assert.ok(ids.includes("thing-explainer/thing-explainer"));
+    assert.equal(books.length, 9);
   });
 
   it("walks Drive children through the mocked API and attaches stream URLs", async () => {

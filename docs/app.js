@@ -1,4 +1,4 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=37";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=38";
 import {
   AUDIO_EXT,
   EBOOK_OFFLINE_KEY,
@@ -8,9 +8,12 @@ import {
   bookHasEbook,
   bookScreenTabs,
   extOf,
+  bookHasDriveMedia,
+  booksFromLibrarySnapshot,
   buildLibrary,
   emptyLibraryMessage,
   isEbookSavedOffline,
+  mergeLibraryScans,
   latestProgressKind,
   loadProgress,
   chapterProgress,
@@ -18,7 +21,7 @@ import {
   saveTextProgress,
   shelfBadge,
   textProgress,
-} from "./library.js?v=37";
+} from "./library.js?v=38";
 import {
   DRIVE_UNAUTHORIZED_MESSAGE,
   attachDriveMedia,
@@ -42,7 +45,7 @@ import {
   signInWithGoogle,
   signOutGoogle,
   sourceDialogActions,
-} from "./drive.js?v=37";
+} from "./drive.js?v=38";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -50,7 +53,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=37";
+} from "./search.js?v=38";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -65,8 +68,8 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=37";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=37";
+} from "./markers.js?v=38";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=38";
 import {
   applyScrollFraction,
   mimeForPath,
@@ -78,14 +81,14 @@ import {
   spineIndexFromCfi,
   spineLabel,
   zipPath,
-} from "./epub.js?v=37";
-import { demoCatalog } from "./shelf/catalog.js?v=37";
+} from "./epub.js?v=38";
+import { demoCatalog } from "./shelf/catalog.js?v=38";
 import {
   closeRiceBook,
   initRiceShelf,
   isRiceShelfPage,
   setRiceShelfLibrary,
-} from "./shelf/shelf.js?v=37";
+} from "./shelf/shelf.js?v=38";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -277,11 +280,9 @@ function restoreLibrarySnapshot() {
   if (!Array.isArray(snapshot)) return [];
   return snapshot.map((b) => {
     const saved = offlineIndex.get(b.id);
-    const canDrive = !!getAccessToken();
-    const coverDrive =
-      canDrive && b.coverDriveId
-        ? restoreDriveFile({ driveId: b.coverDriveId, name: "cover", type: "image/jpeg" })
-        : null;
+    const coverDrive = b.coverDriveId
+      ? restoreDriveFile({ driveId: b.coverDriveId, name: "cover", type: "image/jpeg" })
+      : null;
     return {
       ...b,
       source: b.source || (b.coverDriveId || b.ebook?.driveId ? "drive" : null),
@@ -295,29 +296,27 @@ function restoreLibrarySnapshot() {
             driveId: b.ebook.driveId || null,
             file:
               saved?.get(EBOOK_OFFLINE_KEY) ||
-              (canDrive
-                ? restoreDriveFile({
-                    driveId: b.ebook.driveId,
-                    name: b.ebook.name,
-                    size: b.ebook.size,
-                    type: b.ebook.type,
-                  })
-                : null),
+              restoreDriveFile({
+                driveId: b.ebook.driveId,
+                name: b.ebook.name,
+                size: b.ebook.size,
+                type: b.ebook.type,
+              }),
             fromDevice: !!saved?.get(EBOOK_OFFLINE_KEY),
           }
         : null,
       chapters: b.chapters.map((ch, index) => {
         const offline = offlineChapterBlob(saved, ch);
+        // Keep Drive stubs even before GIS returns a token so the shelf
+        // still lists the last full scan (not only recently-played blobs).
         const file =
           offline ||
-          (canDrive
-            ? restoreDriveFile({
-                driveId: ch.driveId,
-                name: String(ch.id || "").split("#")[0],
-                size: ch.size,
-                type: ch.type,
-              })
-            : null);
+          restoreDriveFile({
+            driveId: ch.driveId,
+            name: String(ch.id || "").split("#")[0],
+            size: ch.size,
+            type: ch.type,
+          });
         return {
           id: ch.id,
           index,
@@ -917,10 +916,14 @@ async function loadLibrary(mode) {
     clearDriveError();
     if (result.handle) await rememberDirectory(result.handle);
 
-    // Books saved on this device stay on the shelf even if this pick did not include them.
-    const scannedIds = new Set(scanned.map((b) => b.id));
-    const kept = state.books.filter((b) => !scannedIds.has(b.id) && isBookOffline(b));
-    const books = [...scanned, ...kept];
+    // Keep offline copies and the last Drive scan when this pass is a
+    // partial page / recently-played reconnect, not a smaller library.
+    const previous = mergeLibraryScans(state.books, restoreLibrarySnapshot(), {
+      keep: () => true,
+    });
+    const books = mergeLibraryScans(scanned, previous, {
+      keep: (book) => isBookOffline(book) || bookHasDriveMedia(book),
+    });
 
     const keepPlayback =
       !!playback && !audio.paused && books.some((b) => b.id === playback.bookId);
@@ -2511,13 +2514,13 @@ function registerSW() {
   });
 }
 
-function showPlayableBooks(books) {
-  const openable = books.filter(isBookOpenable);
-  attachUrls(openable);
-  state.books = openable;
+function showRestoredBooks(books) {
+  const listed = booksFromLibrarySnapshot(books);
+  attachUrls(listed);
+  state.books = listed;
   state.activeBookId = null;
   render();
-  return openable.length > 0;
+  return listed.length > 0;
 }
 
 async function restoreSession() {
@@ -2529,14 +2532,14 @@ async function restoreSession() {
   savedDirHandle = await loadSavedDirectory();
   if (savedDirHandle) {
     await loadLibrary("auto");
-    if (state.books.some(isBookOpenable)) return;
+    if (state.books.length) return;
   }
   if (loadDriveSession()?.folderId && isGoogleClientConfigured()) {
     await loadLibrary("drive-auto");
-    if (state.books.some(isBookOpenable)) return;
+    if (state.books.length) return;
   }
   const restored = restoreLibrarySnapshot();
-  if (showPlayableBooks(restored)) return;
+  if (showRestoredBooks(restored)) return;
   if (restored.length && els.capabilityHint) {
     els.capabilityHint.textContent = libraryUsesDrive()
       ? "用 Google 登入 again to keep listening or reading. Your progress is still here."

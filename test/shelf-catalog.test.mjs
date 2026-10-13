@@ -26,7 +26,13 @@ import {
   stripOpenIntent,
   volumeNumber,
 } from "../docs/shelf/catalog.js";
-import { PROGRESS_KEY, saveProgress, saveTextProgress, shelfBadge } from "../docs/library.js";
+import {
+  PROGRESS_KEY,
+  buildLibrary,
+  saveProgress,
+  saveTextProgress,
+  shelfBadge,
+} from "../docs/library.js";
 
 function memoryStore(initial = {}) {
   const data = { ...initial };
@@ -75,6 +81,31 @@ describe("series + views", () => {
     const chips = seriesChips(demoCatalog());
     assert.equal(chips[0].id, "all");
     assert.equal(chips.find((c) => c.id === "school").count, 3);
+  });
+
+  it("groups a scanned multi-series Library onto every plank", () => {
+    const books = buildLibrary([
+      { path: "Library/Immune/listen/Immune-Part01.mp3", file: { name: "Immune-Part01.mp3", size: 2048 } },
+      { path: "Library/門羅-WhatIf/listen/what-if-1/01.mp3", file: { name: "01.mp3", size: 2048 } },
+      { path: "Library/上學不容易/listen/Middle School 02 Get Me/01.mp3", file: { name: "01.mp3", size: 2048 } },
+      { path: "Library/上學不容易/listen/Middle School 01 First Day/01.mp3", file: { name: "01.mp3", size: 2048 } },
+      { path: "Library/Thing Explainer/listen/Thing Explainer/01.mp3", file: { name: "01.mp3", size: 2048 } },
+    ]);
+    const groups = groupBySeries(books);
+    assert.deepEqual(
+      groups.map((g) => [g.id, g.books.length]).sort(),
+      [
+        ["immune", 1],
+        ["munroe", 1],
+        ["other", 1],
+        ["school", 2],
+      ]
+    );
+    const chips = seriesChips(books);
+    assert.equal(chips[0].count, 5);
+    assert.ok(chips.some((c) => c.id === "munroe"));
+    assert.ok(chips.some((c) => c.id === "school" && c.count === 2));
+    assert.ok(chips.some((c) => c.id === "other"));
   });
 });
 
