@@ -55,6 +55,11 @@ function makeFile(bytes, name) {
   return new File([bytes], name, { type: "audio/mp4" });
 }
 
+function ffmpegAvailable() {
+  const probe = spawnSync("ffmpeg", ["-version"], { encoding: "utf8" });
+  return probe.status === 0;
+}
+
 function ffmpegChapteredM4b() {
   const dir = mkdtempSync(join(tmpdir(), "ll-markers-"));
   const audio = join(dir, "silent.m4a");
@@ -122,7 +127,11 @@ test("Nero chpl markers are read from an in-memory m4b", async () => {
   assert.ok(Math.abs(markers[2].start - 4) < 0.001);
 });
 
-test("ffmpeg QuickTime + Nero fixture (What If 2 shape) is three chapters", async () => {
+test("ffmpeg QuickTime + Nero fixture (What If 2 shape) is three chapters", async (t) => {
+  if (!ffmpegAvailable()) {
+    t.skip("ffmpeg is not installed");
+    return;
+  }
   const bytes = ffmpegChapteredM4b();
   const markers = await readMp4Chapters(bytes);
   assert.equal(markers.length, 3);

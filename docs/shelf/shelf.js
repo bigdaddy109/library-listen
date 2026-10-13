@@ -6,9 +6,10 @@ import {
   bookHasEbook,
   buildLibrary,
   extOf,
+  isBookPlayable,
   shelfBadge,
-} from "../library.js?v=39";
-import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=39";
+} from "../library.js?v=40";
+import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=40";
 import {
   OPEN_INTENT_KEY,
   VIEWS,
@@ -29,8 +30,8 @@ import {
   seriesMeta,
   shelfStatusLabel,
   volumeNumber,
-} from "./catalog.js?v=39";
-import { coverSvg, spineMetrics, topicMotifSvg } from "./covers.js?v=39";
+} from "./catalog.js?v=40";
+import { coverSvg, spineMetrics, topicMotifSvg } from "./covers.js?v=40";
 
 const VIEW_KEY = "librarylisten.shelfView";
 const SERIES_KEY = "librarylisten.shelfSeries";
@@ -405,7 +406,7 @@ function renderSpread(book, phase = "open") {
   const siblings = state.books.filter((b) => seriesIdForBook(b) === series.id);
   const volume = String(volumeNumber(book, siblings)).padStart(2, "0");
   const progress = previewProgress(book);
-  const playable = bookHasAudio(book) && book.chapters.some((ch) => ch.file);
+  const playable = isBookPlayable(book);
   const readable = bookHasEbook(book) && !!book.ebook?.file;
   const rootClass = drawRootClass(phase);
   els.bookStage.innerHTML = `
