@@ -8,13 +8,17 @@ import {
   extOf,
   isBookPlayable,
   shelfBadge,
-} from "../library.js?v=40";
-import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=40";
+} from "../library.js?v=41";
+import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=41";
 import {
+  COVER_MORPH,
+  DEFAULT_VIEW,
   OPEN_INTENT_KEY,
   VIEWS,
   VIEW_LABELS,
   demoCatalog,
+  coverMorphTransform,
+  coverTransitionMode,
   emptyShelfMessage,
   filterShelf,
   groupBySeries,
@@ -30,10 +34,11 @@ import {
   seriesMeta,
   shelfStatusLabel,
   volumeNumber,
-} from "./catalog.js?v=40";
-import { coverSvg, spineMetrics, topicMotifSvg } from "./covers.js?v=40";
+} from "./catalog.js?v=41";
+import { coverSvg, spineMetrics, topicMotifSvg } from "./covers.js?v=41";
 
-const VIEW_KEY = "librarylisten.shelfView";
+/* v2: the cover wall became the default; the old key mostly held the old default. */
+const VIEW_KEY = "librarylisten.shelfView.v2";
 const SERIES_KEY = "librarylisten.shelfSeries";
 
 const state = {
@@ -41,10 +46,12 @@ const state = {
   books: demoCatalog(),
   query: "",
   seriesId: "all",
-  view: "spines",
+  view: DEFAULT_VIEW,
   liftedId: null,
   selectedId: null,
   phase: "shelf",
+  coverOpen: false,
+  morphing: false,
 };
 
 const els = {
@@ -276,6 +283,7 @@ function renderCovers(books) {
     card.type = "button";
     card.className = "cover-card";
     card.dataset.id = book.id;
+    card.setAttribute("aria-label", `${book.title} · ${shelfBadge(book)}`);
     card.innerHTML = `<span class="cover-art"></span><h3></h3><p></p>`;
     card.querySelector(".cover-art").innerHTML = coverSvg(book);
     card.querySelector("h3").textContent = book.title;
@@ -337,12 +345,222 @@ function closeBook() {
   markDrawnSpine(state.selectedId, false);
   state.selectedId = null;
   state.phase = "shelf";
+  state.coverOpen = false;
   els.layer.classList.add("hidden");
   els.layer.hidden = true;
   els.bookStage.innerHTML = "";
 }
 
+const COVER_VT_NAME = "book-cover";
+const COVER_VT_GROUP = `::view-transition-group(${COVER_VT_NAME})`;
+
+function coverMode() {
+  return coverTransitionMode({
+    reducedMotion: prefersReducedMotion(),
+    viewTransitions: typeof document.startViewTransition === "function",
+  });
+}
+
+function cardArtFor(bookId) {
+  for (const card of els.stage?.querySelectorAll(".cover-card") || []) {
+    if (card.dataset.id === bookId) return card.querySelector(".cover-art svg");
+  }
+  return null;
+}
+
+function spreadArt() {
+  return els.bookStage?.querySelector(".spread-cover svg") || null;
+}
+
+function onScreen(rect) {
+  return (
+    !!rect &&
+    rect.width > 0 &&
+    rect.bottom > 0 &&
+    rect.top < window.innerHeight &&
+    rect.right > 0 &&
+    rect.left < window.innerWidth
+  );
+}
+
+function showCoverSpread(book) {
+  state.selectedId = book.id;
+  state.phase = "open";
+  state.coverOpen = true;
+  markDrawnSpine(book.id, true);
+  els.layer.classList.remove("hidden");
+  els.layer.hidden = false;
+  renderSpread(book, "open", { cover: true });
+}
+
+/**
+ * Shared-element zoom between a cover-wall card and the spread cover.
+ * The group's size is pinned to the larger (spread) box and only `transform`
+ * animates, so the compositor does the work on iPhone.
+ */
+function viewTransitionMorph({ fromEl, update, targetEl, opening }) {
+  const root = document.documentElement;
+  const fromRect = fromEl.getBoundingClientRect();
+  fromEl.style.viewTransitionName = COVER_VT_NAME;
+  root.classList.add("cover-morph", opening ? "cover-morph-open" : "cover-morph-close");
+  let toEl = null;
+  const vt = document.startViewTransition(() => {
+    fromEl.style.viewTransitionName = "";
+    update();
+    toEl = targetEl();
+    if (toEl && onScreen(toEl.getBoundingClientRect())) {
+      toEl.style.viewTransitionName = COVER_VT_NAME;
+    } else {
+      toEl = null;
+      root.classList.add("cover-morph-exit");
+    }
+  });
+  vt.ready
+    .then(() => {
+      if (!toEl) return;
+      const toRect = toEl.getBoundingClientRect();
+      const big = opening ? toRect : fromRect;
+      const small = opening ? fromRect : toRect;
+      const shrunk = coverMorphTransform(small, big);
+      if (!shrunk) return;
+      root.style.setProperty("--cover-morph-w", `${big.width}px`);
+      root.style.setProperty("--cover-morph-h", `${big.height}px`);
+      root.classList.add("cover-morph-sized");
+      const at = `translate(${big.left}px, ${big.top}px)`;
+      const frames = [{ transform: `${at} ${shrunk.css}` }, { transform: at }];
+      root.animate(opening ? frames : frames.reverse(), {
+        duration: opening ? COVER_MORPH.openMs : COVER_MORPH.closeMs,
+        easing: COVER_MORPH.easing,
+        fill: "both",
+        pseudoElement: COVER_VT_GROUP,
+      });
+    })
+    .catch(() => {});
+  return vt.finished
+    .catch(() => {})
+    .finally(() => {
+      if (toEl) toEl.style.viewTransitionName = "";
+      root.classList.remove(
+        "cover-morph",
+        "cover-morph-open",
+        "cover-morph-close",
+        "cover-morph-sized",
+        "cover-morph-exit"
+      );
+      root.style.removeProperty("--cover-morph-w");
+      root.style.removeProperty("--cover-morph-h");
+    });
+}
+
+/** FLIP fallback: a fixed ghost of the spread cover scales between the two boxes. */
+function flipMorph({ cardEl, opening }) {
+  const art = spreadArt();
+  if (!art) return Promise.resolve();
+  const bigRect = art.getBoundingClientRect();
+  const cardRect = cardEl && onScreen(cardEl.getBoundingClientRect()) ? cardEl.getBoundingClientRect() : null;
+  const duration = opening ? COVER_MORPH.openMs : COVER_MORPH.closeMs;
+  const fade = [{ opacity: 0 }, { opacity: 1 }];
+  const layerAnim = els.layer.animate(opening ? fade : [...fade].reverse(), {
+    duration: opening ? duration * 0.7 : duration * 0.8,
+    easing: "ease-out",
+    fill: "both",
+  });
+  const shrunk = coverMorphTransform(cardRect, bigRect);
+  if (!shrunk) return layerAnim.finished.catch(() => {}).then(() => layerAnim.cancel());
+  const ghost = art.cloneNode(true);
+  ghost.classList.add("cover-ghost");
+  ghost.setAttribute("aria-hidden", "true");
+  Object.assign(ghost.style, {
+    left: `${bigRect.left}px`,
+    top: `${bigRect.top}px`,
+    width: `${bigRect.width}px`,
+    height: `${bigRect.height}px`,
+  });
+  document.body.appendChild(ghost);
+  art.style.opacity = "0";
+  const frames = [{ transform: shrunk.css }, { transform: "none" }];
+  const ghostAnim = ghost.animate(opening ? frames : frames.reverse(), {
+    duration,
+    easing: COVER_MORPH.easing,
+    fill: "both",
+  });
+  return Promise.all([ghostAnim.finished, layerAnim.finished])
+    .catch(() => {})
+    .then(() => {
+      art.style.opacity = "";
+      ghost.remove();
+      layerAnim.cancel();
+    });
+}
+
+async function openCoverBook(book) {
+  if (state.morphing) return;
+  const mode = coverMode();
+  const fromEl = cardArtFor(book.id);
+  if (mode === "none" || !fromEl) {
+    showCoverSpread(book);
+    return;
+  }
+  state.morphing = true;
+  try {
+    if (mode === "view-transition") {
+      await viewTransitionMorph({
+        fromEl,
+        opening: true,
+        update: () => showCoverSpread(book),
+        targetEl: spreadArt,
+      });
+    } else {
+      showCoverSpread(book);
+      await flipMorph({ cardEl: fromEl, opening: true });
+    }
+  } finally {
+    state.morphing = false;
+  }
+}
+
+async function closeCoverBook() {
+  if (state.morphing) return;
+  const id = state.selectedId;
+  const mode = coverMode();
+  const fromEl = spreadArt();
+  if (mode === "none" || !fromEl || !id) {
+    closeBook();
+    return;
+  }
+  state.morphing = true;
+  try {
+    if (mode === "view-transition") {
+      await viewTransitionMorph({
+        fromEl,
+        opening: false,
+        update: closeBook,
+        targetEl: () => cardArtFor(id),
+      });
+    } else {
+      markDrawnSpine(id, false);
+      const cardEl = cardArtFor(id);
+      if (cardEl) cardEl.style.opacity = "0";
+      await flipMorph({ cardEl, opening: false });
+      if (cardEl) cardEl.style.opacity = "";
+      closeBook();
+    }
+  } finally {
+    state.morphing = false;
+  }
+}
+
+function dismissBook() {
+  if (els.layer.hidden) return;
+  if (state.coverOpen) closeCoverBook();
+  else closeBook();
+}
+
 function openFromShelf(book, phaseHint) {
+  if (!phaseHint && state.view === "covers") {
+    openCoverBook(book);
+    return;
+  }
   state.selectedId = book.id;
   state.phase =
     phaseHint ||
@@ -400,7 +618,7 @@ function playDraw(root) {
   window.requestAnimationFrame(() => window.requestAnimationFrame(start));
 }
 
-function renderSpread(book, phase = "open") {
+function renderSpread(book, phase = "open", { cover = false } = {}) {
   const series = seriesMeta(book);
   const flags = mediaFlags(book);
   const siblings = state.books.filter((b) => seriesIdForBook(b) === series.id);
@@ -408,9 +626,10 @@ function renderSpread(book, phase = "open") {
   const progress = previewProgress(book);
   const playable = isBookPlayable(book);
   const readable = bookHasEbook(book) && !!book.ebook?.file;
-  const rootClass = drawRootClass(phase);
-  els.bookStage.innerHTML = `
-    <div class="draw-root ${rootClass}">
+  const rootClass = cover ? "is-open is-cover" : drawRootClass(phase);
+  const scene = cover
+    ? ""
+    : `
       <div class="book-3d-scene" aria-hidden="true">
         <div class="book-3d" aria-hidden="${phase === "open" ? "true" : "false"}">
           <div class="book-3d-cover">${coverSvg(book, { width: 240, height: 330 })}</div>
@@ -420,9 +639,10 @@ function renderSpread(book, phase = "open") {
           <div class="book-3d-bottom" aria-hidden="true"></div>
           <div class="book-3d-back" aria-hidden="true"></div>
         </div>
-      </div>
-      <article class="spread">
-        <section class="page left">
+      </div>`;
+  const leftPage = cover
+    ? `<div class="spread-cover">${coverSvg(book, { width: 240, height: 330 })}</div>`
+    : `
           <div class="bookplate">
             <div class="bookplate-card">
               <div class="seal" style="--accent:${series.accent}">藏</div>
@@ -430,7 +650,11 @@ function renderSpread(book, phase = "open") {
               <strong></strong>
               <p class="vol"></p>
             </div>
-          </div>
+          </div>`;
+  els.bookStage.innerHTML = `
+    <div class="draw-root ${rootClass}">${scene}
+      <article class="spread">
+        <section class="page left">${leftPage}
         </section>
         <section class="page right">
           <p class="kicker"></p>
@@ -448,10 +672,12 @@ function renderSpread(book, phase = "open") {
   const root = els.bookStage.querySelector(".draw-root");
   root.style.setProperty("--cloth", series.cloth);
   root.style.setProperty("--accent", series.accent);
-  applyPullVars(root, book);
-  els.bookStage.querySelector(".book-3d-spine-title").textContent = book.title;
-  els.bookStage.querySelector(".bookplate-card strong").textContent = series.title;
-  els.bookStage.querySelector(".vol").textContent = `編號 ${volume}`;
+  if (!cover) {
+    applyPullVars(root, book);
+    els.bookStage.querySelector(".book-3d-spine-title").textContent = book.title;
+    els.bookStage.querySelector(".bookplate-card strong").textContent = series.title;
+    els.bookStage.querySelector(".vol").textContent = `編號 ${volume}`;
+  }
   els.bookStage.querySelector(".kicker").textContent = `${series.title} · ${flags.badge}`;
   els.bookStage.querySelector("h2").textContent = book.title;
   els.bookStage.querySelector(".author").textContent = book.author || "";
@@ -608,12 +834,12 @@ function bind() {
     if (els.query) els.query.value = "";
     render();
   });
-  document.getElementById("btn-close-book")?.addEventListener("click", closeBook);
+  document.getElementById("btn-close-book")?.addEventListener("click", dismissBook);
   els.layer?.addEventListener("click", (event) => {
-    if (event.target === els.layer) closeBook();
+    if (event.target === els.layer) dismissBook();
   });
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") closeBook();
+    if (event.key === "Escape") dismissBook();
   });
   if (!document.body?.classList.contains("shell-shelf")) {
     document.getElementById("btn-pick-folder")?.addEventListener("click", async () => {

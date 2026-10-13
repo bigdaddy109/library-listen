@@ -487,8 +487,103 @@ h1 {
   height: auto;
 }
 
+.cover-card .cover-art svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 0.2rem;
+  box-shadow: 0 6px 14px rgba(28, 25, 20, 0.14);
+}
+
+.cover-card.is-drawn .cover-art svg {
+  opacity: 0;
+}
+
 .cover-card h3 {
   font-size: 1rem;
+}
+
+/* Cover wall → spread: 2D shared-element zoom (transform + opacity only). */
+.draw-root.is-cover .page.left {
+  display: grid;
+  place-items: center;
+}
+
+.spread-cover {
+  width: min(15rem, 82%);
+}
+
+.spread-cover svg,
+.cover-ghost {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 0.25rem;
+  box-shadow: 0 16px 34px rgba(28, 25, 20, 0.22);
+}
+
+.cover-ghost {
+  position: fixed;
+  z-index: 30;
+  margin: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* Only transform (the cover group, driven from shelf.js) and opacity animate.
+   The new snapshot fades in over the old one, so there is no cross-fade dip. */
+@keyframes cover-morph-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes cover-morph-out {
+  to {
+    opacity: 0;
+  }
+}
+
+html.cover-morph {
+  --cover-morph-ms: 460ms;
+}
+
+html.cover-morph-close {
+  --cover-morph-ms: 400ms;
+}
+
+html.cover-morph::view-transition-group(root),
+html.cover-morph::view-transition-group(book-cover),
+html.cover-morph::view-transition-image-pair(root),
+html.cover-morph::view-transition-image-pair(book-cover),
+html.cover-morph::view-transition-old(root),
+html.cover-morph::view-transition-old(book-cover) {
+  animation: none;
+}
+
+html.cover-morph::view-transition-group(book-cover) {
+  transform-origin: 0 0;
+}
+
+html.cover-morph-sized::view-transition-group(book-cover) {
+  width: var(--cover-morph-w);
+  height: var(--cover-morph-h);
+}
+
+html.cover-morph::view-transition-old(book-cover),
+html.cover-morph::view-transition-new(book-cover) {
+  height: 100%;
+  object-fit: fill;
+}
+
+html.cover-morph::view-transition-new(root),
+html.cover-morph::view-transition-new(book-cover) {
+  animation: cover-morph-in var(--cover-morph-ms) ease-out both;
+}
+
+html.cover-morph-exit::view-transition-old(book-cover) {
+  animation: cover-morph-out var(--cover-morph-ms) ease-out both;
 }
 
 .book-layer {
@@ -861,6 +956,14 @@ h1 {
     min-height: 11rem;
   }
 
+  .draw-root.is-cover .page.left {
+    padding-top: 1.4rem;
+  }
+
+  .spread-cover {
+    width: min(11.5rem, 56vw);
+  }
+
   .page {
     padding: 1rem 1rem 1.1rem;
   }
@@ -970,6 +1073,12 @@ h1 {
   .draw-root.is-open .spread {
     opacity: 1;
     transform: none;
+  }
+
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
   }
 }
 

@@ -54,7 +54,7 @@ describe("homepage is the rice-paper shelf", () => {
     assert.match(classic, /href="\.\.\/"/);
     assert.match(home, /href="\.\/classic\/index\.html"/);
     assert.match(shelf, /location\.replace\("\.\.\/"\)/);
-    assert.match(sw, /library-listen-shell-v40/);
+    assert.match(sw, /library-listen-shell-v41/);
     assert.match(sw, /"\.\/classic\/index\.html"/);
   });
 
@@ -76,6 +76,22 @@ describe("homepage is the rice-paper shelf", () => {
     assert.match(home, /href="\.\/classic\/index\.html"/);
   });
 
+  it("defaults to the cover wall and zooms covers in 2D", () => {
+    const css = readFileSync(join(ROOT, "docs/shelf/shelf.css"), "utf8");
+    const js = readFileSync(join(ROOT, "docs/shelf/shelf.js"), "utf8");
+    const covers = home.indexOf('data-view="covers"');
+    assert.ok(covers > 0 && covers < home.indexOf('data-view="spines"'), "cover wall is the first tab");
+    assert.match(home, /data-view="covers" aria-pressed="true"/);
+    assert.match(home, /data-view="spines" aria-pressed="false"/);
+    assert.match(js, /startViewTransition/);
+    assert.match(js, /viewTransitionName/);
+    assert.match(css, /::view-transition-group\(book-cover\)/);
+    assert.match(css, /\.cover-ghost\b/);
+    const zoom = css.slice(css.indexOf("/* Cover wall → spread"), css.indexOf("\n.book-layer {"));
+    assert.ok(zoom.length > 100, "zoom block present");
+    assert.doesNotMatch(zoom, /perspective|rotate[XYZ3]|preserve-3d|translate3d/);
+  });
+
   it("activates the new shell with skipWaiting and clients.claim inside waitUntil", () => {
     const install = sw.match(/addEventListener\("install",[\s\S]*?\n\}\);/);
     const activate = sw.match(/addEventListener\("activate",[\s\S]*?\n\}\);/);
@@ -85,6 +101,6 @@ describe("homepage is the rice-paper shelf", () => {
     assert.match(install[0], /skipWaiting/);
     assert.match(activate[0], /waitUntil/);
     assert.match(activate[0], /clients\.claim/);
-    assert.match(sw, /library-listen-shell-v40/);
+    assert.match(sw, /library-listen-shell-v41/);
   });
 });
