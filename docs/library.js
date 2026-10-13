@@ -8,6 +8,7 @@ export const SKIP_FOLDERS = new Set(["_source"]);
 export const KNOWN_COLLECTIONS = {
   "門羅-WhatIf": { id: "munroe", title: "Munroe", author: "Randall Munroe" },
   Immune: { id: "immune", title: "Immune", author: "Philipp Dettmer" },
+  上學不容易: { id: "school", title: "上學不容易", author: "Library" },
 };
 
 export const KNOWN_BOOKS = {
@@ -64,9 +65,7 @@ export function knownCollectionFolders(known = KNOWN_COLLECTIONS) {
 }
 
 /**
- * Copy for an empty scan. Folder names come from KNOWN_COLLECTIONS so a
- * preview-only title (上學不容易 on the homepage shelf) is not listed until that
- * folder is a known player collection.
+ * Copy for an empty scan. Folder names come from KNOWN_COLLECTIONS.
  */
 export function emptyLibraryMessage(entries, skipped, known = KNOWN_COLLECTIONS) {
   const list = Array.isArray(entries) ? entries : [];
@@ -146,6 +145,53 @@ export function pairingKey(collectionFolder, bookFolder) {
   return `${collectionFolder}::${slug(bookFolder)}`;
 }
 
+/** Immune-style chapter files share one listen/ folder. Whole-book m4b names do not. */
+export function isChapterPartName(value) {
+  const base = String(value || "")
+    .replace(/\.[^.]+$/, "")
+    .trim();
+  return /(?:^|[-_\s])part\s*0*\d+$/i.test(base);
+}
+
+export function listenFileBookFolder(collectionFolder, fileName) {
+  if (collectionFolder === "Immune") return "immune";
+  if (isChapterPartName(fileName)) {
+    return collectionFolder === "Immune" ? "immune" : slug(collectionFolder);
+  }
+  const base = String(fileName || "").replace(/\.[^.]+$/, "");
+  return base || slug(collectionFolder);
+}
+
+/** Last full scan stays on the shelf even when files still need Drive reconnect. */
+export function snapshotShouldListBook(book) {
+  return !!(book && book.id);
+}
+
+export function booksFromLibrarySnapshot(snapshot) {
+  return (Array.isArray(snapshot) ? snapshot : []).filter(snapshotShouldListBook);
+}
+
+export function bookHasDriveMedia(book) {
+  if (!book) return false;
+  if (book.source === "drive") return true;
+  if (book.coverDriveId || book.ebook?.driveId) return true;
+  return (book.chapters || []).some((ch) => ch.driveId || ch.file?.driveId);
+}
+
+/**
+ * Union a fresh scan with the previous shelf. A partial Drive page or a
+ * phone that only rehydrated recently-played blobs must not hide the rest.
+ */
+export function mergeLibraryScans(scanned, previous, { keep } = {}) {
+  const list = Array.isArray(scanned) ? scanned : [];
+  const prior = Array.isArray(previous) ? previous : [];
+  const ids = new Set(list.map((b) => b?.id).filter(Boolean));
+  const shouldKeep =
+    typeof keep === "function" ? keep : (book) => bookHasDriveMedia(book);
+  const kept = prior.filter((book) => book?.id && !ids.has(book.id) && shouldKeep(book));
+  return [...list, ...kept];
+}
+
 /**
  * Pair Library/ebooks/<book>.epub (or ebooks/<book>/file.epub) to a listen book.
  * Collection-scoped siblings use Collection/ebooks/ next to Collection/listen/.
@@ -212,10 +258,26 @@ export function locateBookPath(parts) {
     const rest = parts.slice(listenIdx + 1);
     if (rest.length === 0) return null;
     if (rest.length === 1) {
+      const leaf = rest[0];
+      if (AUDIO_EXT.has(extOf(leaf))) {
+        return { collectionFolder, bookFolder: listenFileBookFolder(collectionFolder, leaf) };
+      }
       const bookFolder = collectionFolder === "Immune" ? "immune" : slug(collectionFolder);
       return { collectionFolder, bookFolder };
     }
     return { collectionFolder, bookFolder: rest[0] };
+  }
+  // Library/Collection/Book/file (no listen/) — do not collapse every series into Library.
+  if (parts.length >= 4 && /^library$/i.test(parts[0])) {
+    return { collectionFolder: parts[1], bookFolder: parts[2] };
+  }
+  if (parts.length === 3 && /^library$/i.test(parts[0])) {
+    const collectionFolder = parts[1];
+    const leaf = parts[2];
+    if (AUDIO_EXT.has(extOf(leaf))) {
+      return { collectionFolder, bookFolder: listenFileBookFolder(collectionFolder, leaf) };
+    }
+    return { collectionFolder, bookFolder: leaf };
   }
   // Picked a collection root that contains book folders of audio (no listen/ segment).
   if (parts.length >= 2) {

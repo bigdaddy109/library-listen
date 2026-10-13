@@ -7,8 +7,8 @@ import {
   buildLibrary,
   extOf,
   shelfBadge,
-} from "../library.js?v=37";
-import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=37";
+} from "../library.js?v=38";
+import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=38";
 import {
   OPEN_INTENT_KEY,
   VIEWS,
@@ -30,8 +30,8 @@ import {
   seriesMeta,
   shelfStatusLabel,
   volumeNumber,
-} from "./catalog.js?v=37";
-import { coverSvg, spineMetrics, topicMotifSvg } from "./covers.js?v=37";
+} from "./catalog.js?v=38";
+import { coverSvg, spineMetrics, topicMotifSvg } from "./covers.js?v=38";
 
 const VIEW_KEY = "librarylisten.shelfView";
 const SERIES_KEY = "librarylisten.shelfSeries";

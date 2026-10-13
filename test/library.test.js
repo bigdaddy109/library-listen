@@ -3,9 +3,14 @@ import { describe, it } from "node:test";
 import {
   PROGRESS_KEY,
   KNOWN_COLLECTIONS,
+  bookHasDriveMedia,
+  booksFromLibrarySnapshot,
   buildLibrary,
   emptyLibraryMessage,
+  isChapterPartName,
   knownCollectionFolders,
+  listenFileBookFolder,
+  mergeLibraryScans,
   chapterProgress,
   loadProgress,
   locateBookPath,
@@ -68,6 +73,18 @@ function libraryTree() {
   ];
 }
 
+/** Jeff's live Library shape: Immune + school (several books) + Munroe + one more. */
+function multiSeriesTree() {
+  return [
+    ...libraryTree(),
+    entry("Library/上學不容易/listen/Middle School 01 First Day/01.mp3"),
+    entry("Library/上學不容易/listen/Middle School 02 Get Me/01.mp3"),
+    entry("Library/上學不容易/listen/Middle School 03 Homework/01.mp3"),
+    entry("Library/上學不容易/listen/Middle School 04 Summer.m4b"),
+    entry("Library/Thing Explainer/listen/Thing Explainer/01.mp3"),
+  ];
+}
+
 describe("locateBookPath", () => {
   it("reads Library/Collection/listen/book/file", () => {
     assert.deepEqual(
@@ -106,6 +123,27 @@ describe("locateBookPath", () => {
       collectionFolder: "Imported",
       bookFolder: "imported",
     });
+  });
+
+  it("treats a whole-book file sitting in listen/ as its own title", () => {
+    assert.deepEqual(
+      locateBookPath(pathParts("Library/上學不容易/listen/Middle School 02 Get Me.m4b")),
+      { collectionFolder: "上學不容易", bookFolder: "Middle School 02 Get Me" }
+    );
+    assert.equal(isChapterPartName("Immune-Part05.mp3"), true);
+    assert.equal(isChapterPartName("Middle School 02 Get Me.m4b"), false);
+    assert.equal(listenFileBookFolder("Immune", "Immune-Part05.mp3"), "immune");
+    assert.equal(
+      listenFileBookFolder("上學不容易", "Middle School 02 Get Me.m4b"),
+      "Middle School 02 Get Me"
+    );
+  });
+
+  it("does not collapse Library/Collection/Book paths into one Library book", () => {
+    assert.deepEqual(
+      locateBookPath(pathParts("Library/上學不容易/Middle School 02 Get Me/01.mp3")),
+      { collectionFolder: "上學不容易", bookFolder: "Middle School 02 Get Me" }
+    );
   });
 });
 
@@ -156,6 +194,27 @@ describe("buildLibrary scan", () => {
     assert.equal(whatIf.ebook, null);
     assert.equal(shelfBadge(whatIf), "Audio");
     assert.equal(shelfBadge(books.find((b) => b.id === "immune/immune")), "Audio");
+  });
+
+  it("keeps every series from a multi-book Library fixture", () => {
+    const books = buildLibrary(multiSeriesTree());
+    const ids = books.map((b) => b.id).sort();
+    assert.deepEqual(ids, [
+      "immune/immune",
+      "munroe/how-to",
+      "munroe/what-if-1",
+      "munroe/what-if-2",
+      "school/middle-school-01-first-day",
+      "school/middle-school-02-get-me",
+      "school/middle-school-03-homework",
+      "school/middle-school-04-summer",
+      "thing-explainer/thing-explainer",
+    ]);
+    assert.equal(books.find((b) => b.id === "school/middle-school-02-get-me").title, "Middle School 02 Get Me");
+    assert.equal(books.find((b) => b.id === "school/middle-school-02-get-me").collectionTitle, "上學不容易");
+    assert.equal(books.filter((b) => b.collectionId === "school").length, 4);
+    assert.ok(books.some((b) => b.collectionId === "munroe"));
+    assert.ok(books.some((b) => b.id === "thing-explainer/thing-explainer"));
   });
 
   it("still groups Immune when the pick starts at the collection folder", () => {
@@ -481,14 +540,48 @@ describe("progress", () => {
   });
 });
 
+describe("snapshot restore does not hide the last full scan", () => {
+  it("keeps every snapshot row, not only recently-played blobs", () => {
+    const snapshot = buildLibrary(multiSeriesTree()).map((book, i) => ({
+      id: book.id,
+      title: book.title,
+      collectionId: book.collectionId,
+      source: "drive",
+      chapters: book.chapters.map((ch) => ({
+        id: ch.id,
+        title: ch.title,
+        driveId: i < 2 ? `drive-${ch.id}` : null,
+      })),
+    }));
+    const listed = booksFromLibrarySnapshot(snapshot);
+    assert.equal(listed.length, 9);
+    assert.equal(listed.filter((b) => b.chapters.some((ch) => ch.driveId)).length, 2);
+    assert.equal(bookHasDriveMedia(snapshot[0]), true);
+    assert.equal(bookHasDriveMedia({ id: "x", chapters: [] }), false);
+  });
+
+  it("unions a 2-book reconnect with the previous Drive shelf", () => {
+    const full = buildLibrary(multiSeriesTree()).map((book) => ({
+      ...book,
+      source: "drive",
+      chapters: book.chapters.map((ch) => ({ ...ch, driveId: `d-${ch.id}` })),
+    }));
+    const recent = full.filter((b) => b.id === "immune/immune" || b.id === "school/middle-school-02-get-me");
+    const merged = mergeLibraryScans(recent, full);
+    assert.equal(merged.length, 9);
+    assert.ok(merged.some((b) => b.id === "munroe/what-if-1"));
+    assert.ok(merged.some((b) => b.id === "school/middle-school-01-first-day"));
+    assert.ok(merged.some((b) => b.id === "thing-explainer/thing-explainer"));
+  });
+});
+
 describe("emptyLibraryMessage", () => {
-  it("lists only KNOWN_COLLECTIONS folders and never 上學不容易", () => {
+  it("lists KNOWN_COLLECTIONS folders including 上學不容易", () => {
     assert.deepEqual(knownCollectionFolders(), Object.keys(KNOWN_COLLECTIONS));
     const msg = emptyLibraryMessage([], 0);
     assert.match(msg, /No audiobooks found/);
-    assert.match(msg, /門羅-WhatIf \/ Immune/);
+    assert.match(msg, /門羅-WhatIf \/ Immune \/ 上學不容易/);
     assert.match(msg, /用 Google 登入/);
-    assert.equal(msg.includes("上學不容易"), false);
     assert.match(msg, /Files seen: 0 \(audio: 0\)/);
   });
 
