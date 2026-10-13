@@ -125,7 +125,7 @@ Miss one and phones keep a stale shell. HTML navigations are network-first; othe
 
 ## Working rules
 
-1. **Changes go through PRs. Never merge your own PR.** Jeff reviews and merges.
+1. **Changes go through PRs. Never merge your own PR, and never push to `main`.** The reviewer approves; the 研發程式 merges on GitHub (see Merge rule).
 2. **Docs-only vs app changes stay separate** unless a one-line doc fix is required for the files you were asked to touch.
 3. **Search the repo before assuming something is missing.** README, SHARE, INSTALL-zh, this file, and `fix_plan.md` already exist once this PR lands.
 4. **No stubs.** Don’t add empty tests, placeholder functions, or “TODO implement later” files.
@@ -137,10 +137,13 @@ Miss one and phones keep a stale shell. HTML navigations are network-first; othe
 
 ## Merge rule (every iteration)
 
+Roles: the **agent** (you) builds and opens PRs; the **reviewer** approves; the **研發程式** merges on GitHub. Nobody pushes to `main` directly — not the agent, not with a squash commit, not “just this once”. Do not ask Jeff to merge.
+
 1. **Tag before you start.** Before the first commit of a feature, tag the current `main` as `pre-<feature>-YYYYMMDD` (kebab-case feature, UTC date) and push the tag, e.g. `git tag pre-cover-wall-20261013 origin/main && git push origin pre-cover-wall-20261013`. That tag is the rollback point.
-2. **Open a PR.** Work on a branch, push, open the PR against `main`. CI (`.github/workflows/acceptance.yml`) must be green.
-3. **Wait for 「可以合 #N」.** Do not merge — and do not ask Jeff to merge — until the 研發程式 (dev reviewer) replies on that PR with exactly `可以合 #N`, where `N` is that PR’s number. Approval for another PR number does not count.
-4. **After merge, test the live site.** Once Pages has published `main`, run the full [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md) checklist against https://bigdaddy109.github.io/library-listen/ (not only localhost), including 390px iPhone UA, desktop, and the stale-SW pass. If it fails, roll back to the `pre-…` tag via a revert PR.
+2. **Open a PR.** Work on a branch, push, open the PR against `main`. CI (`.github/workflows/acceptance.yml`) must be green. Put the `pre-…` tag in the PR body.
+3. **Wait for 「可以合 #N」.** The reviewer replies on that PR with exactly `可以合 #N`, where `N` is that PR’s number. Approval for another PR number does not count.
+4. **The 研發程式 merges on GitHub.** After `可以合 #N`, the 研發程式 merges the PR itself through GitHub’s normal PR merge (squash, per repo habit), so the PR shows as merged. The agent does not merge, does not push to `main`, and does not close the PR by hand.
+5. **After merge, the agent tests the live site.** Once Pages has published `main`, run the full [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md) checklist against https://bigdaddy109.github.io/library-listen/ (not only localhost), including 390px iPhone UA, desktop, and the stale-SW pass, and report with live-site screenshots. If it fails, roll back to the `pre-…` tag via a revert PR (same flow: PR → 可以合 #N → 研發程式 merges).
 
 ## Suggested first command when you open the repo
 
