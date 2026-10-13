@@ -54,7 +54,7 @@ describe("homepage is the rice-paper shelf", () => {
     assert.match(classic, /href="\.\.\/"/);
     assert.match(home, /href="\.\/classic\/index\.html"/);
     assert.match(shelf, /location\.replace\("\.\.\/"\)/);
-    assert.match(sw, /library-listen-shell-v36/);
+    assert.match(sw, /library-listen-shell-v37/);
     assert.match(sw, /"\.\/classic\/index\.html"/);
   });
 
@@ -66,8 +66,22 @@ describe("homepage is the rice-paper shelf", () => {
     assert.match(css, /prefers-reduced-motion:\s*reduce/);
     assert.match(css, /\.book-3d,/);
     assert.match(css, /\.spine-fore/);
+    assert.match(css, /html\.no-book-3d/);
+    assert.match(css, /-webkit-touch-callout/);
     assert.match(home, /id="btn-google"/);
     assert.match(home, /id="source-sheet"/);
     assert.match(home, /href="\.\/classic\/index\.html"/);
+  });
+
+  it("activates the new shell with skipWaiting and clients.claim inside waitUntil", () => {
+    const install = sw.match(/addEventListener\("install",[\s\S]*?\n\}\);/);
+    const activate = sw.match(/addEventListener\("activate",[\s\S]*?\n\}\);/);
+    assert.ok(install, "install listener");
+    assert.ok(activate, "activate listener");
+    assert.match(install[0], /waitUntil/);
+    assert.match(install[0], /skipWaiting/);
+    assert.match(activate[0], /waitUntil/);
+    assert.match(activate[0], /clients\.claim/);
+    assert.match(sw, /library-listen-shell-v37/);
   });
 });

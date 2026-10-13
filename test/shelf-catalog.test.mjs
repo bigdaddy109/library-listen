@@ -11,6 +11,7 @@ import {
   groupBySeries,
   mediaFlags,
   normalizeView,
+  isWebKitBook3dUnsafe,
   openBookPhase,
   PULL_TIMING,
   pullOriginFromRect,
@@ -123,6 +124,49 @@ describe("openBookPhase", () => {
     assert.equal(openBookPhase({ pull: true }), "pull");
     assert.equal(openBookPhase({ spread: true, flip: true }), "open");
     assert.equal(openBookPhase({ reducedMotion: true, pull: true }), "open");
+    assert.equal(openBookPhase({ no3d: true }), "open");
+    assert.equal(openBookPhase({ no3d: true, pull: true }), "open");
+    assert.equal(openBookPhase({ no3d: true, flip: true }), "open");
+  });
+});
+
+describe("isWebKitBook3dUnsafe", () => {
+  it("flags iPhone Safari and desktop Safari, not Chromium", () => {
+    assert.equal(
+      isWebKitBook3dUnsafe(
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+      ),
+      true
+    );
+    assert.equal(
+      isWebKitBook3dUnsafe(
+        "Mozilla/5.0 (iPad; CPU OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
+      ),
+      true
+    );
+    assert.equal(
+      isWebKitBook3dUnsafe(
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15"
+      ),
+      true
+    );
+    assert.equal(
+      isWebKitBook3dUnsafe("", { touchMacPad: true }),
+      true
+    );
+    assert.equal(
+      isWebKitBook3dUnsafe(
+        "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+      ),
+      false
+    );
+    assert.equal(
+      isWebKitBook3dUnsafe(
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      ),
+      false
+    );
+    assert.equal(isWebKitBook3dUnsafe(""), false);
   });
 });
 

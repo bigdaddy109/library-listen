@@ -935,6 +935,47 @@ h1 {
   }
 }
 
+/* WebKit/iOS: skip the 3D pull-out. Spines stay 2D cloth; open is instant. */
+html.no-book-3d .draw-root {
+  perspective: none;
+  transform-style: flat;
+}
+
+html.no-book-3d .book-3d {
+  display: none !important;
+}
+
+html.no-book-3d .draw-root .spread,
+html.no-book-3d .draw-root.is-drawing .spread,
+html.no-book-3d .draw-root.is-facing .spread,
+html.no-book-3d .draw-root.is-opening .spread,
+html.no-book-3d .draw-root.is-flipping .spread,
+html.no-book-3d .draw-root.is-open .spread {
+  opacity: 1;
+  transform: none;
+}
+
+@supports (-webkit-touch-callout: none) {
+  .draw-root {
+    perspective: none;
+    transform-style: flat;
+  }
+
+  .book-3d {
+    display: none !important;
+  }
+
+  .draw-root .spread,
+  .draw-root.is-drawing .spread,
+  .draw-root.is-facing .spread,
+  .draw-root.is-opening .spread,
+  .draw-root.is-flipping .spread,
+  .draw-root.is-open .spread {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* Homepage is the rice-paper shelf; player chrome keeps the dark tokens. */
 body.shell-shelf {
   background: var(--paper);

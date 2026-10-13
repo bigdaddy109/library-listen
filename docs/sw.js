@@ -1,5 +1,5 @@
 /* Shell-only cache. Audiobook files are never cached here. */
-const CACHE = "library-listen-shell-v36";
+const CACHE = "library-listen-shell-v37";
 const DRIVE_MEDIA_PREFIX = "/drive-media/";
 const DRIVE_TOKEN_MESSAGE = "librarylisten.drive-token";
 const DRIVE_UNAUTHORIZED_MESSAGE = "librarylisten.drive-unauthorized";
@@ -15,24 +15,24 @@ self.addEventListener("message", (event) => {
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=36",
-  "./app.js?v=36",
-  "./library.js?v=36",
-  "./drive.js?v=36",
-  "./search.js?v=36",
-  "./markers.js?v=36",
-  "./save-prompt.js?v=36",
-  "./epub.js?v=36",
-  "./immune-cards.js?v=36",
+  "./styles.css?v=37",
+  "./app.js?v=37",
+  "./library.js?v=37",
+  "./drive.js?v=37",
+  "./search.js?v=37",
+  "./markers.js?v=37",
+  "./save-prompt.js?v=37",
+  "./epub.js?v=37",
+  "./immune-cards.js?v=37",
   "./manifest.webmanifest",
-  "./icon.svg?v=36",
-  "./apple-touch-icon.png?v=36",
+  "./icon.svg?v=37",
+  "./apple-touch-icon.png?v=37",
   "./classic/index.html",
   "./shelf/index.html",
-  "./shelf/shelf.css?v=36",
-  "./shelf/shelf.js?v=36",
-  "./shelf/catalog.js?v=36",
-  "./shelf/covers.js?v=36",
+  "./shelf/shelf.css?v=37",
+  "./shelf/shelf.js?v=37",
+  "./shelf/catalog.js?v=37",
+  "./shelf/covers.js?v=37",
   "./concepts/immune/skin.jpg",
   "./concepts/immune/bacteria.jpg",
   "./concepts/immune/inflammation.jpg",
@@ -54,17 +54,17 @@ const ASSETS = [
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)));
-  self.skipWaiting();
+  event.waitUntil(
+    caches.open(CACHE).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
-    )
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 function isDriveMediaUrl(url) {
