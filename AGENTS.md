@@ -135,6 +135,13 @@ Miss one and phones keep a stale shell. HTML navigations are network-first; othe
 8. **No secrets in code.** No real library paths. No copyrighted audiobooks.
 9. **Do not work the paused native app** unless Jeff explicitly un-pauses it.
 
+## Merge rule (every iteration)
+
+1. **Tag before you start.** Before the first commit of a feature, tag the current `main` as `pre-<feature>-YYYYMMDD` (kebab-case feature, UTC date) and push the tag, e.g. `git tag pre-cover-wall-20261013 origin/main && git push origin pre-cover-wall-20261013`. That tag is the rollback point.
+2. **Open a PR.** Work on a branch, push, open the PR against `main`. CI (`.github/workflows/acceptance.yml`) must be green.
+3. **Wait for 「可以合 #N」.** Do not merge — and do not ask Jeff to merge — until the 研發程式 (dev reviewer) replies on that PR with exactly `可以合 #N`, where `N` is that PR’s number. Approval for another PR number does not count.
+4. **After merge, test the live site.** Once Pages has published `main`, run the full [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md) checklist against https://bigdaddy109.github.io/library-listen/ (not only localhost), including 390px iPhone UA, desktop, and the stale-SW pass. If it fails, roll back to the `pre-…` tag via a revert PR.
+
 ## Suggested first command when you open the repo
 
 ```bash
