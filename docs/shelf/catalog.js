@@ -28,28 +28,14 @@ export const OPEN_INTENT_KEY = "librarylisten.open.v1";
  * Own motion — not a Gloss/Nutlope clone.
  * draw: pull off the plank + yaw spine→cover, then the front board uncases from the RIGHT.
  * pull: freeze after the yaw (cover faces the camera, still closed).
- * flip: freeze mid-uncase. open / reduced motion / ?spread=1 / WebKit skip to the spread.
- * WebKit/iOS: preserve-3d + backface-visibility can blank the overlay; no 3D there.
+ * flip: freeze mid-uncase. open / reduced motion / ?spread=1 skip to the spread.
+ * 3D is on for iPhone and iPad. Reduced motion is the only skip.
  */
 export const PULL_TIMING = {
   totalMs: 820,
   extractMs: 420,
   openMs: 400,
 };
-
-/** iPhone / iPad / desktop Safari. Chromium (including Android) stays false. */
-export function isWebKitBook3dUnsafe(ua = "", hints = {}) {
-  if (hints.touchMacPad) return true;
-  const agent = String(ua || "");
-  if (/iP(hone|od|ad)/.test(agent)) return true;
-  if (
-    /Safari/i.test(agent) &&
-    !/Chrom(e|ium)|Android|Edg|OPR|Firefox|CriOS|FxiOS/i.test(agent)
-  ) {
-    return true;
-  }
-  return false;
-}
 
 export function openBookPhase({
   reducedMotion = false,
@@ -80,11 +66,21 @@ export function pullOriginFromRect(rect) {
 export function pullTransformVars(rect, viewport = {}) {
   const width = Number(viewport.width) > 0 ? Number(viewport.width) : 390;
   const height = Number(viewport.height) > 0 ? Number(viewport.height) : 844;
+  const left = Number.isFinite(Number(viewport.left)) ? Number(viewport.left) : 0;
+  const top = Number.isFinite(Number(viewport.top)) ? Number(viewport.top) : 0;
   const origin = pullOriginFromRect(rect);
   const yaw = Number.isFinite(viewport.yaw) ? viewport.yaw : origin.valid ? 76 : 0;
+  const cx = left + width / 2;
+  const cy = top + height / 2;
+  let dx = origin.valid ? origin.x - cx : 0;
+  let dy = origin.valid ? origin.y - cy : 0;
+  const maxX = Math.max(width, 1) * 0.95;
+  const maxY = Math.max(height, 1) * 0.95;
+  dx = Math.max(-maxX, Math.min(maxX, dx));
+  dy = Math.max(-maxY, Math.min(maxY, dy));
   return {
-    fromX: `${Math.round(origin.x - width / 2)}px`,
-    fromY: `${Math.round(origin.y - height / 2)}px`,
+    fromX: `${Math.round(dx)}px`,
+    fromY: `${Math.round(dy)}px`,
     fromW: `${Math.round(origin.w)}px`,
     fromH: `${Math.round(origin.h)}px`,
     fromYaw: `${yaw}deg`,

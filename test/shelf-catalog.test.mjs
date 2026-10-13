@@ -11,7 +11,6 @@ import {
   groupBySeries,
   mediaFlags,
   normalizeView,
-  isWebKitBook3dUnsafe,
   openBookPhase,
   PULL_TIMING,
   pullOriginFromRect,
@@ -161,46 +160,6 @@ describe("openBookPhase", () => {
   });
 });
 
-describe("isWebKitBook3dUnsafe", () => {
-  it("flags iPhone Safari and desktop Safari, not Chromium", () => {
-    assert.equal(
-      isWebKitBook3dUnsafe(
-        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-      ),
-      true
-    );
-    assert.equal(
-      isWebKitBook3dUnsafe(
-        "Mozilla/5.0 (iPad; CPU OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
-      ),
-      true
-    );
-    assert.equal(
-      isWebKitBook3dUnsafe(
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15"
-      ),
-      true
-    );
-    assert.equal(
-      isWebKitBook3dUnsafe("", { touchMacPad: true }),
-      true
-    );
-    assert.equal(
-      isWebKitBook3dUnsafe(
-        "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
-      ),
-      false
-    );
-    assert.equal(
-      isWebKitBook3dUnsafe(
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-      ),
-      false
-    );
-    assert.equal(isWebKitBook3dUnsafe(""), false);
-  });
-});
-
 describe("pull transform", () => {
   it("keeps the draw under 900ms and maps a spine rect to CSS vars", () => {
     assert.equal(PULL_TIMING.totalMs, 820);
@@ -222,6 +181,21 @@ describe("pull transform", () => {
       pullTransformVars(null, { width: 390, height: 844, yaw: 8 }).fromYaw,
       "8deg"
     );
+  });
+
+  it("maps from the 3D scene box and clamps a far spine on a 390px scene", () => {
+    const vars = pullTransformVars(
+      { left: 40, top: 200, width: 24, height: 180 },
+      { width: 364, height: 448, left: 13, top: 215 }
+    );
+    assert.equal(vars.fromX, "-143px");
+    assert.equal(vars.fromY, "-149px");
+    const far = pullTransformVars(
+      { left: 20, top: 2400, width: 24, height: 180 },
+      { width: 390, height: 844 }
+    );
+    assert.equal(far.fromY, "802px");
+    assert.equal(pullTransformVars(null, { width: 390, height: 844 }).fromX, "0px");
   });
 });
 
