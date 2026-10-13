@@ -66,17 +66,40 @@ export const COVER_MORPH = {
   flipEasing: "cubic-bezier(0.45, 0.05, 0.2, 1)",
 };
 
-/** Keyframes for the board swing; `opening: false` is the exact reverse. */
+function reverseFrames(frames) {
+  return [...frames]
+    .reverse()
+    .map((f) => (f.offset == null ? f : { ...f, offset: 1 - f.offset }));
+}
+
+/**
+ * Keyframes for the board swing; `opening: false` is the exact reverse.
+ * The faces swap by opacity at offset 0.5, which (same duration + easing as
+ * the leaf) is the edge-on rotateY(-90deg) moment, so engines that flatten 3D
+ * and ignore backface-visibility still never show the mirrored side.
+ */
 export function bookFlipFrames(opening = true) {
   const frames = {
     leaf: [{ transform: "rotateY(0deg)" }, { transform: "rotateY(-180deg)" }],
     spread: [{ transform: "translateX(-25%)" }, { transform: "translateX(0)" }],
     endpaper: [{ opacity: 0 }, { opacity: 1 }],
+    front: [
+      { opacity: 1, offset: 0 },
+      { opacity: 1, offset: 0.5 },
+      { opacity: 0, offset: 0.5 },
+      { opacity: 0, offset: 1 },
+    ],
+    back: [
+      { opacity: 0, offset: 0 },
+      { opacity: 0, offset: 0.5 },
+      { opacity: 1, offset: 0.5 },
+      { opacity: 1, offset: 1 },
+    ],
     frontShade: [{ opacity: 0 }, { opacity: 0.35 }],
     backShade: [{ opacity: 0.35 }, { opacity: 0 }],
   };
   if (opening) return frames;
-  return Object.fromEntries(Object.entries(frames).map(([k, f]) => [k, [...f].reverse()]));
+  return Object.fromEntries(Object.entries(frames).map(([k, f]) => [k, reverseFrames(f)]));
 }
 
 export function coverTransitionMode({ reducedMotion = false, viewTransitions = false } = {}) {

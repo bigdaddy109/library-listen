@@ -111,6 +111,12 @@ test.describe("Jeff Drive fixture plays every series without saved audio Blobs",
       return [...props].filter((k) => !["offset", "computedOffset", "easing", "composite"].includes(k));
     });
     await card.click();
+    await expect(page.locator("#book-layer[data-morph] .page.right [data-open=audio]")).toBeAttached();
+    const hit = await page.evaluate(() => {
+      const r = document.querySelector("#book-layer .page.right [data-open=audio]").getBoundingClientRect();
+      return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest("[data-open]") !== null;
+    });
+    expect(hit).toBe(false);
     const props = await animated;
     expect(props).toContain("transform");
     expect(props.every((p) => p === "transform" || p === "opacity")).toBe(true);

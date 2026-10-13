@@ -240,10 +240,15 @@ describe("cover wall shared-element zoom", () => {
     const shut = bookFlipFrames(false);
     assert.deepEqual(open.leaf, [{ transform: "rotateY(0deg)" }, { transform: "rotateY(-180deg)" }]);
     assert.deepEqual(open.spread, [{ transform: "translateX(-25%)" }, { transform: "translateX(0)" }]);
+    const mirror = (f) => [...f].reverse().map((k) => (k.offset == null ? k : { ...k, offset: 1 - k.offset }));
+    assert.deepEqual(open.front.map((k) => [k.offset, k.opacity]), [[0, 1], [0.5, 1], [0.5, 0], [1, 0]]);
+    assert.deepEqual(open.back.map((k) => [k.offset, k.opacity]), [[0, 0], [0.5, 0], [0.5, 1], [1, 1]]);
     for (const key of Object.keys(open)) {
-      assert.deepEqual(shut[key], [...open[key]].reverse(), key);
+      assert.deepEqual(shut[key], mirror(open[key]), key);
+      const offsets = shut[key].map((k) => k.offset).filter((o) => o != null);
+      assert.deepEqual(offsets, [...offsets].sort((a, b) => a - b), `${key} offsets ascend`);
       for (const frame of open[key]) {
-        for (const prop of Object.keys(frame)) assert.ok(prop === "transform" || prop === "opacity", prop);
+        for (const prop of Object.keys(frame)) assert.ok(["transform", "opacity", "offset"].includes(prop), prop);
         if (frame.transform) assert.doesNotMatch(frame.transform, /rotate[XZ]|translate3d|matrix3d|scale/);
       }
     }

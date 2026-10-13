@@ -637,6 +637,9 @@ html.cover-morph-exit::view-transition-old(book-cover) {
   transform-origin: 0 50%;
   transform-style: preserve-3d;
   -webkit-transform-style: preserve-3d;
+}
+
+.book-layer[data-morph] .spread {
   pointer-events: none;
 }
 
@@ -646,6 +649,11 @@ html.cover-morph-exit::view-transition-old(book-cover) {
 
 .draw-root.is-cover.is-opened .cover-leaf {
   transform: rotateY(-180deg);
+}
+
+.draw-root.is-cover.is-closed .leaf-back,
+.draw-root.is-cover.is-opened .leaf-front {
+  opacity: 0;
 }
 
 .draw-root.is-flipping .cover-leaf,

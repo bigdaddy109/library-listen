@@ -417,6 +417,8 @@ function flipBook(opening) {
     [".cover-leaf", frames.leaf],
     [".spread", frames.spread],
     [".page.left", frames.endpaper],
+    [".leaf-front", frames.front],
+    [".leaf-back", frames.back],
     [".leaf-front .leaf-shade", frames.frontShade],
     [".leaf-back .leaf-shade", frames.backShade],
   ];
