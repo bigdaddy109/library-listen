@@ -1,4 +1,4 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=36";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=37";
 import {
   AUDIO_EXT,
   EBOOK_OFFLINE_KEY,
@@ -18,7 +18,7 @@ import {
   saveTextProgress,
   shelfBadge,
   textProgress,
-} from "./library.js?v=36";
+} from "./library.js?v=37";
 import {
   DRIVE_UNAUTHORIZED_MESSAGE,
   attachDriveMedia,
@@ -42,7 +42,7 @@ import {
   signInWithGoogle,
   signOutGoogle,
   sourceDialogActions,
-} from "./drive.js?v=36";
+} from "./drive.js?v=37";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -50,7 +50,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=36";
+} from "./search.js?v=37";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -65,8 +65,8 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=36";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=36";
+} from "./markers.js?v=37";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=37";
 import {
   applyScrollFraction,
   mimeForPath,
@@ -78,14 +78,14 @@ import {
   spineIndexFromCfi,
   spineLabel,
   zipPath,
-} from "./epub.js?v=36";
-import { demoCatalog } from "./shelf/catalog.js?v=36";
+} from "./epub.js?v=37";
+import { demoCatalog } from "./shelf/catalog.js?v=37";
 import {
   closeRiceBook,
   initRiceShelf,
   isRiceShelfPage,
   setRiceShelfLibrary,
-} from "./shelf/shelf.js?v=36";
+} from "./shelf/shelf.js?v=37";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -176,6 +176,7 @@ let offerSaveBanner = false;
 /** bookIds already asked to save this session */
 const savePrompted = new Set();
 let toastTimer = null;
+let swReloading = false;
 
 let dbPromise = null;
 function openDb() {
@@ -2482,7 +2483,22 @@ function bind() {
 
 function registerSW() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register(new URL("./sw.js", import.meta.url).href).catch(() => {});
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  navigator.serviceWorker
+    .register(new URL("./sw.js", import.meta.url).href)
+    .then((reg) => {
+      try {
+        reg.update();
+      } catch {
+        /* ignore */
+      }
+    })
+    .catch(() => {});
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController || swReloading) return;
+    swReloading = true;
+    location.reload();
+  });
   navigator.serviceWorker.addEventListener("message", (event) => {
     if (event.data?.type !== DRIVE_UNAUTHORIZED_MESSAGE) return;
     showDriveError({ name: "DriveAuthError", status: 401 }, { silent: true });

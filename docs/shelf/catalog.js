@@ -28,7 +28,8 @@ export const OPEN_INTENT_KEY = "librarylisten.open.v1";
  * Own motion — not a Gloss/Nutlope clone.
  * draw: pull off the plank + yaw spine→cover, then the front board uncases from the RIGHT.
  * pull: freeze after the yaw (cover faces the camera, still closed).
- * flip: freeze mid-uncase. open / reduced motion / ?spread=1 skip to the spread.
+ * flip: freeze mid-uncase. open / reduced motion / ?spread=1 / WebKit skip to the spread.
+ * WebKit/iOS: preserve-3d + backface-visibility can blank the overlay; no 3D there.
  */
 export const PULL_TIMING = {
   totalMs: 820,
@@ -36,13 +37,28 @@ export const PULL_TIMING = {
   openMs: 400,
 };
 
+/** iPhone / iPad / desktop Safari. Chromium (including Android) stays false. */
+export function isWebKitBook3dUnsafe(ua = "", hints = {}) {
+  if (hints.touchMacPad) return true;
+  const agent = String(ua || "");
+  if (/iP(hone|od|ad)/.test(agent)) return true;
+  if (
+    /Safari/i.test(agent) &&
+    !/Chrom(e|ium)|Android|Edg|OPR|Firefox|CriOS|FxiOS/i.test(agent)
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export function openBookPhase({
   reducedMotion = false,
   spread = false,
   flip = false,
   pull = false,
+  no3d = false,
 } = {}) {
-  if (spread || reducedMotion) return "open";
+  if (spread || reducedMotion || no3d) return "open";
   if (flip) return "flip";
   if (pull) return "pull";
   return "draw";

@@ -7,8 +7,8 @@ import {
   buildLibrary,
   extOf,
   shelfBadge,
-} from "../library.js?v=36";
-import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=36";
+} from "../library.js?v=37";
+import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=37";
 import {
   OPEN_INTENT_KEY,
   VIEWS,
@@ -19,6 +19,7 @@ import {
   groupBySeries,
   mediaFlags,
   normalizeView,
+  isWebKitBook3dUnsafe,
   openBookPhase,
   PULL_TIMING,
   pullTransformVars,
@@ -29,8 +30,8 @@ import {
   seriesMeta,
   shelfStatusLabel,
   volumeNumber,
-} from "./catalog.js?v=36";
-import { coverSvg, spineMetrics, topicMotifSvg } from "./covers.js?v=36";
+} from "./catalog.js?v=37";
+import { coverSvg, spineMetrics, topicMotifSvg } from "./covers.js?v=37";
 
 const VIEW_KEY = "librarylisten.shelfView";
 const SERIES_KEY = "librarylisten.shelfSeries";
@@ -307,6 +308,21 @@ function prefersReducedMotion() {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
+function book3dDisabled() {
+  const nav = typeof navigator !== "undefined" ? navigator : null;
+  return (
+    prefersReducedMotion() ||
+    isWebKitBook3dUnsafe(nav?.userAgent || "", {
+      touchMacPad: nav?.platform === "MacIntel" && nav.maxTouchPoints > 1,
+    })
+  );
+}
+
+function applyNoBook3dClass() {
+  if (typeof document === "undefined" || !book3dDisabled()) return;
+  document.documentElement.classList.add("no-book-3d");
+}
+
 function markDrawnSpine(bookId, drawn) {
   for (const el of els.stage?.querySelectorAll(".spine, .cover-card") || []) {
     el.classList.toggle("is-drawn", Boolean(drawn) && el.dataset.id === bookId);
@@ -334,7 +350,9 @@ function closeBook() {
 
 function openFromShelf(book, phaseHint) {
   state.selectedId = book.id;
-  state.phase = phaseHint || openBookPhase({ reducedMotion: prefersReducedMotion() });
+  state.phase =
+    phaseHint ||
+    openBookPhase({ reducedMotion: prefersReducedMotion(), no3d: book3dDisabled() });
   markDrawnSpine(book.id, true);
   els.layer.classList.remove("hidden");
   els.layer.hidden = false;
@@ -365,7 +383,7 @@ function applyPullVars(root, book) {
 
 function playDraw(root) {
   window.clearTimeout(coverTimer);
-  if (!root || prefersReducedMotion()) {
+  if (!root || book3dDisabled()) {
     root?.classList.add("is-open");
     state.phase = "open";
     return;
@@ -670,6 +688,7 @@ export function initRiceShelf(options = {}) {
     els.fileDir = document.getElementById("file-input-dir");
     els.fileFiles = document.getElementById("file-input-files");
   }
+  applyNoBook3dClass();
   restoreChrome();
   const previewParams = applyPreviewParams();
   if (!shelfBound) {
@@ -685,6 +704,7 @@ export function initRiceShelf(options = {}) {
       book,
       openBookPhase({
         reducedMotion: prefersReducedMotion(),
+        no3d: book3dDisabled(),
         spread: previewParams.get("spread") === "1",
         flip: previewParams.get("flip") === "1",
         pull: previewParams.get("pull") === "1",
