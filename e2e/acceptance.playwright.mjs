@@ -113,3 +113,59 @@ test.describe("Jeff Drive fixture: every series plays and reads", () => {
     await expect(page.locator('body[data-shell="classic"]')).toBeAttached();
   });
 });
+
+test.describe("lock screen (Media Session)", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      window.__actions = {};
+      const ms = navigator.mediaSession;
+      if (!ms) return;
+      const original = ms.setActionHandler.bind(ms);
+      ms.setActionHandler = (name, fn) => {
+        window.__actions[name] = typeof fn === "function" ? "set" : "cleared";
+        try {
+          original(name, fn);
+        } catch {
+          /* unsupported action */
+        }
+      };
+    });
+    await openFixtureShelf(page);
+  });
+
+  test("playing a book without a cover file puts a PNG of its cover on the lock screen", async ({ page }) => {
+    test.skip(!(await page.evaluate(() => "mediaSession" in navigator)), "no Media Session in this engine");
+    await openFromCoverAndListen(page, "munroe/what-if-1");
+    await audioAdvances(page);
+    await expect
+      .poll(() => page.evaluate(() => navigator.mediaSession.metadata?.artwork?.[0]?.type || ""))
+      .toBe("image/png");
+    const art = await page.evaluate(async () => {
+      const meta = navigator.mediaSession.metadata;
+      const a = meta.artwork[0];
+      const img = new Image();
+      img.src = a.src;
+      await img.decode();
+      return { title: meta.title, album: meta.album, sizes: a.sizes, src: a.src.slice(0, 5), w: img.naturalWidth, h: img.naturalHeight };
+    });
+    expect(art.album).toBe("What If?");
+    expect(art.sizes).toBe("512x512");
+    expect(art.src).toBe("blob:");
+    expect([art.w, art.h]).toEqual([512, 512]);
+  });
+
+  test("iPhone gets ±30 s skip buttons, desktop keeps chapter arrows", async ({ page, isMobile }) => {
+    test.skip(!(await page.evaluate(() => "mediaSession" in navigator)), "no Media Session in this engine");
+    const actions = await page.evaluate(() => window.__actions);
+    expect(actions.seekbackward).toBe("set");
+    expect(actions.seekforward).toBe("set");
+    expect(actions.play).toBe("set");
+    if (isMobile) {
+      expect(actions.nexttrack).toBe("cleared");
+      expect(actions.previoustrack).toBe("cleared");
+    } else {
+      expect(actions.nexttrack).toBe("set");
+      expect(actions.previoustrack).toBe("set");
+    }
+  });
+});
