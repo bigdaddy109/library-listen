@@ -88,7 +88,7 @@ Do not run `./start.sh`, `scripts/generate-fixtures.sh`, or `xcodebuild` for cur
 
 ## Tests (as of 2026-10-12)
 
-Local `node --test` covers scan/title/progress (`test/library.test.js`), PWA cache lockstep (`test/pwa-cache.test.mjs`), shelf search, m4b markers, save-prompt gating, Drive helpers, EPUB parse, and the Jeff Drive listen+ebook fixture. GitHub Actions (`.github/workflows/acceptance.yml`) installs ffmpeg, then runs `node --test` plus Playwright against that fixture. That is not a paid device farm. Do not add App Store / XCTest CI. Live merge still requires [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md).
+Local `node --test` covers scan/title/progress (`test/library.test.js`), PWA cache lockstep (`test/pwa-cache.test.mjs`), shelf search, m4b markers, save-prompt gating, Drive helpers, EPUB parse, and the Jeff Drive listen+ebook fixture. GitHub Actions (`.github/workflows/acceptance.yml`) installs ffmpeg, then runs `node --test` plus Playwright against that fixture in Chromium desktop, WebKit iPhone 390, and Chromium iPhone-UA 390, including a play+read pass on every series and an old-shell (vN-1 → vN) service-worker upgrade (`e2e/stale-shell.playwright.mjs`). That is not a paid device farm. Do not add App Store / XCTest CI. Live merge still requires [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md).
 
 Recorded on a Linux agent against `main` @ `b0e0b6c` (after Drive OAuth #23):
 
@@ -101,7 +101,7 @@ Recorded on a Linux agent against `main` @ `b0e0b6c` (after Drive OAuth #23):
 | Service-worker asset list vs files on disk | **Pass** (CACHE / `?v=` / ASSETS kept in lockstep by `test/pwa-cache.test.mjs`) |
 | Immune concept image files vs `immune-cards.js` | **Pass** |
 | `xcodebuild` / XCTest | **Absent.** Native is paused; do not add a Swift test target or a paid device farm. |
-| `.github/workflows/acceptance.yml` | **Present.** `node --test` + Playwright fixture only. |
+| `.github/workflows/acceptance.yml` | **Present.** `node --test` + Playwright fixture only (Chromium + WebKit, free GitHub runners). |
 
 Do not invent a paid CI service. Keep the workflow free and fixture-only.
 
