@@ -90,7 +90,7 @@ test.describe("Jeff Drive fixture plays every series without saved audio Blobs",
     await expect.poll(async () => page.locator(".spine[data-id], .cover-card[data-id]").count()).toBe(9);
   });
 
-  test("cover wall is the default and a cover zooms into the spread and back", async ({ page }) => {
+  test("cover wall is the default; a cover zooms in, swings open on its spine, and closes back", async ({ page }) => {
     await page.goto(`${ORIGIN}/`);
     await expect(page.locator('.view-toggle [data-view="covers"]')).toHaveAttribute("aria-pressed", "true");
     await expect.poll(async () => page.locator(".cover-card[data-id]").count()).toBe(9);
@@ -100,7 +100,7 @@ test.describe("Jeff Drive fixture plays every series without saved audio Blobs",
     const animated = page.evaluate(async () => {
       const props = new Set();
       const t0 = performance.now();
-      while (performance.now() - t0 < 600) {
+      while (performance.now() - t0 < 1300) {
         for (const a of document.getAnimations()) {
           for (const frame of a.effect?.getKeyframes?.() || []) {
             for (const key of Object.keys(frame)) props.add(key);
@@ -114,7 +114,11 @@ test.describe("Jeff Drive fixture plays every series without saved audio Blobs",
     const props = await animated;
     expect(props).toContain("transform");
     expect(props.every((p) => p === "transform" || p === "opacity")).toBe(true);
-    await expect(page.locator("#book-layer .draw-root.is-cover .spread-cover svg")).toBeVisible();
+    await expect(page.locator("#book-layer .draw-root.is-cover.is-opened .cover-leaf")).toBeAttached();
+    await expect(page.locator("#book-layer:not([data-morph])")).toBeAttached();
+    const leaf = await page.locator("#book-layer .cover-leaf").evaluate((el) => getComputedStyle(el).transform);
+    expect(leaf).toMatch(/^matrix3d\(-1,/);
+    await expect(page.locator("#book-layer .page.right [data-open=audio]")).toBeVisible();
     await expect(page.locator("#book-layer .book-3d")).toHaveCount(0);
     await expect(page.locator("#book-layer .page.right h2")).toHaveText("What If?");
     await page.locator("#btn-close-book").click();
@@ -127,7 +131,8 @@ test.describe("Jeff Drive fixture plays every series without saved audio Blobs",
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto(`${ORIGIN}/`);
     await page.locator('.cover-card[data-id="immune/immune"]').click();
-    await expect(page.locator("#book-layer .spread-cover svg")).toBeVisible();
+    await expect(page.locator("#book-layer .draw-root.is-cover.is-opened")).toBeAttached();
+    await expect(page.locator("#book-layer .page.right [data-open=audio]")).toBeVisible();
     expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);
     await page.keyboard.press("Escape");
     await expect(page.locator("#book-layer")).toBeHidden();

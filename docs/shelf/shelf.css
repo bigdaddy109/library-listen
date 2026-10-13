@@ -59,6 +59,15 @@ body {
     linear-gradient(180deg, #f7f2e8 0%, var(--paper) 28%, var(--paper-deep) 100%);
 }
 
+/* Under the open book the hairline stripes are invisible, and repainting
+   them every frame is what drops WebKit below 60fps during the flip. */
+html.book-open .paper {
+  background:
+    radial-gradient(80% 50% at 10% -10%, rgba(196, 92, 62, 0.07), transparent 50%),
+    radial-gradient(70% 40% at 100% 0%, rgba(61, 107, 106, 0.055), transparent 46%),
+    linear-gradient(180deg, #f7f2e8 0%, var(--paper) 28%, var(--paper-deep) 100%);
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -503,23 +512,12 @@ h1 {
   font-size: 1rem;
 }
 
-/* Cover wall → spread: 2D shared-element zoom (transform + opacity only). */
-.draw-root.is-cover .page.left {
-  display: grid;
-  place-items: center;
-}
-
-.spread-cover {
-  width: min(15rem, 82%);
-}
-
-.spread-cover svg,
+/* Cover wall → book: 2D shared-element zoom onto the closed book (transform + opacity only). */
+.leaf-front svg,
 .cover-ghost {
   display: block;
   width: 100%;
   height: auto;
-  border-radius: 0.25rem;
-  box-shadow: 0 16px 34px rgba(28, 25, 20, 0.22);
 }
 
 .cover-ghost {
@@ -584,6 +582,150 @@ html.cover-morph::view-transition-new(book-cover) {
 
 html.cover-morph-exit::view-transition-old(book-cover) {
   animation: cover-morph-out var(--cover-morph-ms) ease-out both;
+}
+
+
+/* Book flip: the front board swings open on its spine. rotateY is the only 3D. */
+.draw-root.is-cover .spread {
+  width: min(40rem, 100%);
+  min-height: auto;
+  margin: 0 auto;
+  aspect-ratio: 320 / 220;
+  grid-template-columns: 1fr 1fr;
+  overflow: visible;
+  background: none;
+  border-radius: 0;
+  box-shadow: none;
+  perspective: 2200px;
+  -webkit-perspective: 2200px;
+}
+
+.draw-root.is-cover.is-closed .spread {
+  transform: translateX(-25%);
+}
+
+.draw-root.is-cover.is-opened .spread {
+  transform: translateX(0);
+}
+
+.draw-root.is-cover .page {
+  box-shadow: 0 18px 40px rgba(28, 25, 20, 0.14);
+}
+
+.draw-root.is-cover .page.left {
+  border-radius: 0.7rem 0.12rem 0.12rem 0.7rem;
+}
+
+.draw-root.is-cover .page.right {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border-radius: 0.12rem 0.7rem 0.7rem 0.12rem;
+}
+
+.draw-root.is-cover.is-closed .page.left {
+  opacity: 0;
+}
+
+.cover-leaf {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 50%;
+  z-index: 3;
+  transform-origin: 0 50%;
+  transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
+  pointer-events: none;
+}
+
+.draw-root.is-cover.is-closed .cover-leaf {
+  transform: rotateY(0deg);
+}
+
+.draw-root.is-cover.is-opened .cover-leaf {
+  transform: rotateY(-180deg);
+}
+
+.draw-root.is-flipping .cover-leaf,
+.draw-root.is-flipping .spread {
+  will-change: transform;
+}
+
+.leaf-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.leaf-front {
+  display: grid;
+  align-items: center;
+  border-radius: 0.12rem 0.6rem 0.6rem 0.12rem;
+  background: var(--paper, #ebe4d6);
+  box-shadow: 0 18px 40px rgba(28, 25, 20, 0.22);
+}
+
+.leaf-front::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 5%;
+  background: var(--cloth, #5c564c);
+  border-radius: 0.12rem 0 0 0.12rem;
+}
+
+.leaf-back {
+  transform: rotateY(180deg);
+  border-radius: 0.6rem 0.12rem 0.12rem 0.6rem;
+  background:
+    radial-gradient(circle at 1px 1px, rgba(28, 25, 20, 0.05) 1px, transparent 0) 0 0 / 11px 11px,
+    #f4ead8;
+  box-shadow: 0 18px 40px rgba(28, 25, 20, 0.14);
+}
+
+.leaf-back .bookplate {
+  padding: 0.8rem;
+}
+
+.leaf-shade {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: #1c1914;
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  .draw-root.is-cover .page {
+    padding: 0.85rem 0.75rem;
+  }
+
+  .draw-root.is-cover .page.right h2 {
+    font-size: 1.2rem;
+  }
+
+  .draw-root.is-cover .kicker {
+    font-size: 0.68rem;
+  }
+
+  .draw-root.is-cover .page.right .author,
+  .draw-root.is-cover .page.right .progress {
+    font-size: 0.8rem;
+  }
+
+  .draw-root.is-cover .page.right .progress {
+    margin-top: 0.6rem;
+  }
+
+  .leaf-back .bookplate-card {
+    padding: 0.8rem 0.5rem;
+  }
 }
 
 .book-layer {
@@ -954,14 +1096,6 @@ html.cover-morph-exit::view-transition-old(book-cover) {
 
   .page.left {
     min-height: 11rem;
-  }
-
-  .draw-root.is-cover .page.left {
-    padding-top: 1.4rem;
-  }
-
-  .spread-cover {
-    width: min(11.5rem, 56vw);
   }
 
   .page {

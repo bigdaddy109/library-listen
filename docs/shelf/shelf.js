@@ -8,10 +8,11 @@ import {
   extOf,
   isBookPlayable,
   shelfBadge,
-} from "../library.js?v=41";
-import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=41";
+} from "../library.js?v=42";
+import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=42";
 import {
   COVER_MORPH,
+  bookFlipFrames,
   DEFAULT_VIEW,
   OPEN_INTENT_KEY,
   VIEWS,
@@ -34,8 +35,8 @@ import {
   seriesMeta,
   shelfStatusLabel,
   volumeNumber,
-} from "./catalog.js?v=41";
-import { coverSvg, spineMetrics, topicMotifSvg } from "./covers.js?v=41";
+} from "./catalog.js?v=42";
+import { coverSvg, spineMetrics, topicMotifSvg } from "./covers.js?v=42";
 
 /* v2: the cover wall became the default; the old key mostly held the old default. */
 const VIEW_KEY = "librarylisten.shelfView.v2";
@@ -346,6 +347,7 @@ function closeBook() {
   state.selectedId = null;
   state.phase = "shelf";
   state.coverOpen = false;
+  document.documentElement.classList.remove("book-open");
   els.layer.classList.add("hidden");
   els.layer.hidden = true;
   els.bookStage.innerHTML = "";
@@ -369,7 +371,7 @@ function cardArtFor(bookId) {
 }
 
 function spreadArt() {
-  return els.bookStage?.querySelector(".spread-cover svg") || null;
+  return els.bookStage?.querySelector(".leaf-front svg") || null;
 }
 
 function onScreen(rect) {
@@ -383,14 +385,48 @@ function onScreen(rect) {
   );
 }
 
-function showCoverSpread(book) {
+function showCoverSpread(book, { opened = false } = {}) {
   state.selectedId = book.id;
   state.phase = "open";
   state.coverOpen = true;
   markDrawnSpine(book.id, true);
+  document.documentElement.classList.add("book-open");
   els.layer.classList.remove("hidden");
   els.layer.hidden = false;
-  renderSpread(book, "open", { cover: true });
+  renderSpread(book, "open", { cover: true, opened });
+}
+
+function setMorphing(on) {
+  state.morphing = on;
+  if (on) els.layer.dataset.morph = "1";
+  else delete els.layer.dataset.morph;
+}
+
+/** Swing the front board open (or shut) on its spine. */
+function flipBook(opening) {
+  const root = els.bookStage?.querySelector(".draw-root.is-cover");
+  if (!root) return Promise.resolve();
+  root.classList.toggle("is-opened", opening);
+  root.classList.toggle("is-closed", !opening);
+  const frames = bookFlipFrames(opening);
+  const timing = {
+    duration: opening ? COVER_MORPH.flipMs : COVER_MORPH.flipCloseMs,
+    easing: COVER_MORPH.flipEasing,
+  };
+  const parts = [
+    [".cover-leaf", frames.leaf],
+    [".spread", frames.spread],
+    [".page.left", frames.endpaper],
+    [".leaf-front .leaf-shade", frames.frontShade],
+    [".leaf-back .leaf-shade", frames.backShade],
+  ];
+  root.classList.add("is-flipping");
+  const anims = parts
+    .map(([sel, f]) => root.querySelector(sel)?.animate(f, timing))
+    .filter(Boolean);
+  return Promise.all(anims.map((a) => a.finished))
+    .catch(() => {})
+    .then(() => root.classList.remove("is-flipping"));
 }
 
 /**
@@ -498,10 +534,10 @@ async function openCoverBook(book) {
   const mode = coverMode();
   const fromEl = cardArtFor(book.id);
   if (mode === "none" || !fromEl) {
-    showCoverSpread(book);
+    showCoverSpread(book, { opened: true });
     return;
   }
-  state.morphing = true;
+  setMorphing(true);
   try {
     if (mode === "view-transition") {
       await viewTransitionMorph({
@@ -514,8 +550,9 @@ async function openCoverBook(book) {
       showCoverSpread(book);
       await flipMorph({ cardEl: fromEl, opening: true });
     }
+    await flipBook(true);
   } finally {
-    state.morphing = false;
+    setMorphing(false);
   }
 }
 
@@ -528,8 +565,9 @@ async function closeCoverBook() {
     closeBook();
     return;
   }
-  state.morphing = true;
+  setMorphing(true);
   try {
+    await flipBook(false);
     if (mode === "view-transition") {
       await viewTransitionMorph({
         fromEl,
@@ -546,7 +584,7 @@ async function closeCoverBook() {
       closeBook();
     }
   } finally {
-    state.morphing = false;
+    setMorphing(false);
   }
 }
 
@@ -618,7 +656,7 @@ function playDraw(root) {
   window.requestAnimationFrame(() => window.requestAnimationFrame(start));
 }
 
-function renderSpread(book, phase = "open", { cover = false } = {}) {
+function renderSpread(book, phase = "open", { cover = false, opened = true } = {}) {
   const series = seriesMeta(book);
   const flags = mediaFlags(book);
   const siblings = state.books.filter((b) => seriesIdForBook(b) === series.id);
@@ -626,7 +664,9 @@ function renderSpread(book, phase = "open", { cover = false } = {}) {
   const progress = previewProgress(book);
   const playable = isBookPlayable(book);
   const readable = bookHasEbook(book) && !!book.ebook?.file;
-  const rootClass = cover ? "is-open is-cover" : drawRootClass(phase);
+  const rootClass = cover
+    ? `is-open is-cover ${opened ? "is-opened" : "is-closed"}`
+    : drawRootClass(phase);
   const scene = cover
     ? ""
     : `
@@ -640,9 +680,7 @@ function renderSpread(book, phase = "open", { cover = false } = {}) {
           <div class="book-3d-back" aria-hidden="true"></div>
         </div>
       </div>`;
-  const leftPage = cover
-    ? `<div class="spread-cover">${coverSvg(book, { width: 240, height: 330 })}</div>`
-    : `
+  const bookplate = `
           <div class="bookplate">
             <div class="bookplate-card">
               <div class="seal" style="--accent:${series.accent}">藏</div>
@@ -651,6 +689,19 @@ function renderSpread(book, phase = "open", { cover = false } = {}) {
               <p class="vol"></p>
             </div>
           </div>`;
+  const leftPage = cover ? "" : bookplate;
+  const leaf = cover
+    ? `
+        <div class="cover-leaf" aria-hidden="true">
+          <div class="leaf-face leaf-front" style="--paper:${series.paper}">
+            ${coverSvg(book, { width: 240, height: 330 })}
+            <span class="leaf-shade"></span>
+          </div>
+          <div class="leaf-face leaf-back">${bookplate}
+            <span class="leaf-shade"></span>
+          </div>
+        </div>`
+    : "";
   els.bookStage.innerHTML = `
     <div class="draw-root ${rootClass}">${scene}
       <article class="spread">
@@ -665,7 +716,7 @@ function renderSpread(book, phase = "open", { cover = false } = {}) {
             <button type="button" class="primary" data-open="audio">聽</button>
             <button type="button" class="primary" data-open="read">讀</button>
           </div>
-        </section>
+        </section>${leaf}
       </article>
     </div>
   `;
@@ -675,9 +726,9 @@ function renderSpread(book, phase = "open", { cover = false } = {}) {
   if (!cover) {
     applyPullVars(root, book);
     els.bookStage.querySelector(".book-3d-spine-title").textContent = book.title;
-    els.bookStage.querySelector(".bookplate-card strong").textContent = series.title;
-    els.bookStage.querySelector(".vol").textContent = `編號 ${volume}`;
   }
+  els.bookStage.querySelector(".bookplate-card strong").textContent = series.title;
+  els.bookStage.querySelector(".vol").textContent = `編號 ${volume}`;
   els.bookStage.querySelector(".kicker").textContent = `${series.title} · ${flags.badge}`;
   els.bookStage.querySelector("h2").textContent = book.title;
   els.bookStage.querySelector(".author").textContent = book.author || "";
