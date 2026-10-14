@@ -401,6 +401,27 @@ h1 {
   visibility: hidden;
 }
 
+/* Morph source for the shared openCoverBook path (same SVG as 封面牆).
+   Sized like a cover from the spine height; invisible but measurable. */
+.spine .cover-art {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  z-index: 0;
+  width: calc(var(--h) * 160 / 220);
+  height: var(--h);
+  transform: translateX(-50%);
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.spine .cover-art svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 .spine-tip {
   position: absolute;
   left: 50%;

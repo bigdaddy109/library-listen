@@ -27,11 +27,8 @@ export const VIEW_LABELS = {
 export const OPEN_INTENT_KEY = "librarylisten.open.v1";
 
 /**
- * Own motion — not a Gloss/Nutlope clone.
- * draw: pull off the plank + yaw spine→cover, then the front board uncases from the RIGHT.
- * pull: freeze after the yaw (cover faces the camera, still closed).
- * flip: freeze mid-uncase. open / reduced motion / ?spread=1 skip to the spread.
- * 3D is on for iPhone and iPad. Reduced motion is the only skip.
+ * Legacy 3D pull-out timing — only for ?pull= / ?flip= URL preview freezes.
+ * UI taps on 封面牆 and 書架 never use this; they share COVER_OPEN_SEQUENCE.
  */
 export const PULL_TIMING = {
   totalMs: 820,
@@ -39,6 +36,13 @@ export const PULL_TIMING = {
   openMs: 400,
 };
 
+/** Views whose taps open via openCoverBook (zoom → hinge left). 主題卡片 is filter-only. */
+export const COVER_OPEN_VIEWS = ["covers", "spines"];
+
+/**
+ * Preview-only phase for ?spread= / ?flip= / ?pull= URL freezes.
+ * Normal shelf taps ignore this and call openCoverBook instead.
+ */
 export function openBookPhase({
   reducedMotion = false,
   spread = false,
@@ -53,7 +57,8 @@ export function openBookPhase({
 }
 
 /**
- * Cover wall → book (Jeff 10/13): NOT a 2D zoom into the open page.
+ * Cover wall + spine shelf → book (Jeff 10/13–14): NOT a 2D zoom into the open page,
+ * and NOT a separate 3D pull-out for 書架 taps.
  * 1) Zoom / move the tapped cover onto the closed-book position.
  * 2) Then the front board swings open to the LEFT on its spine hinge
  *    (rotateY 0 → −90 → −180), revealing the inner spread (聽 / 讀).
@@ -70,7 +75,7 @@ export const COVER_MORPH = {
   flipEasing: "cubic-bezier(0.45, 0.05, 0.18, 1)",
 };
 
-/** Documented two-phase sequence for cover-wall open. */
+/** Documented two-phase sequence for 封面牆 and 書架 open (same path). */
 export const COVER_OPEN_SEQUENCE = ["zoom-to-closed", "hinge-left"];
 
 function reverseFrames(frames) {
