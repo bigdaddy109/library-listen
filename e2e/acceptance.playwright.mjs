@@ -63,16 +63,28 @@ test.describe("Jeff Drive fixture: every series plays and reads", () => {
     await card.scrollIntoViewIfNeeded();
     const animated = page.evaluate(async () => {
       const props = new Set();
+      const sawClosed = { v: false };
+      const sawHinge = { v: false };
       const t0 = performance.now();
-      while (performance.now() - t0 < 1300) {
+      while (performance.now() - t0 < 1600) {
+        const root = document.querySelector("#book-layer .draw-root.is-cover");
+        if (root?.classList.contains("is-closed")) sawClosed.v = true;
+        if (root?.classList.contains("is-flipping") || root?.classList.contains("is-opened")) sawHinge.v = true;
         for (const a of document.getAnimations()) {
           for (const frame of a.effect?.getKeyframes?.() || []) {
             for (const key of Object.keys(frame)) props.add(key);
+            if (typeof frame.transform === "string" && /rotateY\(-90deg\)/.test(frame.transform)) {
+              sawHinge.v = true;
+            }
           }
         }
         await new Promise((r) => setTimeout(r, 16));
       }
-      return [...props].filter((k) => !["offset", "computedOffset", "easing", "composite"].includes(k));
+      return {
+        props: [...props].filter((k) => !["offset", "computedOffset", "easing", "composite"].includes(k)),
+        sawClosed: sawClosed.v,
+        sawHinge: sawHinge.v,
+      };
     });
     await card.click();
     await expect(page.locator("#book-layer[data-morph] .page.right [data-open=audio]")).toBeAttached();
@@ -81,9 +93,11 @@ test.describe("Jeff Drive fixture: every series plays and reads", () => {
       return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest("[data-open]") !== null;
     });
     expect(hit).toBe(false);
-    const props = await animated;
-    expect(props).toContain("transform");
-    expect(props.every((p) => p === "transform" || p === "opacity")).toBe(true);
+    const observed = await animated;
+    expect(observed.props).toContain("transform");
+    expect(observed.props.every((p) => p === "transform" || p === "opacity")).toBe(true);
+    expect(observed.sawClosed).toBe(true);
+    expect(observed.sawHinge).toBe(true);
     await expect(page.locator("#book-layer .draw-root.is-cover.is-opened .cover-leaf")).toBeAttached();
     await waitBookSettled(page);
     const leaf = await page.locator("#book-layer .cover-leaf").evaluate((el) => getComputedStyle(el).transform);

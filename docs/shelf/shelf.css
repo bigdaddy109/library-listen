@@ -518,7 +518,7 @@ h1 {
   font-size: 1rem;
 }
 
-/* Cover wall → book: 2D shared-element zoom onto the closed book (transform + opacity only). */
+/* Cover wall → book phase 1: 2D FLIP zoom onto the CLOSED cover (transform + opacity). */
 .leaf-front svg,
 .cover-ghost {
   display: block;
@@ -535,63 +535,8 @@ h1 {
   will-change: transform;
 }
 
-/* Only transform (the cover group, driven from shelf.js) and opacity animate.
-   The new snapshot fades in over the old one, so there is no cross-fade dip. */
-@keyframes cover-morph-in {
-  from {
-    opacity: 0;
-  }
-}
-
-@keyframes cover-morph-out {
-  to {
-    opacity: 0;
-  }
-}
-
-html.cover-morph {
-  --cover-morph-ms: 460ms;
-}
-
-html.cover-morph-close {
-  --cover-morph-ms: 400ms;
-}
-
-html.cover-morph::view-transition-group(root),
-html.cover-morph::view-transition-group(book-cover),
-html.cover-morph::view-transition-image-pair(root),
-html.cover-morph::view-transition-image-pair(book-cover),
-html.cover-morph::view-transition-old(root),
-html.cover-morph::view-transition-old(book-cover) {
-  animation: none;
-}
-
-html.cover-morph::view-transition-group(book-cover) {
-  transform-origin: 0 0;
-}
-
-html.cover-morph-sized::view-transition-group(book-cover) {
-  width: var(--cover-morph-w);
-  height: var(--cover-morph-h);
-}
-
-html.cover-morph::view-transition-old(book-cover),
-html.cover-morph::view-transition-new(book-cover) {
-  height: 100%;
-  object-fit: fill;
-}
-
-html.cover-morph::view-transition-new(root),
-html.cover-morph::view-transition-new(book-cover) {
-  animation: cover-morph-in var(--cover-morph-ms) ease-out both;
-}
-
-html.cover-morph-exit::view-transition-old(book-cover) {
-  animation: cover-morph-out var(--cover-morph-ms) ease-out both;
-}
-
-
-/* Book flip: the front board swings open on its spine. rotateY is the only 3D. */
+/* Book flip phase 2: front board swings open LEFT on the spine hinge.
+   rotateY is the only 3D; transform-origin is the spine (left edge of the leaf). */
 .draw-root.is-cover .spread {
   width: min(40rem, 100%);
   min-height: auto;
@@ -602,8 +547,8 @@ html.cover-morph-exit::view-transition-old(book-cover) {
   background: none;
   border-radius: 0;
   box-shadow: none;
-  perspective: 1300px;
-  -webkit-perspective: 1300px;
+  perspective: 1200px;
+  -webkit-perspective: 1200px;
 }
 
 .draw-root.is-cover.is-closed .spread {
@@ -657,6 +602,15 @@ html.cover-morph-exit::view-transition-old(book-cover) {
 
 .draw-root.is-cover.is-closed .page.left {
   opacity: 0;
+}
+
+/* Keep 聽 / 讀 out of sight until the cover has hinged past edge-on. */
+.draw-root.is-cover.is-closed .page.right .actions {
+  visibility: hidden;
+}
+
+.draw-root.is-cover.is-opened .page.right .actions {
+  visibility: visible;
 }
 
 .cover-leaf {
@@ -743,8 +697,9 @@ html.cover-morph-exit::view-transition-old(book-cover) {
 
 @media (max-width: 640px) {
   .draw-root.is-cover .spread {
-    perspective: 900px;
-    -webkit-perspective: 900px;
+    /* Closer perspective on phones so the left hinge reads in depth at 390px. */
+    perspective: 780px;
+    -webkit-perspective: 780px;
   }
 
   body.shell-shelf .book-layer:has(.is-cover) {
@@ -1259,9 +1214,15 @@ html.cover-morph-exit::view-transition-old(book-cover) {
     transform: none;
   }
 
-  ::view-transition-group(*),
-  ::view-transition-old(*),
-  ::view-transition-new(*) {
+  .cover-ghost,
+  .cover-leaf,
+  .draw-root.is-cover .spread,
+  .draw-root.is-cover .page.left,
+  .leaf-front,
+  .leaf-back,
+  .page-shade,
+  .leaf-shade {
+    transition: none !important;
     animation: none !important;
   }
 }

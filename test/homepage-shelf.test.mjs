@@ -54,7 +54,7 @@ describe("homepage is the rice-paper shelf", () => {
     assert.match(classic, /href="\.\.\/"/);
     assert.match(home, /href="\.\/classic\/index\.html"/);
     assert.match(shelf, /location\.replace\("\.\.\/"\)/);
-    assert.match(sw, /library-listen-shell-v44/);
+    assert.match(sw, /library-listen-shell-v45/);
     assert.match(sw, /"\.\/classic\/index\.html"/);
   });
 
@@ -76,28 +76,29 @@ describe("homepage is the rice-paper shelf", () => {
     assert.match(home, /href="\.\/classic\/index\.html"/);
   });
 
-  it("defaults to the cover wall and zooms covers in 2D", () => {
+  it("defaults to the cover wall and zooms covers in 2D before the hinge", () => {
     const css = readFileSync(join(ROOT, "docs/shelf/shelf.css"), "utf8");
     const js = readFileSync(join(ROOT, "docs/shelf/shelf.js"), "utf8");
     const covers = home.indexOf('data-view="covers"');
     assert.ok(covers > 0 && covers < home.indexOf('data-view="spines"'), "cover wall is the first tab");
     assert.match(home, /data-view="covers" aria-pressed="true"/);
     assert.match(home, /data-view="spines" aria-pressed="false"/);
-    assert.match(js, /startViewTransition/);
-    assert.match(js, /viewTransitionName/);
-    assert.match(css, /::view-transition-group\(book-cover\)/);
+    assert.doesNotMatch(js, /startViewTransition/);
+    assert.match(js, /showCoverSpread\(book, \{ opened: false \}\)/);
+    assert.match(js, /flipMorph/);
+    assert.match(js, /flipBook\(true\)/);
     assert.match(css, /\.cover-ghost\b/);
-    const zoomAt = css.indexOf("/* Cover wall → book");
-    const flipAt = css.indexOf("/* Book flip:");
+    const zoomAt = css.indexOf("/* Cover wall → book phase 1");
+    const flipAt = css.indexOf("/* Book flip phase 2");
     assert.ok(zoomAt > 0 && flipAt > zoomAt, "zoom block then flip block");
     const zoom = css.slice(zoomAt, flipAt);
     assert.doesNotMatch(zoom, /perspective|rotate[XYZ3]|preserve-3d|translate3d/);
   });
 
-  it("opens the book by swinging the front board on its spine (rotateY only)", () => {
+  it("opens the book by swinging the front board left on its spine (rotateY only)", () => {
     const css = readFileSync(join(ROOT, "docs/shelf/shelf.css"), "utf8");
     const js = readFileSync(join(ROOT, "docs/shelf/shelf.js"), "utf8");
-    const flip = css.slice(css.indexOf("/* Book flip:"), css.indexOf("\n.book-layer {"));
+    const flip = css.slice(css.indexOf("/* Book flip phase 2"), css.indexOf("\n.book-layer {"));
     assert.match(flip, /\.cover-leaf\s*\{[^}]*transform-origin:\s*0 50%/);
     assert.match(flip, /\.cover-leaf\s*\{[^}]*transform-style:\s*preserve-3d/);
     assert.match(flip, /is-opened \.cover-leaf\s*\{[^}]*rotateY\(-180deg\)/);
@@ -108,6 +109,7 @@ describe("homepage is the rice-paper shelf", () => {
     assert.match(js, /class="cover-leaf"/);
     assert.match(js, /leaf-front/);
     assert.match(js, /leaf-back/);
+    assert.match(css, /\.draw-root\.is-cover\.is-closed \.page\.right \.actions/);
   });
 
   it("picks up a new release: HTML revalidated, update checks on resume, no reload mid-chapter", () => {
@@ -141,6 +143,6 @@ describe("homepage is the rice-paper shelf", () => {
     assert.match(install[0], /skipWaiting/);
     assert.match(activate[0], /waitUntil/);
     assert.match(activate[0], /clients\.claim/);
-    assert.match(sw, /library-listen-shell-v44/);
+    assert.match(sw, /library-listen-shell-v45/);
   });
 });

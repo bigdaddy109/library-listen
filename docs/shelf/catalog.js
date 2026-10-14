@@ -53,19 +53,25 @@ export function openBookPhase({
 }
 
 /**
- * Cover wall → book: a 2D shared-element zoom onto the closed book, then the
- * front board swings open on its spine (rotateY, the only 3D). Closing runs it
- * backwards. Transform + opacity only; reduced motion switches instantly.
+ * Cover wall → book (Jeff 10/13): NOT a 2D zoom into the open page.
+ * 1) Zoom / move the tapped cover onto the closed-book position.
+ * 2) Then the front board swings open to the LEFT on its spine hinge
+ *    (rotateY 0 → −90 → −180), revealing the inner spread (聽 / 讀).
+ * Closing runs the same frames backwards. Transform + opacity only.
+ * prefers-reduced-motion: reduce → instant cut (mode "none").
  */
 export const COVER_MORPH = {
-  openMs: 420,
-  closeMs: 360,
+  openMs: 400,
+  closeMs: 340,
   easing: "cubic-bezier(0.32, 0.72, 0, 1)",
-  flipDelayMs: 120,
-  flipMs: 860,
-  flipCloseMs: 640,
-  flipEasing: "cubic-bezier(0.45, 0.05, 0.2, 1)",
+  flipDelayMs: 140,
+  flipMs: 900,
+  flipCloseMs: 680,
+  flipEasing: "cubic-bezier(0.45, 0.05, 0.18, 1)",
 };
+
+/** Documented two-phase sequence for cover-wall open. */
+export const COVER_OPEN_SEQUENCE = ["zoom-to-closed", "hinge-left"];
 
 function reverseFrames(frames) {
   return [...frames]
@@ -75,15 +81,26 @@ function reverseFrames(frames) {
 
 /**
  * Keyframes for the board swing; `opening: false` is the exact reverse.
- * The faces swap by opacity at offset 0.5, which (same duration + easing as
- * the leaf) is the edge-on rotateY(-90deg) moment, so engines that flatten 3D
- * and ignore backface-visibility still never show the mirrored side.
+ * Midpoint is rotateY(-90deg) (edge-on at the spine). Faces swap by opacity
+ * at the same offset so engines that flatten 3D still never show a mirror.
  */
 export function bookFlipFrames(opening = true) {
   const frames = {
-    leaf: [{ transform: "rotateY(0deg)" }, { transform: "rotateY(-180deg)" }],
-    spread: [{ transform: "translateX(-25%)" }, { transform: "translateX(0)" }],
-    endpaper: [{ opacity: 0 }, { opacity: 1 }],
+    leaf: [
+      { transform: "rotateY(0deg)", offset: 0 },
+      { transform: "rotateY(-90deg)", offset: 0.5 },
+      { transform: "rotateY(-180deg)", offset: 1 },
+    ],
+    spread: [
+      { transform: "translateX(-25%)", offset: 0 },
+      { transform: "translateX(-12%)", offset: 0.5 },
+      { transform: "translateX(0)", offset: 1 },
+    ],
+    endpaper: [
+      { opacity: 0, offset: 0 },
+      { opacity: 0, offset: 0.5 },
+      { opacity: 1, offset: 1 },
+    ],
     front: [
       { opacity: 1, offset: 0 },
       { opacity: 1, offset: 0.5 },
@@ -98,19 +115,31 @@ export function bookFlipFrames(opening = true) {
     ],
     pageShade: [
       { opacity: 1, offset: 0 },
-      { opacity: 0.85, offset: 0.35 },
+      { opacity: 0.9, offset: 0.45 },
       { opacity: 0, offset: 1 },
     ],
-    frontShade: [{ opacity: 0 }, { opacity: 0.35 }],
-    backShade: [{ opacity: 0.35 }, { opacity: 0 }],
+    frontShade: [
+      { opacity: 0, offset: 0 },
+      { opacity: 0.2, offset: 0.5 },
+      { opacity: 0.35, offset: 1 },
+    ],
+    backShade: [
+      { opacity: 0.35, offset: 0 },
+      { opacity: 0.15, offset: 0.5 },
+      { opacity: 0, offset: 1 },
+    ],
   };
   if (opening) return frames;
   return Object.fromEntries(Object.entries(frames).map(([k, f]) => [k, reverseFrames(f)]));
 }
 
-export function coverTransitionMode({ reducedMotion = false, viewTransitions = false } = {}) {
+/**
+ * Cover-wall motion mode. Always FLIP morph → hinge (never View Transitions):
+ * VT morphs read as “2D zoom into the book page” and hide the hinge phase.
+ */
+export function coverTransitionMode({ reducedMotion = false } = {}) {
   if (reducedMotion) return "none";
-  return viewTransitions ? "view-transition" : "flip";
+  return "flip";
 }
 
 function usableRect(rect) {

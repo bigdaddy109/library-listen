@@ -8,8 +8,8 @@ import {
   extOf,
   isBookPlayable,
   shelfBadge,
-} from "../library.js?v=44";
-import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=44";
+} from "../library.js?v=45";
+import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=45";
 import {
   COVER_MORPH,
   bookFlipFrames,
@@ -35,8 +35,8 @@ import {
   seriesMeta,
   shelfStatusLabel,
   volumeNumber,
-} from "./catalog.js?v=44";
-import { coverSvg, spineMetrics, topicMotifSvg } from "./covers.js?v=44";
+} from "./catalog.js?v=45";
+import { coverSvg, spineMetrics, topicMotifSvg } from "./covers.js?v=45";
 
 /* v2: the cover wall became the default; the old key mostly held the old default. */
 const VIEW_KEY = "librarylisten.shelfView.v2";
@@ -353,14 +353,8 @@ function closeBook() {
   els.bookStage.innerHTML = "";
 }
 
-const COVER_VT_NAME = "book-cover";
-const COVER_VT_GROUP = `::view-transition-group(${COVER_VT_NAME})`;
-
 function coverMode() {
-  return coverTransitionMode({
-    reducedMotion: prefersReducedMotion(),
-    viewTransitions: typeof document.startViewTransition === "function",
-  });
+  return coverTransitionMode({ reducedMotion: prefersReducedMotion() });
 }
 
 function cardArtFor(bookId) {
@@ -435,65 +429,9 @@ function flipBook(opening) {
 }
 
 /**
- * Shared-element zoom between a cover-wall card and the spread cover.
- * The group's size is pinned to the larger (spread) box and only `transform`
- * animates, so the compositor does the work on iPhone.
+ * Phase 1: FLIP ghost zooms the cover between the wall card and the closed-book
+ * cover box (transform + opacity only). Phase 2 is flipBook (hinge left).
  */
-function viewTransitionMorph({ fromEl, update, targetEl, opening }) {
-  const root = document.documentElement;
-  const fromRect = fromEl.getBoundingClientRect();
-  fromEl.style.viewTransitionName = COVER_VT_NAME;
-  root.classList.add("cover-morph", opening ? "cover-morph-open" : "cover-morph-close");
-  let toEl = null;
-  const vt = document.startViewTransition(() => {
-    fromEl.style.viewTransitionName = "";
-    update();
-    toEl = targetEl();
-    if (toEl && onScreen(toEl.getBoundingClientRect())) {
-      toEl.style.viewTransitionName = COVER_VT_NAME;
-    } else {
-      toEl = null;
-      root.classList.add("cover-morph-exit");
-    }
-  });
-  vt.ready
-    .then(() => {
-      if (!toEl) return;
-      const toRect = toEl.getBoundingClientRect();
-      const big = opening ? toRect : fromRect;
-      const small = opening ? fromRect : toRect;
-      const shrunk = coverMorphTransform(small, big);
-      if (!shrunk) return;
-      root.style.setProperty("--cover-morph-w", `${big.width}px`);
-      root.style.setProperty("--cover-morph-h", `${big.height}px`);
-      root.classList.add("cover-morph-sized");
-      const at = `translate(${big.left}px, ${big.top}px)`;
-      const frames = [{ transform: `${at} ${shrunk.css}` }, { transform: at }];
-      root.animate(opening ? frames : frames.reverse(), {
-        duration: opening ? COVER_MORPH.openMs : COVER_MORPH.closeMs,
-        easing: COVER_MORPH.easing,
-        fill: "both",
-        pseudoElement: COVER_VT_GROUP,
-      });
-    })
-    .catch(() => {});
-  return vt.finished
-    .catch(() => {})
-    .finally(() => {
-      if (toEl) toEl.style.viewTransitionName = "";
-      root.classList.remove(
-        "cover-morph",
-        "cover-morph-open",
-        "cover-morph-close",
-        "cover-morph-sized",
-        "cover-morph-exit"
-      );
-      root.style.removeProperty("--cover-morph-w");
-      root.style.removeProperty("--cover-morph-h");
-    });
-}
-
-/** FLIP fallback: a fixed ghost of the spread cover scales between the two boxes. */
 function flipMorph({ cardEl, opening }) {
   const art = spreadArt();
   if (!art) return Promise.resolve();
@@ -544,17 +482,9 @@ async function openCoverBook(book) {
   }
   setMorphing(true);
   try {
-    if (mode === "view-transition") {
-      await viewTransitionMorph({
-        fromEl,
-        opening: true,
-        update: () => showCoverSpread(book),
-        targetEl: spreadArt,
-      });
-    } else {
-      showCoverSpread(book);
-      await flipMorph({ cardEl: fromEl, opening: true });
-    }
+    // Closed book first, then hinge — never zoom straight into the open spread.
+    showCoverSpread(book, { opened: false });
+    await flipMorph({ cardEl: fromEl, opening: true });
     await flipBook(true);
   } finally {
     setMorphing(false);
@@ -573,21 +503,12 @@ async function closeCoverBook() {
   setMorphing(true);
   try {
     await flipBook(false);
-    if (mode === "view-transition") {
-      await viewTransitionMorph({
-        fromEl,
-        opening: false,
-        update: closeBook,
-        targetEl: () => cardArtFor(id),
-      });
-    } else {
-      markDrawnSpine(id, false);
-      const cardEl = cardArtFor(id);
-      if (cardEl) cardEl.style.opacity = "0";
-      await flipMorph({ cardEl, opening: false });
-      if (cardEl) cardEl.style.opacity = "";
-      closeBook();
-    }
+    markDrawnSpine(id, false);
+    const cardEl = cardArtFor(id);
+    if (cardEl) cardEl.style.opacity = "0";
+    await flipMorph({ cardEl, opening: false });
+    if (cardEl) cardEl.style.opacity = "";
+    closeBook();
   } finally {
     setMorphing(false);
   }
