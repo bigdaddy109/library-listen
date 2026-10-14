@@ -129,14 +129,6 @@ test.describe("Jeff Drive fixture: every series plays and reads", () => {
     const spine = page.locator(`.spine[data-id="${id}"]`);
     await expect(spine.locator(".cover-art svg")).toBeAttached();
     await spine.scrollIntoViewIfNeeded();
-    // Coarse-pointer spines lift on first tap; ensure lifted so the next click opens.
-    await spine.click();
-    if (await page.locator("#book-layer").evaluate((el) => el.hidden)) {
-      await expect(spine).toHaveClass(/is-lifted/);
-    } else {
-      await page.locator("#btn-close-book").click();
-      await expect(page.locator("#book-layer")).toBeHidden();
-    }
     const animated = page.evaluate(async () => {
       const props = new Set();
       const sawClosed = { v: false };
@@ -165,6 +157,7 @@ test.describe("Jeff Drive fixture: every series plays and reads", () => {
         sawPull3d: sawPull3d.v,
       };
     });
+    // Playwright pointerenter lifts a coarse spine before click; one click still opens.
     await spine.click();
     await expect(page.locator("#book-layer .draw-root.is-cover")).toBeAttached();
     const observed = await animated;
@@ -174,7 +167,8 @@ test.describe("Jeff Drive fixture: every series plays and reads", () => {
     expect(observed.props.every((p) => p === "transform" || p === "opacity")).toBe(true);
     await expect(page.locator("#book-layer .draw-root.is-cover.is-opened")).toBeAttached();
     await expect(page.locator("#book-layer .book-3d")).toHaveCount(0);
-    await expect(page.locator("#book-layer .page.right h2")).toHaveText("Get Me");
+    await expect(page.locator("#book-layer .page.right h2")).toHaveText("Middle School 02 Get Me");
+    await waitBookSettled(page);
     await page.locator("#btn-close-book").click();
     await expect(page.locator("#book-layer")).toBeHidden();
   });
