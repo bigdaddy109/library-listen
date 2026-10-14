@@ -122,6 +122,57 @@ test.describe("Jeff Drive fixture: every series plays and reads", () => {
     await expect(page.locator("#book-layer")).toBeHidden();
   });
 
+  test("書架 spine tap uses the same cover zoom → hinge-left open (no 3D pull-out)", async ({ page }) => {
+    await page.locator('.view-toggle [data-view="spines"]').click();
+    await expect(page.locator('.view-toggle [data-view="spines"]')).toHaveAttribute("aria-pressed", "true");
+    const id = "school/middle-school-02-get-me";
+    const spine = page.locator(`.spine[data-id="${id}"]`);
+    await expect(spine.locator(".cover-art svg")).toBeAttached();
+    await spine.scrollIntoViewIfNeeded();
+    const animated = page.evaluate(async () => {
+      const props = new Set();
+      const sawClosed = { v: false };
+      const sawHinge = { v: false };
+      const sawPull3d = { v: false };
+      const t0 = performance.now();
+      while (performance.now() - t0 < 1600) {
+        const root = document.querySelector("#book-layer .draw-root");
+        if (root?.classList.contains("is-cover") && root.classList.contains("is-closed")) sawClosed.v = true;
+        if (root?.classList.contains("is-flipping") || root?.classList.contains("is-opened")) sawHinge.v = true;
+        if (root && !root.classList.contains("is-cover") && root.querySelector(".book-3d")) sawPull3d.v = true;
+        for (const a of document.getAnimations()) {
+          for (const frame of a.effect?.getKeyframes?.() || []) {
+            for (const key of Object.keys(frame)) props.add(key);
+            if (typeof frame.transform === "string" && /rotateY\(-90deg\)/.test(frame.transform)) {
+              sawHinge.v = true;
+            }
+          }
+        }
+        await new Promise((r) => setTimeout(r, 16));
+      }
+      return {
+        props: [...props].filter((k) => !["offset", "computedOffset", "easing", "composite"].includes(k)),
+        sawClosed: sawClosed.v,
+        sawHinge: sawHinge.v,
+        sawPull3d: sawPull3d.v,
+      };
+    });
+    // Playwright pointerenter lifts a coarse spine before click; one click still opens.
+    await spine.click();
+    await expect(page.locator("#book-layer .draw-root.is-cover")).toBeAttached();
+    const observed = await animated;
+    expect(observed.sawPull3d).toBe(false);
+    expect(observed.sawClosed).toBe(true);
+    expect(observed.sawHinge).toBe(true);
+    expect(observed.props.every((p) => p === "transform" || p === "opacity")).toBe(true);
+    await expect(page.locator("#book-layer .draw-root.is-cover.is-opened")).toBeAttached();
+    await expect(page.locator("#book-layer .book-3d")).toHaveCount(0);
+    await expect(page.locator("#book-layer .page.right h2")).toHaveText("Middle School 02 Get Me");
+    await waitBookSettled(page);
+    await page.locator("#btn-close-book").click();
+    await expect(page.locator("#book-layer")).toBeHidden();
+  });
+
   test("/classic/ is still the dark player", async ({ page }) => {
     await page.goto(`${ORIGIN}/classic/`);
     await expect(page.locator('body[data-shell="classic"]')).toBeAttached();

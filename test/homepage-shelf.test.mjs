@@ -54,7 +54,7 @@ describe("homepage is the rice-paper shelf", () => {
     assert.match(classic, /href="\.\.\/"/);
     assert.match(home, /href="\.\/classic\/index\.html"/);
     assert.match(shelf, /location\.replace\("\.\.\/"\)/);
-    assert.match(sw, /library-listen-shell-v45/);
+    assert.match(sw, /library-listen-shell-v46/);
     assert.match(sw, /"\.\/classic\/index\.html"/);
   });
 
@@ -93,6 +93,19 @@ describe("homepage is the rice-paper shelf", () => {
     assert.ok(zoomAt > 0 && flipAt > zoomAt, "zoom block then flip block");
     const zoom = css.slice(zoomAt, flipAt);
     assert.doesNotMatch(zoom, /perspective|rotate[XYZ3]|preserve-3d|translate3d/);
+  });
+
+  it("書架 taps share openCoverBook (zoom → hinge); spines carry cover art for the morph", () => {
+    const css = readFileSync(join(ROOT, "docs/shelf/shelf.css"), "utf8");
+    const js = readFileSync(join(ROOT, "docs/shelf/shelf.js"), "utf8");
+    const openFn = js.slice(js.indexOf("function openFromShelf"), js.indexOf("function drawRootClass"));
+    assert.match(openFn, /if \(!phaseHint\) \{\s*openCoverBook\(book\);\s*return;/);
+    assert.doesNotMatch(openFn, /state\.view === "covers"/);
+    assert.doesNotMatch(openFn, /playDraw|is-drawing|book-3d/);
+    assert.match(js, /\.cover-card, \.spine/);
+    assert.match(js, /btn\.querySelector\("\.cover-art"\)\.innerHTML = coverSvg\(book\)/);
+    assert.match(css, /\.spine \.cover-art\s*\{/);
+    assert.match(css, /\.spine \.cover-art\s*\{[^}]*opacity:\s*0/);
   });
 
   it("opens the book by swinging the front board left on its spine (rotateY only)", () => {
@@ -143,6 +156,6 @@ describe("homepage is the rice-paper shelf", () => {
     assert.match(install[0], /skipWaiting/);
     assert.match(activate[0], /waitUntil/);
     assert.match(activate[0], /clients\.claim/);
-    assert.match(sw, /library-listen-shell-v45/);
+    assert.match(sw, /library-listen-shell-v46/);
   });
 });

@@ -8,8 +8,8 @@ import {
   extOf,
   isBookPlayable,
   shelfBadge,
-} from "../library.js?v=45";
-import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=45";
+} from "../library.js?v=46";
+import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=46";
 import {
   COVER_MORPH,
   bookFlipFrames,
@@ -35,8 +35,8 @@ import {
   seriesMeta,
   shelfStatusLabel,
   volumeNumber,
-} from "./catalog.js?v=45";
-import { coverSvg, spineMetrics, topicMotifSvg } from "./covers.js?v=45";
+} from "./catalog.js?v=46";
+import { coverSvg, spineMetrics, topicMotifSvg } from "./covers.js?v=46";
 
 /* v2: the cover wall became the default; the old key mostly held the old default. */
 const VIEW_KEY = "librarylisten.shelfView.v2";
@@ -208,8 +208,10 @@ function spineButton(book) {
       <span class="spine-fore" aria-hidden="true"></span>
       <span class="spine-head" aria-hidden="true"></span>
     </span>
+    <span class="cover-art" aria-hidden="true"></span>
     <span class="spine-tip"><strong></strong><span></span></span>
   `;
+  btn.querySelector(".cover-art").innerHTML = coverSvg(book);
   btn.querySelector(".spine-title").textContent = book.title;
   btn.querySelector(".spine-tip strong").textContent = book.title;
   btn.querySelector(".spine-tip span").textContent = tipText(book);
@@ -357,9 +359,10 @@ function coverMode() {
   return coverTransitionMode({ reducedMotion: prefersReducedMotion() });
 }
 
+/** Cover SVG used as the shared-element morph source (封面牆 card or 書架 spine). */
 function cardArtFor(bookId) {
-  for (const card of els.stage?.querySelectorAll(".cover-card") || []) {
-    if (card.dataset.id === bookId) return card.querySelector(".cover-art svg");
+  for (const el of els.stage?.querySelectorAll(".cover-card, .spine") || []) {
+    if (el.dataset.id === bookId) return el.querySelector(".cover-art svg");
   }
   return null;
 }
@@ -520,15 +523,17 @@ function dismissBook() {
   else closeBook();
 }
 
+/**
+ * Shelf tap (封面牆 or 書架): same openCoverBook path — cover zoom → hinge left.
+ * phaseHint is only for ?flip= / ?pull= / ?spread= preview freezes (not UI taps).
+ */
 function openFromShelf(book, phaseHint) {
-  if (!phaseHint && state.view === "covers") {
+  if (!phaseHint) {
     openCoverBook(book);
     return;
   }
   state.selectedId = book.id;
-  state.phase =
-    phaseHint ||
-    openBookPhase({ reducedMotion: prefersReducedMotion(), no3d: book3dDisabled() });
+  state.phase = phaseHint;
   markDrawnSpine(book.id, true);
   els.layer.classList.remove("hidden");
   els.layer.hidden = false;

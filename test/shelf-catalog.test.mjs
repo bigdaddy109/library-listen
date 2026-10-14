@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   COVER_MORPH,
   COVER_OPEN_SEQUENCE,
+  COVER_OPEN_VIEWS,
   DEFAULT_VIEW,
   bookFlipFrames,
   OPEN_INTENT_KEY,
@@ -211,6 +212,8 @@ describe("pull transform", () => {
 describe("cover wall shared-element zoom", () => {
   it("always FLIP-morphs then hinges; reduced motion is instant", () => {
     assert.deepEqual(COVER_OPEN_SEQUENCE, ["zoom-to-closed", "hinge-left"]);
+    assert.deepEqual(COVER_OPEN_VIEWS, ["covers", "spines"]);
+    assert.ok(COVER_OPEN_VIEWS.includes("spines"), "書架 uses the same open path");
     assert.equal(coverTransitionMode({}), "flip");
     assert.equal(coverTransitionMode({ viewTransitions: true }), "flip");
     assert.equal(coverTransitionMode({ reducedMotion: true }), "none");
