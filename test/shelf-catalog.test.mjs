@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   COVER_MORPH,
+  COVER_OPEN_SEQUENCE,
   DEFAULT_VIEW,
   bookFlipFrames,
   OPEN_INTENT_KEY,
@@ -208,12 +209,12 @@ describe("pull transform", () => {
 });
 
 describe("cover wall shared-element zoom", () => {
-  it("uses View Transitions, falls back to FLIP, and stops for reduced motion", () => {
-    assert.equal(coverTransitionMode({ viewTransitions: true }), "view-transition");
-    assert.equal(coverTransitionMode({ viewTransitions: false }), "flip");
+  it("always FLIP-morphs then hinges; reduced motion is instant", () => {
+    assert.deepEqual(COVER_OPEN_SEQUENCE, ["zoom-to-closed", "hinge-left"]);
     assert.equal(coverTransitionMode({}), "flip");
-    assert.equal(coverTransitionMode({ reducedMotion: true, viewTransitions: true }), "none");
+    assert.equal(coverTransitionMode({ viewTransitions: true }), "flip");
     assert.equal(coverTransitionMode({ reducedMotion: true }), "none");
+    assert.equal(coverTransitionMode({ reducedMotion: true, viewTransitions: true }), "none");
   });
 
   it("maps a 390px cover card onto the spread cover with translate + scale only", () => {
@@ -235,11 +236,18 @@ describe("cover wall shared-element zoom", () => {
     assert.ok(COVER_MORPH.closeMs <= COVER_MORPH.openMs);
   });
 
-  it("swings the board on rotateY only, and closing is the exact reverse", () => {
+  it("swings the board left on rotateY (0 → −90 → −180), and closing is the exact reverse", () => {
     const open = bookFlipFrames(true);
     const shut = bookFlipFrames(false);
-    assert.deepEqual(open.leaf, [{ transform: "rotateY(0deg)" }, { transform: "rotateY(-180deg)" }]);
-    assert.deepEqual(open.spread, [{ transform: "translateX(-25%)" }, { transform: "translateX(0)" }]);
+    assert.deepEqual(open.leaf, [
+      { transform: "rotateY(0deg)", offset: 0 },
+      { transform: "rotateY(-90deg)", offset: 0.5 },
+      { transform: "rotateY(-180deg)", offset: 1 },
+    ]);
+    assert.deepEqual(
+      open.spread.map((k) => k.transform),
+      ["translateX(-25%)", "translateX(-12%)", "translateX(0)"]
+    );
     const mirror = (f) => [...f].reverse().map((k) => (k.offset == null ? k : { ...k, offset: 1 - k.offset }));
     assert.deepEqual(open.front.map((k) => [k.offset, k.opacity]), [[0, 1], [0.5, 1], [0.5, 0], [1, 0]]);
     assert.deepEqual(open.back.map((k) => [k.offset, k.opacity]), [[0, 0], [0.5, 0], [0.5, 1], [1, 1]]);
@@ -258,7 +266,7 @@ describe("cover wall shared-element zoom", () => {
       COVER_MORPH.openMs + COVER_MORPH.flipDelayMs + COVER_MORPH.flipMs <= 1500,
       "zoom + beat + swing stays under 1.5s"
     );
-    assert.deepEqual(open.pageShade.map((k) => k.opacity), [1, 0.85, 0]);
+    assert.deepEqual(open.pageShade.map((k) => k.opacity), [1, 0.9, 0]);
   });
 });
 
