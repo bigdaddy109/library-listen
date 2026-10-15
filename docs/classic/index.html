@@ -80,7 +80,7 @@
           </p>
           <ol>
             <li>Tap <strong>用 Google 登入</strong>. The player loads the Drive folder named <code>Library</code> (including Shared with me).</li>
-            <li>Play from the shelf. Audio streams from Drive. An EPUB downloads when you open <strong>Read</strong>.</li>
+            <li>Play from the shelf. Audio streams from Drive.</li>
             <li>Local fallback: tap <strong>Use a local folder instead</strong> (download in Files first on iPhone).</li>
           </ol>
           <div class="cta-row cta-stack">
@@ -124,29 +124,10 @@
           </div>
           <div id="book-tabs" class="book-tabs hidden">
             <button type="button" id="tab-audio" aria-pressed="true">Audio</button>
-            <button type="button" id="tab-read" class="hidden" aria-pressed="false">Read</button>
             <button type="button" id="tab-concepts" aria-pressed="false">Concepts</button>
           </div>
           <ul id="chapter-list" class="chapter-list"></ul>
           <div id="concept-list" class="concept-list hidden"></div>
-          <div id="reader" class="reader hidden">
-            <div class="reader-bar">
-              <button type="button" id="reader-prev" class="ghost" aria-label="Previous section">
-                Previous
-              </button>
-              <p id="reader-label" class="reader-label"></p>
-              <button type="button" id="reader-next" class="ghost" aria-label="Next section">
-                Next
-              </button>
-            </div>
-            <iframe
-              id="reader-frame"
-              class="reader-frame"
-              title="Ebook"
-              sandbox="allow-same-origin"
-            ></iframe>
-            <p id="reader-status" class="hint"></p>
-          </div>
         </section>
       </main>
 

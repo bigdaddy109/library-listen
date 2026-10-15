@@ -4,20 +4,18 @@ import {
   SNAPSHOT,
   STALE_SNAPSHOT,
   audioAdvances,
-  epubRenders,
   expect,
   openFixtureShelf,
   openFromCoverAndListen,
   test,
-  waitBookSettled,
 } from "./fixtures.mjs";
 
-test.describe("Jeff Drive fixture: every series plays and reads", () => {
+test.describe("Jeff Drive fixture: every series listens (listen-only)", () => {
   test.beforeEach(async ({ page }) => {
     await openFixtureShelf(page);
   });
 
-  test("every series is on the shelf and no listen/ book is Read-only", async ({ page }) => {
+  test("every series is on the shelf; listen books are Audio; no Read UI", async ({ page }) => {
     const chips = await page.locator("#series-chips .chip").allTextContents();
     for (const label of ["上學不容易", "門羅", "Immune"]) {
       expect(chips.some((c) => c.includes(label)), label).toBe(true);
@@ -26,7 +24,12 @@ test.describe("Jeff Drive fixture: every series plays and reads", () => {
     for (const { id } of SERIES_BOOKS) expect(ids).toContain(id);
     const badges = await page.locator(".cover-card p").allTextContents();
     expect(badges).toHaveLength(SNAPSHOT.length);
-    for (const badge of badges) expect(badge).toMatch(/· (Both|Audio)$/);
+    for (const badge of badges) expect(badge).toMatch(/· Audio$/);
+    await expect(page.locator('[data-view="topics"]')).toHaveCount(0);
+    await expect(page.locator("#tab-read")).toHaveCount(0);
+    await expect(page.locator("#reader")).toHaveCount(0);
+    const toggle = await page.locator(".view-toggle button").allTextContents();
+    expect(toggle).toEqual(["封面牆", "書架"]);
   });
 
   test("stale 2-book localStorage still becomes a multi-series Drive shelf", async ({ page }) => {
@@ -37,12 +40,21 @@ test.describe("Jeff Drive fixture: every series plays and reads", () => {
     await expect.poll(() => page.locator(".cover-card[data-id]").count()).toBe(SNAPSHOT.length);
   });
 
+  test("stale topics shelfView falls back to covers", async ({ page }) => {
+    await page.evaluate(() => localStorage.setItem("librarylisten.shelfView.v2", "topics"));
+    await page.reload();
+    await expect(page.locator('.view-toggle [data-view="covers"]')).toHaveAttribute("aria-pressed", "true");
+    await expect.poll(() => page.locator(".cover-card[data-id]").count()).toBeGreaterThan(0);
+    await expect(page.locator(".topic-card")).toHaveCount(0);
+  });
+
   for (const book of SERIES_BOOKS) {
-    test(`${book.series}: tap cover → 聽 plays, 讀 opens the EPUB`, async ({ page }) => {
+    test(`${book.series}: tap cover → auto-listens (no Read chooser)`, async ({ page }) => {
       await openFromCoverAndListen(page, book.id);
       await audioAdvances(page);
       await expect(page.locator("#player-bar:not(.hidden)")).toBeVisible();
-      await epubRenders(page);
+      await expect(page.locator("#tab-read")).toHaveCount(0);
+      await expect(page.locator("#reader")).toHaveCount(0);
       await page.evaluate(() => document.getElementById("audio").pause());
       await page.locator("#btn-back").click();
       await expect.poll(() => page.locator(".cover-card[data-id]").count()).toBe(SNAPSHOT.length);
@@ -56,7 +68,7 @@ test.describe("Jeff Drive fixture: every series plays and reads", () => {
     await audioAdvances(page);
   });
 
-  test("cover wall is the default; a cover zooms in, swings open on its spine, and closes back", async ({ page }) => {
+  test("cover wall zooms then hinges, then auto-listens", async ({ page }) => {
     await expect(page.locator('.view-toggle [data-view="covers"]')).toHaveAttribute("aria-pressed", "true");
     const id = "munroe/what-if-1";
     const card = page.locator(`.cover-card[data-id="${id}"]`);
@@ -87,42 +99,25 @@ test.describe("Jeff Drive fixture: every series plays and reads", () => {
       };
     });
     await card.click();
-    await expect(page.locator("#book-layer[data-morph] .page.right [data-open=audio]")).toBeAttached();
-    const hit = await page.evaluate(() => {
-      const r = document.querySelector("#book-layer .page.right [data-open=audio]").getBoundingClientRect();
-      return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest("[data-open]") !== null;
-    });
-    expect(hit).toBe(false);
+    await expect(page.locator("#book:not(.hidden)")).toBeVisible({ timeout: 20_000 });
     const observed = await animated;
-    expect(observed.props).toContain("transform");
     expect(observed.props.every((p) => p === "transform" || p === "opacity")).toBe(true);
     expect(observed.sawClosed).toBe(true);
     expect(observed.sawHinge).toBe(true);
-    await expect(page.locator("#book-layer .draw-root.is-cover.is-opened .cover-leaf")).toBeAttached();
-    await waitBookSettled(page);
-    const leaf = await page.locator("#book-layer .cover-leaf").evaluate((el) => getComputedStyle(el).transform);
-    expect(leaf).toMatch(/^matrix3d\(-1,|^matrix\(-1,/);
-    await expect(page.locator("#book-layer .page.right [data-open=audio]")).toBeVisible();
-    await expect(page.locator("#book-layer .book-3d")).toHaveCount(0);
-    await expect(page.locator("#book-layer .page.right h2")).toHaveText("What If?");
-    await page.locator("#btn-close-book").click();
+    await audioAdvances(page);
     await expect(page.locator("#book-layer")).toBeHidden();
-    await expect(page.locator(`.cover-card[data-id="${id}"] .cover-art svg`)).toHaveCSS("opacity", "1");
-    await expect.poll(() => page.evaluate(() => document.documentElement.className)).not.toMatch(/cover-morph|book-open/);
+    await expect(page.locator('[data-open="audio"], [data-open="read"]')).toHaveCount(0);
   });
 
-  test("reduced motion opens and closes the book instantly", async ({ page }) => {
+  test("reduced motion still auto-listens", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.reload();
     await page.locator('.cover-card[data-id="immune/immune"]').click();
-    await expect(page.locator("#book-layer .draw-root.is-cover.is-opened")).toBeAttached();
-    await expect(page.locator("#book-layer .page.right [data-open=audio]")).toBeVisible();
-    expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);
-    await page.keyboard.press("Escape");
-    await expect(page.locator("#book-layer")).toBeHidden();
+    await expect(page.locator("#book:not(.hidden)")).toBeVisible({ timeout: 15_000 });
+    await audioAdvances(page);
   });
 
-  test("書架 spine tap uses the same cover zoom → hinge-left open (no 3D pull-out)", async ({ page }) => {
+  test("書架 spine tap uses cover zoom → hinge then auto-listens (no 3D pull-out)", async ({ page }) => {
     await page.locator('.view-toggle [data-view="spines"]').click();
     await expect(page.locator('.view-toggle [data-view="spines"]')).toHaveAttribute("aria-pressed", "true");
     const id = "school/middle-school-02-get-me";
@@ -157,32 +152,26 @@ test.describe("Jeff Drive fixture: every series plays and reads", () => {
         sawPull3d: sawPull3d.v,
       };
     });
-    // Playwright pointerenter lifts a coarse spine before click; one click still opens.
     await spine.click();
-    await expect(page.locator("#book-layer .draw-root.is-cover")).toBeAttached();
+    await expect(page.locator("#book:not(.hidden)")).toBeVisible({ timeout: 20_000 });
     const observed = await animated;
     expect(observed.sawPull3d).toBe(false);
     expect(observed.sawClosed).toBe(true);
     expect(observed.sawHinge).toBe(true);
     expect(observed.props.every((p) => p === "transform" || p === "opacity")).toBe(true);
-    await expect(page.locator("#book-layer .draw-root.is-cover.is-opened")).toBeAttached();
-    await expect(page.locator("#book-layer .book-3d")).toHaveCount(0);
-    await expect(page.locator("#book-layer .page.right h2")).toHaveText("Middle School 02 Get Me");
-    await waitBookSettled(page);
-    await page.locator("#btn-close-book").click();
-    await expect(page.locator("#book-layer")).toBeHidden();
+    await audioAdvances(page);
   });
 
-  test("/classic/ is still the dark player", async ({ page }) => {
+  test("/classic/ is still the dark player without Read UI", async ({ page }) => {
     await page.goto(`${ORIGIN}/classic/`);
     await expect(page.locator('body[data-shell="classic"]')).toBeAttached();
+    await expect(page.locator("#tab-read")).toHaveCount(0);
+    await expect(page.locator("#reader")).toHaveCount(0);
   });
 });
 
 test.describe("lock screen (Media Session)", () => {
   test.beforeEach(async ({ page }) => {
-    // Recorded in sessionStorage: WebKit doesn't always run init scripts
-    // before the app's modules on a reload, so keep what the first load saw.
     await page.addInitScript(() => {
       const ms = navigator.mediaSession;
       if (!ms) return;

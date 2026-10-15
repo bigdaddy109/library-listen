@@ -62,12 +62,10 @@ describe("demo catalog", () => {
     assert.ok(books.some((b) => b.id === "immune/immune"));
   });
 
-  it("uses Audio / Read / Both badges from library.js", () => {
+  it("uses Audio badges for listen books (listen-only)", () => {
     const books = demoCatalog();
-    const badges = new Set(books.map((b) => shelfBadge(b)));
-    assert.ok(badges.has("Audio"));
-    assert.ok(badges.has("Read"));
-    assert.ok(badges.has("Both"));
+    const listen = books.filter((b) => (b.chapters || []).length);
+    assert.ok(listen.every((b) => shelfBadge(b) === "Audio"));
     assert.equal(mediaFlags(books.find((b) => b.title === "放假")).badge, "Read");
   });
 });

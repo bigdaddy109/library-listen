@@ -272,7 +272,7 @@ describe("buildLibrary scan", () => {
     assert.equal(books[0].folder, "what-if-1");
     assert.equal(books[0].chapters.length, 2);
     assert.equal(books[0].ebook?.name, "what-if-1.epub");
-    assert.equal(shelfBadge(books[0]), "Both");
+    assert.equal(shelfBadge(books[0]), "Audio");
   });
 
   it("pairs collection-scoped listen/ and ebooks/ siblings by slug", () => {
@@ -287,11 +287,11 @@ describe("buildLibrary scan", () => {
     const howTo = books.find((b) => b.id === "munroe/how-to");
     const whatIf2 = books.find((b) => b.id === "munroe/what-if-2");
     assert.equal(immune.ebook?.name, "Immune.epub");
-    assert.equal(shelfBadge(immune), "Both");
+    assert.equal(shelfBadge(immune), "Audio");
     assert.equal(whatIf.ebook?.name, "what-if-1.epub");
-    assert.equal(shelfBadge(whatIf), "Both");
+    assert.equal(shelfBadge(whatIf), "Audio");
     assert.equal(howTo.ebook?.name, "how-to.epub");
-    assert.equal(shelfBadge(howTo), "Both");
+    assert.equal(shelfBadge(howTo), "Audio");
     assert.equal(whatIf2.ebook, null);
     assert.equal(shelfBadge(whatIf2), "Audio");
   });
@@ -316,13 +316,13 @@ describe("buildLibrary scan", () => {
     ]);
     assert.deepEqual(
       books.map((b) => [b.id, shelfBadge(b), b.ebook?.name, b.chapters.length]),
-      [["immune/immune", "Both", "immune.epub", 1]]
+      [["immune/immune", "Audio", "immune.epub", 1]]
     );
   });
 });
 
 describe("Jeff Drive fixture: every series has listen/ + ebooks/", () => {
-  it("builds playable Both books for 上學不容易, 門羅-WhatIf, Immune, Thing Explainer", () => {
+  it("builds playable Audio books for 上學不容易, 門羅-WhatIf, Immune, Thing Explainer", () => {
     const books = buildLibrary(jeffDriveLibraryEntries());
     const expected = [
       "immune/immune",
@@ -337,7 +337,7 @@ describe("Jeff Drive fixture: every series has listen/ + ebooks/", () => {
     ];
     assert.deepEqual(books.map((b) => b.id).sort(), expected);
     for (const book of books) {
-      assert.equal(shelfBadge(book), "Both", book.id);
+      assert.equal(shelfBadge(book), "Audio", book.id);
       assert.equal(isBookPlayable(book), true, book.id);
       assert.ok(book.ebook?.file, book.id);
       assert.ok(book.chapters.every((ch) => chapterIsPlayable(ch)), book.id);
@@ -348,7 +348,7 @@ describe("Jeff Drive fixture: every series has listen/ + ebooks/", () => {
     const books = buildLibrary(jeffLibraryRootEbookEntries());
     assert.equal(books.length, 4);
     for (const book of books) {
-      assert.equal(shelfBadge(book), "Both", book.id);
+      assert.equal(shelfBadge(book), "Audio", book.id);
       assert.equal(isBookPlayable(book), true, book.id);
     }
     assert.ok(books.every((b) => b.id !== "library/immune"));
@@ -405,12 +405,12 @@ describe("locateEbookPath + pairingKey", () => {
 });
 
 describe("shelfBadge", () => {
-  it("returns Audio, Read, or Both from chapters and ebook", () => {
+  it("returns Audio for listen books; Read only for ebook-only leftovers", () => {
     assert.equal(shelfBadge({ chapters: [{ id: "a" }], ebook: null }), "Audio");
     assert.equal(shelfBadge({ chapters: [], ebook: { name: "solo.epub" } }), "Read");
     assert.equal(
       shelfBadge({ chapters: [{ id: "a" }], ebook: { id: "book.epub" } }),
-      "Both"
+      "Audio"
     );
   });
 });
@@ -421,7 +421,7 @@ describe("bookScreenTabs", () => {
     assert.deepEqual(bookScreenTabs({ chapters: [], ebook: { name: "solo.epub" } }), []);
   });
 
-  it("adds Audio | Read for a paired listen + EPUB book", () => {
+  it("hides the tab bar for a paired listen book (listen-only, no Read tab)", () => {
     assert.deepEqual(
       bookScreenTabs({
         id: "munroe/how-to",
@@ -429,11 +429,11 @@ describe("bookScreenTabs", () => {
         chapters: [{ id: "01.mp3" }],
         ebook: { name: "how-to.epub" },
       }),
-      ["audio", "read"]
+      []
     );
   });
 
-  it("keeps Concepts for Immune and adds Read when an EPUB is paired", () => {
+  it("keeps Concepts for Immune and never adds Read", () => {
     assert.equal(isImmuneBook({ collectionId: "immune", id: "immune/immune" }), true);
     assert.deepEqual(
       bookScreenTabs({
@@ -451,7 +451,7 @@ describe("bookScreenTabs", () => {
         chapters: [{ id: "Immune-Part01.mp3" }],
         ebook: { name: "immune.epub" },
       }),
-      ["audio", "read", "concepts"]
+      ["audio", "concepts"]
     );
   });
 });

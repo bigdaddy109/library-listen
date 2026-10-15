@@ -17,7 +17,7 @@ export const SHELL_VERSION = Number(
   readFileSync(join(ROOT, "docs/sw.js"), "utf8").match(/library-listen-shell-v(\d+)/)[1]
 );
 
-/** One book per series of Jeff's Drive Library (each has listen/ + ebooks/). */
+/** One book per series of Jeff's Drive Library (each has listen/ audio). */
 export const SERIES_BOOKS = [
   { series: "上學不容易", id: "school/middle-school-02-get-me" },
   { series: "門羅-WhatIf", id: "munroe/what-if-1" },
@@ -78,60 +78,39 @@ export async function routeDriveMedia(page) {
   });
 }
 
-/** Saved EPUB blobs, as after "Save to this device"; audio stays Drive-stream only. */
-export async function seedOfflineEpubs(page) {
-  await page.evaluate(
-    async ({ rows, epubB64 }) => {
-      const bytes = Uint8Array.from(atob(epubB64), (c) => c.charCodeAt(0));
-      await new Promise((resolve, reject) => {
-        const req = indexedDB.open("library-listen", 1);
-        req.onupgradeneeded = () => {
-          const db = req.result;
-          if (!db.objectStoreNames.contains("offline")) db.createObjectStore("offline");
-          if (!db.objectStoreNames.contains("handles")) db.createObjectStore("handles");
-        };
-        req.onerror = () => reject(req.error);
-        req.onsuccess = () => {
-          const tx = req.result.transaction("offline", "readwrite");
-          for (const book of rows) {
-            if (!book.ebook) continue;
-            const blob = new Blob([bytes], { type: "application/epub+zip" });
-            tx.objectStore("offline").put({ bookId: book.id, chapterId: "__ebook__", blob }, [book.id, "__ebook__"]);
-          }
-          tx.oncomplete = () => resolve();
-          tx.onerror = () => reject(tx.error);
-        };
-      });
-    },
-    { rows: SNAPSHOT, epubB64: EPUB.toString("base64") }
-  );
-}
-
-/** Jeff's multi-series Drive shelf with saved EPUBs, served without a service worker. */
+/** Jeff's multi-series Drive shelf; audio via Drive stream (or offline blobs). */
 export async function openFixtureShelf(page) {
   await routeDriveMedia(page);
   await page.addInitScript((rows) => {
     localStorage.setItem("librarylisten.library.v1", JSON.stringify(rows));
   }, SNAPSHOT);
   await page.goto(`${ORIGIN}/`);
-  await seedOfflineEpubs(page);
+  await seedOfflineAudioAll(page);
   await page.reload();
   await expect.poll(() => page.locator(".cover-card[data-id]").count()).toBe(SNAPSHOT.length);
+}
+
+/** Seed offline audio for every snapshot book so play works without SW Drive proxy quirks. */
+export async function seedOfflineAudioAll(page) {
+  for (const book of SNAPSHOT) {
+    if (!book.chapters?.length) continue;
+    await seedOfflineAudio(page, book.id);
+  }
 }
 
 export async function waitBookSettled(page) {
   await expect(page.locator("#book-layer:not([data-morph])")).toBeAttached();
 }
 
-/** Real taps: cover → zoom + swing → 聽. */
+/**
+ * Real tap: cover → zoom + hinge → auto-listen (no 聽/讀 chooser).
+ */
 export async function openFromCoverAndListen(page, bookId) {
   const card = page.locator(`.cover-card[data-id="${bookId}"]`);
   await card.scrollIntoViewIfNeeded();
   await card.click();
-  await expect(page.locator("#book-layer .draw-root.is-cover.is-opened")).toBeAttached();
-  await waitBookSettled(page);
-  await page.locator('#book-layer [data-open="audio"]').click();
-  await expect(page.locator("#book:not(.hidden)")).toBeVisible();
+  await expect(page.locator("#book:not(.hidden)")).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator("#player-bar:not(.hidden)")).toBeVisible();
 }
 
 export async function audioAdvances(page) {
@@ -148,22 +127,6 @@ export async function audioAdvances(page) {
     .toBeGreaterThan(0);
 }
 
-export async function epubRenders(page) {
-  await page.locator("#tab-read").click();
-  await expect(page.locator("#reader:not(.hidden)")).toBeVisible();
-  await expect
-    .poll(() =>
-      page.evaluate(() => {
-        try {
-          return (document.getElementById("reader-frame")?.contentDocument?.body?.innerText || "").trim();
-        } catch {
-          return "";
-        }
-      })
-    )
-    .toMatch(/Opening|Fixture|spine/i);
-}
-
 export async function shellState(page) {
   return page.evaluate(async () => ({
     caches: await caches.keys(),
@@ -177,6 +140,9 @@ export async function shellState(page) {
       const audio = document.getElementById("audio");
       return Boolean(audio && !audio.paused && !audio.ended);
     })(),
+    hasReadTab: !!document.getElementById("tab-read"),
+    hasReader: !!document.getElementById("reader"),
+    hasTopics: !!document.querySelector('[data-view="topics"]'),
   }));
 }
 

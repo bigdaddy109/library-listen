@@ -47,7 +47,7 @@ Vanilla ES modules. No bundler, no framework. Root `package.json` is only `"type
 - Sort / rate: `librarylisten.shelfSort`, `librarylisten.rate`.
 - IndexedDB `library-listen`: `handles` (desktop File System Access directory handle) and `offline` (copied chapter/cover blobs).
 - Folder pick: **用 Google 登入** (GIS token, Drive API v3 `drive.readonly`) or `showDirectoryPicker` / `<input webkitdirectory>` as the local fallback. iPhone Safari cannot keep local folder permission across launches — Drive reconnect or **Save to this device** is the workaround.
-- Playback extras on the web player: sleep timer (15/30/45/60), −30/+30, next-chapter toast, save-to-device, Immune Concepts tab, shelf search (`docs/search.js`), EPUB Read tab, m4b chapter markers (`docs/markers.js`). The mid-listen save `confirm()` is gated to phones without a persisted folder handle.
+- Playback extras on the web player: sleep timer (15/30/45/60), −30/+30, next-chapter toast, save-to-device, Immune Concepts tab, shelf search (`docs/search.js`), m4b chapter markers (`docs/markers.js`). Listen-only: shelf tap opens the book then starts audio (no Read/ebook UI). The mid-listen save `confirm()` is gated to phones without a persisted folder handle.
 - A chaptered `m4b` is split with in-file markers when present (`applyAudiobookMarkers`). Unmarked files stay one chapter.
 
 ### Native app (`LibraryListen/`) — paused
@@ -88,7 +88,7 @@ Do not run `./start.sh`, `scripts/generate-fixtures.sh`, or `xcodebuild` for cur
 
 ## Tests (as of 2026-10-12)
 
-Local `node --test` covers scan/title/progress (`test/library.test.js`), PWA cache lockstep (`test/pwa-cache.test.mjs`), shelf search, m4b markers, save-prompt gating, Drive helpers, EPUB parse, and the Jeff Drive listen+ebook fixture. GitHub Actions (`.github/workflows/acceptance.yml`) installs ffmpeg, then runs `node --test` plus Playwright against that fixture in Chromium desktop, WebKit iPhone 390, and Chromium iPhone-UA 390, including a play+read pass on every series and an old-shell (vN-1 → vN) service-worker upgrade (`e2e/stale-shell.playwright.mjs`). That is not a paid device farm. Do not add App Store / XCTest CI. Live merge still requires [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md).
+Local `node --test` covers scan/title/progress (`test/library.test.js`), PWA cache lockstep (`test/pwa-cache.test.mjs`), shelf search, m4b markers, save-prompt gating, Drive helpers, EPUB parse helpers, and the Jeff Drive listen fixture. GitHub Actions (`.github/workflows/acceptance.yml`) installs ffmpeg, then runs `node --test` plus Playwright against that fixture in Chromium desktop, WebKit iPhone 390, and Chromium iPhone-UA 390, including a listen pass on every series and an old-shell (vN-1 → vN) service-worker upgrade (`e2e/stale-shell.playwright.mjs`). That is not a paid device farm. Do not add App Store / XCTest CI. Live merge still requires [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md).
 
 Recorded on a Linux agent against `main` @ `b0e0b6c` (after Drive OAuth #23):
 

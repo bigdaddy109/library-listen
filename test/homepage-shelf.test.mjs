@@ -27,7 +27,7 @@ describe("homepage is the rice-paper shelf", () => {
     assert.ok(searchAt > 0 && viewsAt > searchAt, "search comes before view toggles");
   });
 
-  it("keeps Drive sign-in, source sheet, player, EPUB, and Immune Concepts", () => {
+  it("keeps Drive sign-in, source sheet, player, and Immune Concepts (no Read/ebook UI)", () => {
     assert.match(home, /id="btn-google"/);
     assert.match(home, /用 Google 登入/);
     assert.match(home, /id="btn-pick-main"/);
@@ -38,8 +38,9 @@ describe("homepage is the rice-paper shelf", () => {
     assert.match(home, /id="source-sheet-advanced"/);
     assert.match(home, /id="btn-sheet-signout"/);
     assert.match(home, /id="player-bar"/);
-    assert.match(home, /id="tab-read"/);
-    assert.match(home, /id="reader-frame"/);
+    assert.doesNotMatch(home, /id="tab-read"/);
+    assert.doesNotMatch(home, /id="reader-frame"/);
+    assert.doesNotMatch(home, /主題卡片/);
     assert.match(home, /id="tab-concepts"/);
     assert.match(home, /id="concept-list"/);
     assert.match(home, /id="btn-offline"/);

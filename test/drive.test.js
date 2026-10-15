@@ -321,11 +321,11 @@ describe("Drive walker feeds the existing library pairing", () => {
     const whatIf = books.find((b) => b.id === "munroe/what-if-1");
     assert.equal(immune.chapters.length, 2);
     assert.equal(immune.ebook?.name, "Immune.epub");
-    assert.equal(shelfBadge(immune), "Both");
+    assert.equal(shelfBadge(immune), "Audio");
     assert.equal(whatIf.chapters.length, 2);
     assert.equal(whatIf.coverFile?.driveId, "c1");
     assert.equal(whatIf.ebook?.file?.driveId, "e1");
-    assert.equal(shelfBadge(whatIf), "Both");
+    assert.equal(shelfBadge(whatIf), "Audio");
   });
 
   it("follows nextPageToken so a paged Library still lists every series", async () => {
