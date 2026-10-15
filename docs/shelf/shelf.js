@@ -8,8 +8,8 @@ import {
   extOf,
   isBookPlayable,
   shelfBadge,
-} from "../library.js?v=46";
-import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=46";
+} from "../library.js?v=47";
+import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=47";
 import {
   COVER_MORPH,
   bookFlipFrames,
@@ -35,8 +35,8 @@ import {
   seriesMeta,
   shelfStatusLabel,
   volumeNumber,
-} from "./catalog.js?v=46";
-import { coverSvg, spineMetrics, topicMotifSvg } from "./covers.js?v=46";
+} from "./catalog.js?v=47";
+import { coverSvg, spineMetrics } from "./covers.js?v=47";
 
 /* v2: the cover wall became the default; the old key mostly held the old default. */
 const VIEW_KEY = "librarylisten.shelfView.v2";
@@ -248,36 +248,6 @@ function renderSpines(books) {
   els.stage.appendChild(root);
 }
 
-function renderTopics(books) {
-  const groups = groupBySeries(books);
-  const grid = document.createElement("div");
-  grid.className = "topics";
-  for (const group of groups) {
-    const card = document.createElement("button");
-    card.type = "button";
-    card.className = "topic-card";
-    card.style.setProperty("--accent", group.series.accent);
-    card.innerHTML = `${topicMotifSvg(group.id)}<h2></h2><p></p><div class="topic-chart"></div>`;
-    card.querySelector("h2").textContent = group.series.title;
-    card.querySelector("p").textContent = `${group.books.length} 本`;
-    const chart = card.querySelector(".topic-chart");
-    for (const book of group.books) {
-      const bar = document.createElement("i");
-      bar.style.height = `${Math.round(spineMetrics(book).height / 8)}px`;
-      bar.style.background = group.series.accent;
-      chart.appendChild(bar);
-    }
-    card.addEventListener("click", () => {
-      state.seriesId = group.id;
-      state.view = "covers";
-      persistChrome();
-      render();
-    });
-    grid.appendChild(card);
-  }
-  els.stage.appendChild(grid);
-}
-
 function renderCovers(books) {
   const grid = document.createElement("div");
   grid.className = "covers";
@@ -310,8 +280,7 @@ function render() {
     els.stage.appendChild(empty);
     return;
   }
-  if (state.view === "topics") renderTopics(books);
-  else if (state.view === "covers") renderCovers(books);
+  if (state.view === "covers") renderCovers(books);
   else renderSpines(books);
 }
 

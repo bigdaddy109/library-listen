@@ -458,21 +458,12 @@ h1 {
   opacity: 1;
 }
 
-.topics,
 .covers {
   display: grid;
   gap: 0.85rem;
-}
-
-.topics {
-  grid-template-columns: repeat(auto-fit, minmax(15.5rem, 1fr));
-}
-
-.covers {
   grid-template-columns: repeat(auto-fill, minmax(8.4rem, 1fr));
 }
 
-.topic-card,
 .cover-card {
   display: block;
   width: 100%;
@@ -487,7 +478,6 @@ h1 {
   touch-action: manipulation;
 }
 
-.topic-card h2,
 .cover-card h3 {
   margin: 0.55rem 0 0.2rem;
   font-family: var(--serif);
@@ -495,26 +485,10 @@ h1 {
   font-weight: 600;
 }
 
-.topic-card p,
 .cover-card p {
   margin: 0;
   color: var(--muted);
   font-size: 0.8rem;
-}
-
-.topic-chart {
-  display: flex;
-  align-items: flex-end;
-  gap: 0.18rem;
-  height: 2.4rem;
-  margin-top: 0.75rem;
-}
-
-.topic-chart i {
-  display: block;
-  width: 0.42rem;
-  border-radius: 1px 1px 0 0;
-  background: var(--accent, var(--ink));
 }
 
 .cover-card .cover-art {

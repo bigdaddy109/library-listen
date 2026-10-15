@@ -11,14 +11,14 @@ const shelf = readFileSync(join(ROOT, "docs/shelf/index.html"), "utf8");
 const sw = readFileSync(join(ROOT, "docs/sw.js"), "utf8");
 
 describe("homepage is the rice-paper shelf", () => {
-  it("puts 書架 / 主題卡片 / 封面牆 and search-first on the root page", () => {
+  it("puts 書架 / 封面牆 and search-first on the root page", () => {
     assert.match(home, /class="shell-shelf"/);
     assert.match(home, />書架</);
     assert.match(home, /data-view="spines"/);
-    assert.match(home, /data-view="topics"/);
-    assert.match(home, /主題卡片/);
     assert.match(home, /data-view="covers"/);
     assert.match(home, /封面牆/);
+    assert.doesNotMatch(home, /data-view="topics"/);
+    assert.doesNotMatch(home, /主題卡片/);
     assert.match(home, /id="series-chips"/);
     assert.match(home, /id="stage"/);
     assert.match(home, /id="book-layer"/);
@@ -54,7 +54,7 @@ describe("homepage is the rice-paper shelf", () => {
     assert.match(classic, /href="\.\.\/"/);
     assert.match(home, /href="\.\/classic\/index\.html"/);
     assert.match(shelf, /location\.replace\("\.\.\/"\)/);
-    assert.match(sw, /library-listen-shell-v46/);
+    assert.match(sw, /library-listen-shell-v47/);
     assert.match(sw, /"\.\/classic\/index\.html"/);
   });
 
@@ -83,6 +83,8 @@ describe("homepage is the rice-paper shelf", () => {
     assert.ok(covers > 0 && covers < home.indexOf('data-view="spines"'), "cover wall is the first tab");
     assert.match(home, /data-view="covers" aria-pressed="true"/);
     assert.match(home, /data-view="spines" aria-pressed="false"/);
+    assert.doesNotMatch(js, /renderTopics|topicMotifSvg|topic-card/);
+    assert.doesNotMatch(css, /\.topics\b|\.topic-card\b|\.topic-chart\b/);
     assert.doesNotMatch(js, /startViewTransition/);
     assert.match(js, /showCoverSpread\(book, \{ opened: false \}\)/);
     assert.match(js, /flipMorph/);
@@ -156,6 +158,6 @@ describe("homepage is the rice-paper shelf", () => {
     assert.match(install[0], /skipWaiting/);
     assert.match(activate[0], /waitUntil/);
     assert.match(activate[0], /clients\.claim/);
-    assert.match(sw, /library-listen-shell-v46/);
+    assert.match(sw, /library-listen-shell-v47/);
   });
 });

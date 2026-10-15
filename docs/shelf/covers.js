@@ -105,17 +105,6 @@ export function coverSvg(book, { width = 160, height = 220 } = {}) {
 </svg>`;
 }
 
-export function topicMotifSvg(seriesId, { width = 280, height = 120 } = {}) {
-  const series = seriesMeta(seriesId);
-  const mark = coverMark(seriesId);
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 120" width="${width}" height="${height}" data-series="${escapeXml(series.id)}" data-mark="${mark}" aria-hidden="true">
-  <rect width="280" height="120" fill="${series.paper}"/>
-  <g transform="translate(70,-20) scale(1.15)">
-    ${seriesArt(series.id, series.accent, series.ink)}
-  </g>
-</svg>`;
-}
-
 export function coverUsesExternalImage(svg) {
   const text = String(svg || "");
   if (/<image\b/i.test(text)) return true;

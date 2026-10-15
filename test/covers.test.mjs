@@ -6,7 +6,6 @@ import {
   coverSvg,
   coverUsesExternalImage,
   spineMetrics,
-  topicMotifSvg,
 } from "../docs/shelf/covers.js";
 
 describe("generated covers", () => {
@@ -36,9 +35,4 @@ describe("generated covers", () => {
     assert.ok(metrics.every((m) => m.lean >= -5 && m.lean <= 5));
   });
 
-  it("draws topic motifs without external images", () => {
-    const svg = topicMotifSvg("school");
-    assert.match(svg, /data-mark="seal"/);
-    assert.equal(coverUsesExternalImage(svg), false);
-  });
 });

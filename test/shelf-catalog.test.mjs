@@ -82,10 +82,11 @@ describe("series + views", () => {
   });
 
   it("normalizes views and chips", () => {
-    assert.deepEqual(VIEWS, ["covers", "spines", "topics"]);
+    assert.deepEqual(VIEWS, ["covers", "spines"]);
     assert.equal(DEFAULT_VIEW, "covers");
     assert.equal(normalizeView("map"), "covers");
     assert.equal(normalizeView(null), "covers");
+    assert.equal(normalizeView("topics"), "covers", "legacy topics view falls back to covers");
     assert.equal(normalizeView("spines"), "spines");
     const chips = seriesChips(demoCatalog());
     assert.equal(chips[0].id, "all");
