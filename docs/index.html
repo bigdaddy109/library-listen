@@ -16,10 +16,10 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="書架" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" href="./icon.svg?v=46" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=46" />
-    <link rel="stylesheet" href="./styles.css?v=46" />
-    <link rel="stylesheet" href="./shelf/shelf.css?v=46" />
+    <link rel="icon" href="./icon.svg?v=47" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=47" />
+    <link rel="stylesheet" href="./styles.css?v=47" />
+    <link rel="stylesheet" href="./shelf/shelf.css?v=47" />
     <title>書架 · Library Listen</title>
   </head>
   <body class="shell-shelf" data-shell="shelf">
@@ -36,7 +36,7 @@
           </div>
         </div>
         <p class="lede">
-          紙色書架。用 Google 登入讀共享的 <code>Library</code> 資料夾，或改用本機檔案。
+          紙色書架。用 Google 登入聽共享的 <code>Library</code> 資料夾，或改用本機檔案。
         </p>
         <section id="onboarding" class="onboarding">
           <div class="load-row cta-stack">
@@ -60,7 +60,7 @@
             hidden
           ></p>
         </section>
-        <p id="load-hint" class="hint">尚未選庫時顯示示範書。登入或選資料夾後即可聽／讀。</p>
+        <p id="load-hint" class="hint">尚未選庫時顯示示範書。登入或選資料夾後即可聽。</p>
       </header>
 
       <div class="toolbar">
@@ -83,7 +83,6 @@
         <div class="view-toggle" role="tablist" aria-label="檢視">
           <button type="button" data-view="covers" aria-pressed="true">封面牆</button>
           <button type="button" data-view="spines" aria-pressed="false">書架</button>
-          <button type="button" data-view="topics" aria-pressed="false">主題卡片</button>
         </div>
       </div>
 
@@ -110,29 +109,10 @@
       </div>
       <div id="book-tabs" class="book-tabs hidden">
         <button type="button" id="tab-audio" aria-pressed="true">Audio</button>
-        <button type="button" id="tab-read" class="hidden" aria-pressed="false">Read</button>
         <button type="button" id="tab-concepts" aria-pressed="false">Concepts</button>
       </div>
       <ul id="chapter-list" class="chapter-list"></ul>
       <div id="concept-list" class="concept-list hidden"></div>
-      <div id="reader" class="reader hidden">
-        <div class="reader-bar">
-          <button type="button" id="reader-prev" class="ghost" aria-label="Previous section">
-            Previous
-          </button>
-          <p id="reader-label" class="reader-label"></p>
-          <button type="button" id="reader-next" class="ghost" aria-label="Next section">
-            Next
-          </button>
-        </div>
-        <iframe
-          id="reader-frame"
-          class="reader-frame"
-          title="Ebook"
-          sandbox="allow-same-origin"
-        ></iframe>
-        <p id="reader-status" class="hint"></p>
-      </div>
     </section>
 
     <footer id="player-bar" class="player-bar hidden">
@@ -258,6 +238,6 @@
       </div>
     </div>
     <button type="button" id="btn-sort" class="hidden" hidden title="Sort shelf">Sort</button>
-    <script type="module" src="./app.js?v=46"></script>
+    <script type="module" src="./app.js?v=47"></script>
   </body>
 </html>

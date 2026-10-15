@@ -14,14 +14,13 @@ import {
   trimQuery,
 } from "../search.js";
 
-export const VIEWS = ["covers", "spines", "topics"];
+export const VIEWS = ["covers", "spines"];
 
 export const DEFAULT_VIEW = "covers";
 
 export const VIEW_LABELS = {
   covers: "封面牆",
   spines: "書架",
-  topics: "主題卡片",
 };
 
 export const OPEN_INTENT_KEY = "librarylisten.open.v1";
@@ -36,7 +35,7 @@ export const PULL_TIMING = {
   openMs: 400,
 };
 
-/** Views whose taps open via openCoverBook (zoom → hinge left). 主題卡片 is filter-only. */
+/** Views whose taps open via openCoverBook (zoom → hinge left). */
 export const COVER_OPEN_VIEWS = ["covers", "spines"];
 
 /**
@@ -279,6 +278,7 @@ export function seriesMeta(bookOrId) {
   );
 }
 
+/** Unknown or removed views (e.g. legacy `topics`) fall back to the cover wall. */
 export function normalizeView(view) {
   return VIEWS.includes(view) ? view : DEFAULT_VIEW;
 }

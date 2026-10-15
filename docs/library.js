@@ -336,12 +336,10 @@ export function bookHasEbook(book) {
   return !!(book?.ebook?.file || book?.ebook?.name || book?.ebook?.id);
 }
 
-/** Shelf badge: Audio, Read, or Both. */
+/** Shelf badge. Listen-only player: audio books are Audio; leftover ebook-only rows stay Read. */
 export function shelfBadge(book) {
-  const audio = bookHasAudio(book);
-  const read = bookHasEbook(book);
-  if (audio && read) return "Both";
-  if (read) return "Read";
+  if (bookHasAudio(book)) return "Audio";
+  if (bookHasEbook(book)) return "Read";
   return "Audio";
 }
 
@@ -350,16 +348,14 @@ export function isImmuneBook(book) {
 }
 
 /**
- * Book-screen tabs. Empty means no tab bar (audio-only, or ebook-only).
- * Immune keeps Concepts; a paired EPUB adds Read beside Audio.
+ * Book-screen tabs. Empty means no tab bar (plain audio).
+ * Immune keeps Concepts beside Audio. No Read tab (listen-only).
  */
 export function bookScreenTabs(book) {
   const audio = bookHasAudio(book);
-  const read = bookHasEbook(book);
   const immune = isImmuneBook(book);
   const tabs = [];
-  if (audio && (read || immune)) tabs.push("audio");
-  if (audio && read) tabs.push("read");
+  if (audio && immune) tabs.push("audio");
   if (immune) tabs.push("concepts");
   return tabs;
 }

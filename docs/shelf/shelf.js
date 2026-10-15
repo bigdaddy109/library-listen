@@ -3,13 +3,12 @@ import {
   EPUB_EXT,
   SKIP_FOLDERS,
   bookHasAudio,
-  bookHasEbook,
   buildLibrary,
   extOf,
   isBookPlayable,
   shelfBadge,
-} from "../library.js?v=46";
-import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=46";
+} from "../library.js?v=47";
+import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=47";
 import {
   COVER_MORPH,
   bookFlipFrames,
@@ -35,8 +34,8 @@ import {
   seriesMeta,
   shelfStatusLabel,
   volumeNumber,
-} from "./catalog.js?v=46";
-import { coverSvg, spineMetrics, topicMotifSvg } from "./covers.js?v=46";
+} from "./catalog.js?v=47";
+import { coverSvg, spineMetrics } from "./covers.js?v=47";
 
 /* v2: the cover wall became the default; the old key mostly held the old default. */
 const VIEW_KEY = "librarylisten.shelfView.v2";
@@ -122,8 +121,8 @@ function updateHint() {
   if (!els.hint) return;
   els.hint.textContent =
     state.source === "library"
-      ? `已載入 ${state.books.length} 本書。聽／讀在這一頁打開。`
-      : "尚未選庫時顯示示範書。登入或選資料夾後即可聽／讀。";
+      ? `已載入 ${state.books.length} 本書。點封面即可聽。`
+      : "尚未選庫時顯示示範書。登入或選資料夾後即可聽。";
 }
 
 function setLibrary(books, source = "library") {
@@ -248,36 +247,6 @@ function renderSpines(books) {
   els.stage.appendChild(root);
 }
 
-function renderTopics(books) {
-  const groups = groupBySeries(books);
-  const grid = document.createElement("div");
-  grid.className = "topics";
-  for (const group of groups) {
-    const card = document.createElement("button");
-    card.type = "button";
-    card.className = "topic-card";
-    card.style.setProperty("--accent", group.series.accent);
-    card.innerHTML = `${topicMotifSvg(group.id)}<h2></h2><p></p><div class="topic-chart"></div>`;
-    card.querySelector("h2").textContent = group.series.title;
-    card.querySelector("p").textContent = `${group.books.length} 本`;
-    const chart = card.querySelector(".topic-chart");
-    for (const book of group.books) {
-      const bar = document.createElement("i");
-      bar.style.height = `${Math.round(spineMetrics(book).height / 8)}px`;
-      bar.style.background = group.series.accent;
-      chart.appendChild(bar);
-    }
-    card.addEventListener("click", () => {
-      state.seriesId = group.id;
-      state.view = "covers";
-      persistChrome();
-      render();
-    });
-    grid.appendChild(card);
-  }
-  els.stage.appendChild(grid);
-}
-
 function renderCovers(books) {
   const grid = document.createElement("div");
   grid.className = "covers";
@@ -310,8 +279,7 @@ function render() {
     els.stage.appendChild(empty);
     return;
   }
-  if (state.view === "topics") renderTopics(books);
-  else if (state.view === "covers") renderCovers(books);
+  if (state.view === "covers") renderCovers(books);
   else renderSpines(books);
 }
 
@@ -481,6 +449,7 @@ async function openCoverBook(book) {
   const fromEl = cardArtFor(book.id);
   if (mode === "none" || !fromEl) {
     showCoverSpread(book, { opened: true });
+    beginListening(book);
     return;
   }
   setMorphing(true);
@@ -492,6 +461,16 @@ async function openCoverBook(book) {
   } finally {
     setMorphing(false);
   }
+  beginListening(book);
+}
+
+/** After the cover opens, go straight into audio — no 聽/讀 chooser. */
+function beginListening(book) {
+  if (!bookHasAudio(book)) {
+    showToast("這本書還沒有聽的音檔。");
+    return;
+  }
+  goToPlayer(book, "audio", isBookPlayable(book));
 }
 
 async function closeCoverBook() {
@@ -593,8 +572,6 @@ function renderSpread(book, phase = "open", { cover = false, opened = true } = {
   const siblings = state.books.filter((b) => seriesIdForBook(b) === series.id);
   const volume = String(volumeNumber(book, siblings)).padStart(2, "0");
   const progress = previewProgress(book);
-  const playable = isBookPlayable(book);
-  const readable = bookHasEbook(book) && !!book.ebook?.file;
   const rootClass = cover
     ? `is-open is-cover ${opened ? "is-opened" : "is-closed"}`
     : drawRootClass(phase);
@@ -643,10 +620,6 @@ function renderSpread(book, phase = "open", { cover = false, opened = true } = {
           <h2></h2>
           <p class="author"></p>
           <p class="progress"></p>
-          <div class="actions">
-            <button type="button" class="primary" data-open="audio">聽</button>
-            <button type="button" class="primary" data-open="read">讀</button>
-          </div>
         </section>${leaf}
       </article>
     </div>
@@ -664,18 +637,12 @@ function renderSpread(book, phase = "open", { cover = false, opened = true } = {
   els.bookStage.querySelector("h2").textContent = book.title;
   els.bookStage.querySelector(".author").textContent = book.author || "";
   els.bookStage.querySelector(".progress").textContent = progress.line;
-  const listen = els.bookStage.querySelector('[data-open="audio"]');
-  const read = els.bookStage.querySelector('[data-open="read"]');
-  listen.disabled = !flags.audio;
-  read.disabled = !flags.read;
-  listen.addEventListener("click", () => goToPlayer(book, "audio", playable));
-  read.addEventListener("click", () => goToPlayer(book, "read", readable));
   if (phase === "draw") playDraw(root);
 }
 
 function goToPlayer(book, pane, ready) {
   if (state.source === "demo" || !ready) {
-    showToast("先登入 Google 或選擇 Library 資料夾，才能聽或讀。");
+    showToast("先登入 Google 或選擇 Library 資料夾，才能聽。");
     if (typeof shelfOptions.onNeedLibrary === "function") {
       shelfOptions.onNeedLibrary(book, pane);
     }
@@ -683,15 +650,15 @@ function goToPlayer(book, pane, ready) {
   }
   if (typeof shelfOptions.onOpenBook === "function") {
     closeBook();
-    shelfOptions.onOpenBook(book, pane);
+    shelfOptions.onOpenBook(book, pane === "read" ? "audio" : pane);
     return;
   }
   try {
-    sessionStorage.setItem(OPEN_INTENT_KEY, JSON.stringify({ bookId: book.id, pane }));
+    sessionStorage.setItem(OPEN_INTENT_KEY, JSON.stringify({ bookId: book.id, pane: "audio" }));
   } catch {
     /* private mode */
   }
-  window.location.href = playerOpenUrl(book.id, pane);
+  window.location.href = playerOpenUrl(book.id, "audio");
 }
 
 async function walkDirectory(dir, prefix = []) {
@@ -772,7 +739,7 @@ async function loadFromFiles() {
 
 function applyLoaded(books) {
   if (!books.length) {
-    showToast("沒有找到聽或讀的書。示範書架還在。");
+    showToast("沒有找到能聽的書。示範書架還在。");
     return;
   }
   setLibrary(books, "library");

@@ -62,12 +62,10 @@ describe("demo catalog", () => {
     assert.ok(books.some((b) => b.id === "immune/immune"));
   });
 
-  it("uses Audio / Read / Both badges from library.js", () => {
+  it("uses Audio badges for listen books (listen-only)", () => {
     const books = demoCatalog();
-    const badges = new Set(books.map((b) => shelfBadge(b)));
-    assert.ok(badges.has("Audio"));
-    assert.ok(badges.has("Read"));
-    assert.ok(badges.has("Both"));
+    const listen = books.filter((b) => (b.chapters || []).length);
+    assert.ok(listen.every((b) => shelfBadge(b) === "Audio"));
     assert.equal(mediaFlags(books.find((b) => b.title === "放假")).badge, "Read");
   });
 });
@@ -82,10 +80,11 @@ describe("series + views", () => {
   });
 
   it("normalizes views and chips", () => {
-    assert.deepEqual(VIEWS, ["covers", "spines", "topics"]);
+    assert.deepEqual(VIEWS, ["covers", "spines"]);
     assert.equal(DEFAULT_VIEW, "covers");
     assert.equal(normalizeView("map"), "covers");
     assert.equal(normalizeView(null), "covers");
+    assert.equal(normalizeView("topics"), "covers", "legacy topics view falls back to covers");
     assert.equal(normalizeView("spines"), "spines");
     const chips = seriesChips(demoCatalog());
     assert.equal(chips[0].id, "all");
