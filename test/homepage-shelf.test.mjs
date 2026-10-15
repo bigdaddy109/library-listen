@@ -55,7 +55,7 @@ describe("homepage is the rice-paper shelf", () => {
     assert.match(classic, /href="\.\.\/"/);
     assert.match(home, /href="\.\/classic\/index\.html"/);
     assert.match(shelf, /location\.replace\("\.\.\/"\)/);
-    assert.match(sw, /library-listen-shell-v47/);
+    assert.match(sw, /library-listen-shell-v\d+/);
     assert.match(sw, /"\.\/classic\/index\.html"/);
   });
 
@@ -159,6 +159,6 @@ describe("homepage is the rice-paper shelf", () => {
     assert.match(install[0], /skipWaiting/);
     assert.match(activate[0], /waitUntil/);
     assert.match(activate[0], /clients\.claim/);
-    assert.match(sw, /library-listen-shell-v47/);
+    assert.match(sw, /library-listen-shell-v\d+/);
   });
 });

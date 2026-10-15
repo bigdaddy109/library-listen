@@ -204,7 +204,7 @@ function walk(dir, root, out) {
 function isShellAsset(rel) {
   if (rel === "sw.js") return false;
   if (rel === "index.html" || rel === "manifest.webmanifest") return true;
-  if (rel === "apple-touch-icon.png") return true;
+  if (rel === "apple-touch-icon.png" || rel === "og-image.png") return true;
   if (rel === "shelf/index.html" || rel === "classic/index.html") return true;
   if (rel.startsWith("shelf/") && VERSIONED_SHELL.test(rel)) return true;
   if (!rel.includes("/") && VERSIONED_SHELL.test(rel)) return true;
