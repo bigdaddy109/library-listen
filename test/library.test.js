@@ -25,6 +25,8 @@ import {
   saveTextProgress,
   shelfBadge,
   bookScreenTabs,
+  libraryReadUrl,
+  seriesFolderName,
   isImmuneBook,
   shouldSkipPath,
   textProgress,
@@ -294,6 +296,13 @@ describe("buildLibrary scan", () => {
     assert.equal(shelfBadge(howTo), "Audio");
     assert.equal(whatIf2.ebook, null);
     assert.equal(shelfBadge(whatIf2), "Audio");
+    assert.equal(whatIf.collectionFolder, "門羅-WhatIf");
+    assert.equal(immune.collectionFolder, "Immune");
+    assert.equal(
+      libraryReadUrl(whatIf, 1),
+      "https://bigdaddy109.github.io/library-read/?series=%E9%96%80%E7%BE%85-WhatIf&book=what-if-1&ch=2"
+    );
+    assert.equal(libraryReadUrl(whatIf2, 0), "");
   });
 
   it("adds a searchable ebook-only row and ignores PDF", () => {
@@ -401,6 +410,37 @@ describe("locateEbookPath + pairingKey", () => {
       pairingKey("門羅-WhatIf", "What If 1")
     );
     assert.equal(pairingKey("Immune", "immune"), pairingKey("Immune", "Immune"));
+  });
+});
+
+describe("libraryReadUrl", () => {
+  it("uses the series folder and EPUB stem, with a 1-based chapter", () => {
+    const school = {
+      collectionId: "school",
+      ebook: { name: "Middle School 02 Get Me.epub" },
+    };
+    assert.equal(seriesFolderName(school), "上學不容易");
+    assert.equal(
+      libraryReadUrl(school, 0),
+      "https://bigdaddy109.github.io/library-read/?series=%E4%B8%8A%E5%AD%B8%E4%B8%8D%E5%AE%B9%E6%98%93&book=Middle%20School%2002%20Get%20Me&ch=1"
+    );
+  });
+
+  it("omits ch when nothing is playing and hides books without an EPUB", () => {
+    assert.equal(
+      libraryReadUrl({ collectionId: "immune", ebook: { id: "Immune.epub", name: "Immune.epub" } }, null),
+      "https://bigdaddy109.github.io/library-read/?series=Immune&book=Immune"
+    );
+    assert.equal(libraryReadUrl({ collectionFolder: "Immune", ebook: null }, 3), "");
+    assert.equal(libraryReadUrl({ collectionFolder: "Immune", ebook: { name: "notes.pdf" } }, 0), "");
+    assert.equal(libraryReadUrl({ collectionId: "thing-explainer", ebook: { name: "Thing Explainer.epub" } }), "");
+    assert.equal(
+      libraryReadUrl(
+        { collectionId: "thing-explainer", collectionFolder: "Thing Explainer", ebook: { name: "Thing Explainer.epub" } },
+        4
+      ),
+      "https://bigdaddy109.github.io/library-read/?series=Thing%20Explainer&book=Thing%20Explainer&ch=5"
+    );
   });
 });
 

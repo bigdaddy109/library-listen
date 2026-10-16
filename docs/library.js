@@ -336,6 +336,46 @@ export function bookHasEbook(book) {
   return !!(book?.ebook?.file || book?.ebook?.name || book?.ebook?.id);
 }
 
+/** Drive series folder, not the shelf title. Known ids cover snapshots saved before the folder was stored. */
+export function seriesFolderName(book, known = KNOWN_COLLECTIONS) {
+  const stored = String(book?.collectionFolder || "").trim();
+  if (stored) return stored;
+  const id = book?.collectionId;
+  if (!id) return "";
+  for (const [folder, meta] of Object.entries(known || {})) {
+    if (meta?.id === id) return folder;
+  }
+  return "";
+}
+
+/** EPUB file name without the extension. PDF and other names return empty. */
+export function epubStem(name) {
+  const base = String(name || "").split(/[/\\]/).pop() || "";
+  if (!/\.epub$/i.test(base)) return "";
+  return base.slice(0, -".epub".length);
+}
+
+/**
+ * Library Read deep link. `chapterIndex` is 0-based; the `ch` query is 1-based and omitted when unknown.
+ * Empty string when the book has no EPUB or no series folder — callers hide the entry.
+ * @param {object} book
+ * @param {number|null} [chapterIndex]
+ */
+export function libraryReadUrl(book, chapterIndex = null) {
+  if (!bookHasEbook(book)) return "";
+  const series = seriesFolderName(book);
+  const stem = epubStem(book?.ebook?.name || book?.ebook?.file?.name || book?.ebook?.id || "");
+  if (!series || !stem) return "";
+  const params = [
+    `series=${encodeURIComponent(series)}`,
+    `book=${encodeURIComponent(stem)}`,
+  ];
+  if (Number.isInteger(chapterIndex) && chapterIndex >= 0) {
+    params.push(`ch=${encodeURIComponent(String(chapterIndex + 1))}`);
+  }
+  return `https://bigdaddy109.github.io/library-read/?${params.join("&")}`;
+}
+
 /** Shelf badge. Listen-only player: audio books are Audio; leftover ebook-only rows stay Read. */
 export function shelfBadge(book) {
   if (bookHasAudio(book)) return "Audio";
@@ -598,6 +638,7 @@ function makeBook({ collectionFolder, bookFolder, audioFiles, coverFile, ebook }
     id: `${collection.id}/${slug(bookFolder)}`,
     collectionId: collection.id,
     collectionTitle: collection.title,
+    collectionFolder,
     folder: bookFolder,
     title: meta.title,
     subtitle: meta.subtitle,

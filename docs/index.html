@@ -23,10 +23,10 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="書架" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" href="./icon.svg?v=49" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=49" />
-    <link rel="stylesheet" href="./styles.css?v=49" />
-    <link rel="stylesheet" href="./shelf/shelf.css?v=49" />
+    <link rel="icon" href="./icon.svg?v=50" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=50" />
+    <link rel="stylesheet" href="./styles.css?v=50" />
+    <link rel="stylesheet" href="./shelf/shelf.css?v=50" />
     <title>書架 · Library Listen</title>
   </head>
   <body class="shell-shelf" data-shell="shelf">
@@ -108,6 +108,7 @@
           <h2 id="book-title"></h2>
           <p class="author" id="book-author"></p>
           <p class="subtitle" id="book-subtitle"></p>
+          <a id="read-this-book" class="read-this-book hidden" hidden>讀這本</a>
         </div>
       </div>
       <div class="offline-row">
@@ -125,7 +126,10 @@
     <footer id="player-bar" class="player-bar hidden">
       <div class="player-cover" id="player-cover"></div>
       <div class="player-text">
-        <div id="player-title" class="player-title">—</div>
+        <div class="player-title-row">
+          <div id="player-title" class="player-title">—</div>
+          <a id="player-read-this-book" class="read-this-book hidden" hidden>讀這本</a>
+        </div>
         <div class="player-sub">
           <div id="player-chapter" class="player-chapter">—</div>
           <button type="button" id="btn-rate" class="skip rate" aria-label="Playback speed 1.0×">
@@ -245,6 +249,6 @@
       </div>
     </div>
     <button type="button" id="btn-sort" class="hidden" hidden title="Sort shelf">Sort</button>
-    <script type="module" src="./app.js?v=49"></script>
+    <script type="module" src="./app.js?v=50"></script>
   </body>
 </html>
