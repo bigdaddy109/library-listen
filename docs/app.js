@@ -1,4 +1,4 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=48";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=49";
 import {
   AUDIO_EXT,
   EPUB_EXT,
@@ -17,7 +17,7 @@ import {
   chapterProgress,
   saveProgress,
   shelfBadge,
-} from "./library.js?v=48";
+} from "./library.js?v=49";
 import {
   DRIVE_UNAUTHORIZED_MESSAGE,
   attachDriveMedia,
@@ -42,7 +42,7 @@ import {
   signInWithGoogle,
   signOutGoogle,
   sourceDialogActions,
-} from "./drive.js?v=48";
+} from "./drive.js?v=49";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -50,7 +50,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=48";
+} from "./search.js?v=49";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -65,17 +65,17 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=48";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=48";
-import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=48";
-import { coverSvg } from "./shelf/covers.js?v=48";
-import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=48";
+} from "./markers.js?v=49";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=49";
+import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=49";
+import { coverSvg } from "./shelf/covers.js?v=49";
+import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=49";
 import {
   closeRiceBook,
   initRiceShelf,
   isRiceShelfPage,
   setRiceShelfLibrary,
-} from "./shelf/shelf.js?v=48";
+} from "./shelf/shelf.js?v=49";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";

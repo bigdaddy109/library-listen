@@ -47,6 +47,29 @@ describe("homepage is the rice-paper shelf", () => {
     assert.doesNotMatch(home, /application\/pdf|\.pdf/i);
   });
 
+  it("shares one absolute og:image on a single line for every HTML page", () => {
+    const image = "https://bigdaddy109.github.io/library-listen/og-image.png";
+    const og = `<meta property="og:image" content="${image}" />`;
+    const twitter = `<meta name="twitter:image" content="${image}" />`;
+    for (const [label, html] of [
+      ["docs/index.html", home],
+      ["docs/classic/index.html", classic],
+      ["docs/shelf/index.html", shelf],
+    ]) {
+      assert.ok(html.split("\n").some((line) => line.includes(og)), `${label} og:image`);
+      assert.ok(
+        html.split("\n").some((line) => line.includes(twitter)),
+        `${label} twitter:image`
+      );
+      assert.match(html, /<meta property="og:title" content="[^"]+" \/>/);
+      assert.match(html, /<meta property="og:description" content="[^"]+" \/>/);
+      assert.match(html, /<meta property="og:image:width" content="1200" \/>/);
+      assert.match(html, /<meta property="og:image:height" content="630" \/>/);
+      assert.match(html, /<meta name="twitter:card" content="summary_large_image" \/>/);
+    }
+    assert.match(sw, /"\.\/og-image\.png"/);
+  });
+
   it("keeps the old dark player at /classic/ and redirects /shelf/ home", () => {
     assert.match(classic, /data-shell="classic"/);
     assert.match(classic, /Listen from your shared Library/);
