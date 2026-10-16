@@ -69,6 +69,7 @@ export function jeffDriveLibrarySnapshot(buildLibrary) {
     id: book.id,
     collectionId: book.collectionId,
     collectionTitle: book.collectionTitle,
+    collectionFolder: book.collectionFolder || null,
     folder: book.folder,
     title: book.title,
     subtitle: book.subtitle,

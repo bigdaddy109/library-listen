@@ -1,10 +1,11 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=49";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=50";
 import {
   AUDIO_EXT,
   EPUB_EXT,
   SKIP_FOLDERS,
   bookHasAudio,
   bookScreenTabs,
+  libraryReadUrl,
   extOf,
   bookHasDriveMedia,
   booksFromLibrarySnapshot,
@@ -17,7 +18,7 @@ import {
   chapterProgress,
   saveProgress,
   shelfBadge,
-} from "./library.js?v=49";
+} from "./library.js?v=50";
 import {
   DRIVE_UNAUTHORIZED_MESSAGE,
   attachDriveMedia,
@@ -42,7 +43,7 @@ import {
   signInWithGoogle,
   signOutGoogle,
   sourceDialogActions,
-} from "./drive.js?v=49";
+} from "./drive.js?v=50";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -50,7 +51,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=49";
+} from "./search.js?v=50";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -65,17 +66,17 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=49";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=49";
-import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=49";
-import { coverSvg } from "./shelf/covers.js?v=49";
-import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=49";
+} from "./markers.js?v=50";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=50";
+import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=50";
+import { coverSvg } from "./shelf/covers.js?v=50";
+import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=50";
 import {
   closeRiceBook,
   initRiceShelf,
   isRiceShelfPage,
   setRiceShelfLibrary,
-} from "./shelf/shelf.js?v=49";
+} from "./shelf/shelf.js?v=50";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -229,6 +230,7 @@ function saveLibrarySnapshot() {
     id: b.id,
     collectionId: b.collectionId,
     collectionTitle: b.collectionTitle,
+    collectionFolder: b.collectionFolder || null,
     folder: b.folder,
     title: b.title,
     subtitle: b.subtitle,
@@ -1364,6 +1366,10 @@ function renderBook() {
   els.chapterList.classList.toggle("hidden", showConcepts || !book.chapters.length);
   els.conceptList.classList.toggle("hidden", !showConcepts);
   if (showConcepts) renderConceptCards();
+  setReadThisBookLink(
+    document.getElementById("read-this-book"),
+    libraryReadUrl(book, playingChapterIndex(book))
+  );
 }
 
 function render() {
@@ -1847,9 +1853,28 @@ function writeSeekBar(pos, dur) {
   ignoreSeekInput -= 1;
 }
 
+function playingChapterIndex(book) {
+  if (!book || playback?.bookId !== book.id) return null;
+  return Number.isInteger(playback.chapterIndex) ? playback.chapterIndex : null;
+}
+
+function setReadThisBookLink(el, href) {
+  if (!el) return;
+  if (!href) {
+    el.hidden = true;
+    el.classList.add("hidden");
+    el.removeAttribute("href");
+    return;
+  }
+  el.href = href;
+  el.hidden = false;
+  el.classList.remove("hidden");
+}
+
 function updatePlayerBar() {
   if (!playback) {
     els.playerBar.classList.add("hidden");
+    setReadThisBookLink(document.getElementById("player-read-this-book"), "");
     return;
   }
   const book = findBook(playback.bookId);
@@ -1857,6 +1882,10 @@ function updatePlayerBar() {
   if (!book || !chapter) return;
 
   els.playerBar.classList.remove("hidden");
+  setReadThisBookLink(
+    document.getElementById("player-read-this-book"),
+    libraryReadUrl(book, playback.chapterIndex)
+  );
   setCover(document.getElementById("player-cover"), book);
   document.getElementById("player-title").textContent = book.title;
   document.getElementById("player-chapter").textContent = chapter.title;

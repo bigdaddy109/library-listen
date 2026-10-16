@@ -44,6 +44,10 @@ describe("homepage is the rice-paper shelf", () => {
     assert.match(home, /id="tab-concepts"/);
     assert.match(home, /id="concept-list"/);
     assert.match(home, /id="btn-offline"/);
+    assert.match(home, /id="read-this-book"/);
+    assert.match(home, /id="player-read-this-book"/);
+    assert.match(classic, /id="read-this-book"/);
+    assert.match(classic, /id="player-read-this-book"/);
     assert.doesNotMatch(home, /application\/pdf|\.pdf/i);
   });
 
