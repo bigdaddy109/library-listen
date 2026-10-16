@@ -1882,10 +1882,11 @@ function updatePlayerBar() {
   if (!book || !chapter) return;
 
   els.playerBar.classList.remove("hidden");
-  setReadThisBookLink(
-    document.getElementById("player-read-this-book"),
-    libraryReadUrl(book, playback.chapterIndex)
-  );
+  const readHref = libraryReadUrl(book, playback.chapterIndex);
+  setReadThisBookLink(document.getElementById("player-read-this-book"), readHref);
+  if (state.activeBookId === book.id) {
+    setReadThisBookLink(document.getElementById("read-this-book"), readHref);
+  }
   setCover(document.getElementById("player-cover"), book);
   document.getElementById("player-title").textContent = book.title;
   document.getElementById("player-chapter").textContent = chapter.title;

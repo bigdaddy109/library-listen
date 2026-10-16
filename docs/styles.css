@@ -837,6 +837,18 @@ body.is-scanning .hint {
   min-width: 0;
 }
 
+.player-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.player-title-row .player-title {
+  flex: 1;
+  min-width: 0;
+}
+
 .player-title,
 .player-chapter {
   overflow: hidden;
