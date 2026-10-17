@@ -51,8 +51,7 @@ export const DRIVE_ERROR_KIND = {
 export const DRIVE_ERROR_MESSAGES = {
   testUser:
     "This Google account is not a test user for Library Listen. While the OAuth consent screen is in Testing mode, only approved testers can sign in. Ask Jeff to add this account as a test user.",
-  expired:
-    "Google sign-in expired. Tap 用 Google 登入 again to keep streaming or reading from Drive.",
+  expired: "登入已過期。請再點「用 Google 登入」才能繼續從雲端播放。",
   noLibrary:
     "This Google account cannot see a folder named Library. Ask Jeff to share Library (Viewer) with this account, or Choose Library folder as a local fallback.",
   accessDenied:
