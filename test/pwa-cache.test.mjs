@@ -149,12 +149,19 @@ export function auditPwaCache(sources) {
 
   for (const file of localRefs(cards, /file:\s*"([^"]+)"/g)) {
     const asset = `./concepts/immune/${file}`;
-    if (!listed.has(asset)) {
-      errors.push(`IMMUNE_CARDS file ${asset} is not in ASSETS`);
+    if (listed.has(asset)) {
+      errors.push(`${asset} is a concept card and must be cached on demand, not in the shell precache`);
     }
     if (!files.includes(`concepts/immune/${file}`)) {
       errors.push(`IMMUNE_CARDS file ${asset} is missing on disk`);
     }
+  }
+
+  if (listed.has("./epub.js")) {
+    errors.push("epub.js is not loaded by the player and must stay out of the shell precache");
+  }
+  if (!sw.includes("librarylisten.cache-concepts")) {
+    errors.push("sw.js must cache Immune concept cards on demand");
   }
 
   return { version, assets, errors };
@@ -202,13 +209,14 @@ function walk(dir, root, out) {
 }
 
 function isShellAsset(rel) {
-  if (rel === "sw.js") return false;
+  if (rel === "sw.js" || rel === "epub.js") return false;
   if (rel === "index.html" || rel === "manifest.webmanifest") return true;
   if (rel === "apple-touch-icon.png" || rel === "og-image.png") return true;
   if (rel === "shelf/index.html" || rel === "classic/index.html") return true;
   if (rel.startsWith("shelf/") && VERSIONED_SHELL.test(rel)) return true;
+  if (rel.startsWith("concepts/")) return false;
   if (!rel.includes("/") && VERSIONED_SHELL.test(rel)) return true;
-  return rel.startsWith("concepts/") && /\.(jpe?g|png|webp)$/i.test(rel);
+  return false;
 }
 
 function needsQuery(assetPath) {
@@ -267,8 +275,18 @@ describe("PWA cache-bust", () => {
       "ASSETS must include drive.js from main"
     );
     assert.ok(
+      result.assets.some((a) => stripQuery(a) === "./sleep.js"),
+      "ASSETS must include sleep.js from main"
+    );
+    assert.equal(
       result.assets.some((a) => stripQuery(a) === "./epub.js"),
-      "ASSETS must include epub.js from main"
+      false,
+      "epub.js stays out of the shell precache"
+    );
+    assert.equal(
+      result.assets.some((a) => a.includes("concepts/immune/")),
+      false,
+      "Immune concept cards stay out of the shell precache"
     );
     assert.ok(
       result.assets.some((a) => stripQuery(a) === "./shelf/index.html"),

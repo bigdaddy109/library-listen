@@ -24,7 +24,7 @@ test.describe("Jeff Drive fixture: every series listens (listen-only)", () => {
     for (const { id } of SERIES_BOOKS) expect(ids).toContain(id);
     const badges = await page.locator(".cover-card p").allTextContents();
     expect(badges).toHaveLength(SNAPSHOT.length);
-    for (const badge of badges) expect(badge).toMatch(/· Audio$/);
+    for (const badge of badges) expect(badge).toMatch(/· 音檔$/);
     await expect(page.locator('[data-view="topics"]')).toHaveCount(0);
     await expect(page.locator("#tab-read")).toHaveCount(0);
     await expect(page.locator("#reader")).toHaveCount(0);

@@ -229,6 +229,8 @@ h1 {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+  min-height: 44px;
+  box-sizing: border-box;
 }
 
 .chip-dot {
