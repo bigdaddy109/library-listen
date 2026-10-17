@@ -1,4 +1,4 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=50";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=51";
 import {
   AUDIO_EXT,
   EPUB_EXT,
@@ -18,7 +18,7 @@ import {
   chapterProgress,
   saveProgress,
   shelfBadge,
-} from "./library.js?v=50";
+} from "./library.js?v=51";
 import {
   DRIVE_UNAUTHORIZED_MESSAGE,
   attachDriveMedia,
@@ -27,6 +27,8 @@ import {
   downloadDriveFile,
   driveMediaUrl,
   fetchDriveUser,
+  finishDrivePlaybackAuthRetry,
+  freshAccessToken,
   getAccessToken,
   hydrateDriveCovers,
   isDriveFile,
@@ -36,6 +38,7 @@ import {
   loadDriveEntries,
   loadDriveSession,
   openGooglePicker,
+  planDrivePlaybackAuthRetry,
   publishDriveToken,
   refreshGoogleToken,
   restoreDriveFile,
@@ -43,7 +46,8 @@ import {
   signInWithGoogle,
   signOutGoogle,
   sourceDialogActions,
-} from "./drive.js?v=50";
+  tokenForChapterFetch,
+} from "./drive.js?v=51";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -51,7 +55,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=50";
+} from "./search.js?v=51";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -66,17 +70,17 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=50";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=50";
-import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=50";
-import { coverSvg } from "./shelf/covers.js?v=50";
-import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=50";
+} from "./markers.js?v=51";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=51";
+import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=51";
+import { coverSvg } from "./shelf/covers.js?v=51";
+import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=51";
 import {
   closeRiceBook,
   initRiceShelf,
   isRiceShelfPage,
   setRiceShelfLibrary,
-} from "./shelf/shelf.js?v=50";
+} from "./shelf/shelf.js?v=51";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -158,6 +162,15 @@ let offerSaveBanner = false;
 const savePrompted = new Set();
 let toastTimer = null;
 let swReloading = false;
+/** Last file position heard, so a 401 can replay the same spot after currentTime drops. */
+let driveFilePosition = 0;
+/** @type {{ key: string, attempts: number, pending: boolean, position: number } | null} */
+let driveAuthRetryState = null;
+/** @type {Promise<void> | null} */
+let driveAuthRecovering = null;
+/** @type {Promise<unknown> | null} */
+let driveTokenRefresh = null;
+let driveTokenCheckAt = 0;
 const SW_CHECK_MS = 60_000;
 const APP_VERSION = new URL(import.meta.url).searchParams.get("v") || "";
 
@@ -206,6 +219,13 @@ function isBookOffline(book) {
   const chapters = book.chapters || [];
   if (!chapters.length) return false;
   return chapters.every((ch) => !!offlineChapterBlob(saved, ch));
+}
+
+function chapterStreamsFromDrive(chapter) {
+  const url = String(chapter?.url || "");
+  if (url.startsWith("blob:")) return false;
+  if (isDriveMediaPath(url)) return true;
+  return !!(chapter?.driveId || chapter?.file?.driveId);
 }
 
 function ensureChapterPlayableUrl(chapter) {
@@ -665,25 +685,41 @@ function hideLibraryStatus() {
   showLibraryStatus("");
 }
 
-function clearDriveError() {
-  const el = els.driveStatus;
-  if (!el || !el.classList.contains("drive-error")) return;
-  el.classList.remove("drive-error");
-  el.textContent = "";
-  updateDriveStatus();
+function clearPlayerDriveError() {
+  const playerEl = document.getElementById("player-drive-error");
+  if (playerEl) playerEl.textContent = "";
+  els.playerBar?.classList.remove("has-drive-error");
 }
 
-function showDriveError(err, { silent } = {}) {
+function clearDriveError() {
+  const el = els.driveStatus;
+  const hadStatus = !!el?.classList.contains("drive-error");
+  if (hadStatus && el) {
+    el.classList.remove("drive-error");
+    el.textContent = "";
+  }
+  const hadPlayer = !!els.playerBar?.classList.contains("has-drive-error");
+  clearPlayerDriveError();
+  if (hadStatus || hadPlayer) updateDriveStatus();
+}
+
+function showDriveError(err) {
   const classified = classifyDriveError(err);
   if (classified.kind === "abort" || classified.kind === "coop" || classified.silent) {
     return classified;
   }
+  const text = classified.message;
   const el = els.driveStatus;
   if (el) {
-    el.textContent = classified.message;
+    el.textContent = text;
     el.classList.add("drive-error");
+    el.hidden = false;
   }
-  if (!silent) alert(classified.message);
+  const playerEl = document.getElementById("player-drive-error");
+  if (playerEl) {
+    playerEl.textContent = text;
+    els.playerBar?.classList.add("has-drive-error");
+  }
   return classified;
 }
 
@@ -1604,7 +1640,11 @@ function updateMediaSession() {
   updatePositionState();
 }
 
-async function playChapter(bookId, chapterIndex, { resumeIfSame = false, forceStart = false } = {}) {
+async function playChapter(
+  bookId,
+  chapterIndex,
+  { resumeIfSame = false, forceStart = false, startAt = null, authRetry = false } = {}
+) {
   const book = findBook(bookId);
   if (!book) return;
   const chapter = book.chapters[chapterIndex];
@@ -1614,9 +1654,28 @@ async function playChapter(bookId, chapterIndex, { resumeIfSame = false, forceSt
     return;
   }
 
+  if (!authRetry) {
+    driveAuthRetryState = null;
+    driveFilePosition = 0;
+  }
+  // Fresh token, or none yet: no await before audio.play() — iOS drops the gesture.
+  // A stored token inside the skew window is refreshed with prompt "" first.
+  // No stored token still starts playback; a 401 refreshes and replays once.
+  if (chapterStreamsFromDrive(chapter) && getAccessToken() && !freshAccessToken()) {
+    try {
+      const token = await tokenForChapterFetch();
+      await publishDriveToken(token);
+    } catch (err) {
+      if (classifyDriveError(err).kind === "abort") return;
+      showDriveError(err);
+      return;
+    }
+  }
+
+  const hasStartAt = Number.isFinite(startAt);
   const same =
     playback?.bookId === bookId && playback.chapterIndex === chapterIndex;
-  if (same && resumeIfSame && !forceStart) {
+  if (same && resumeIfSame && !forceStart && !authRetry && !hasStartAt) {
     if (audio.paused) await audio.play().catch(() => {});
     updatePlayerBar();
     updateMediaSession();
@@ -1631,7 +1690,7 @@ async function playChapter(bookId, chapterIndex, { resumeIfSame = false, forceSt
 
   const saved = chapterProgress(bookId, chapter.id);
   const start = chapterStart(chapter);
-  const seekTo = forceStart ? start : resumeFileSeconds(saved, chapter);
+  const seekTo = hasStartAt ? Math.max(0, startAt) : forceStart ? start : resumeFileSeconds(saved, chapter);
   const shouldResume = seekTo > 0.5;
 
   const applyPosition = () => {
@@ -1641,6 +1700,15 @@ async function playChapter(bookId, chapterIndex, { resumeIfSame = false, forceSt
 
   if (shouldResume) beginResumeGuard(token, seekTo);
   else clearResumeGuard();
+
+  if (authRetry) {
+    audio.removeAttribute("src");
+    try {
+      audio.load();
+    } catch {
+      /* element not ready */
+    }
+  }
 
   const alreadyLoaded = audio.src === chapter.url && audio.readyState >= 1;
   if (!alreadyLoaded) {
@@ -2077,7 +2145,11 @@ function bind() {
     await publishDriveToken("");
     clearDriveSession();
     closeSourceSheet(null);
-    els.driveStatus?.classList.remove("drive-error");
+    clearPlayerDriveError();
+    if (els.driveStatus) {
+      els.driveStatus.classList.remove("drive-error");
+      els.driveStatus.textContent = "";
+    }
     updateDriveStatus();
     showToast("Signed out of Google");
   });
@@ -2176,6 +2248,9 @@ function bind() {
   });
 
   audio.addEventListener("timeupdate", () => {
+    noteDriveFilePosition();
+    noteDriveRetryPlaying();
+    maybeRefreshDriveToken();
     maybeFixResumeSnap();
     syncChapterFromTime({ toast: true });
     updatePlayerBar();
@@ -2208,7 +2283,7 @@ function bind() {
   audio.addEventListener("durationchange", updatePlayerBar);
   audio.addEventListener("error", () => {
     if (!isDriveMediaPath(audio.currentSrc || audio.src || "")) return;
-    showDriveError({ name: "DriveAuthError", status: 401 }, { silent: true });
+    recoverDrivePlaybackAuth();
   });
   audio.addEventListener("ended", () => {
     persistCurrent();
@@ -2279,14 +2354,84 @@ function registerSW() {
   });
   navigator.serviceWorker.addEventListener("message", (event) => {
     if (event.data?.type !== DRIVE_UNAUTHORIZED_MESSAGE) return;
-    showDriveError({ name: "DriveAuthError", status: 401 }, { silent: true });
-    refreshGoogleToken()
-      .then((token) => publishDriveToken(token))
-      .catch((err) => {
-        if (classifyDriveError(err).kind === "abort") return;
-        showDriveError({ name: "DriveAuthError", status: 401 });
-      });
+    recoverDrivePlaybackAuth();
   });
+}
+
+function noteDriveFilePosition() {
+  const t = audio.currentTime;
+  if (Number.isFinite(t) && t > 0) driveFilePosition = t;
+}
+
+function drivePlaybackPosition() {
+  const live = audio.currentTime;
+  if (Number.isFinite(live) && live > 0.5) return live;
+  if (driveFilePosition > 0) return driveFilePosition;
+  return Number.isFinite(live) ? Math.max(0, live) : 0;
+}
+
+function maybeRefreshDriveToken() {
+  if (!playback || audio.paused) return;
+  const now = Date.now();
+  if (now - driveTokenCheckAt < 15000) return;
+  driveTokenCheckAt = now;
+  const book = findBook(playback.bookId);
+  const chapter = book?.chapters?.[playback.chapterIndex];
+  if (!getAccessToken() || !chapterStreamsFromDrive(chapter) || freshAccessToken(now)) return;
+  if (driveTokenRefresh) return;
+  driveTokenRefresh = tokenForChapterFetch()
+    .then((token) => publishDriveToken(token))
+    .catch((err) => {
+      if (classifyDriveError(err).kind === "abort") return;
+      /* A real 401 replays once, then shows the inline message. */
+    })
+    .finally(() => {
+      driveTokenRefresh = null;
+    });
+}
+
+function noteDriveRetryPlaying() {
+  if (!driveAuthRetryState || audio.paused) return;
+  if ((audio.currentTime || 0) <= 0.2) return;
+  driveAuthRetryState = finishDrivePlaybackAuthRetry(driveAuthRetryState, { ok: true });
+  clearDriveError();
+}
+
+function recoverDrivePlaybackAuth() {
+  if (driveAuthRecovering) return driveAuthRecovering;
+  const plan = planDrivePlaybackAuthRetry(driveAuthRetryState, {
+    bookId: playback?.bookId,
+    chapterIndex: playback?.chapterIndex,
+    position: drivePlaybackPosition(),
+  });
+  if (plan.state) driveAuthRetryState = plan.state;
+  if (plan.action === "ignore") return Promise.resolve();
+  if (plan.action !== "retry") {
+    if (!audio.paused && (audio.readyState || 0) >= 2) return Promise.resolve();
+    showDriveError({ name: "DriveAuthError", status: 401 });
+    return Promise.resolve();
+  }
+  driveAuthRecovering = (async () => {
+    try {
+      const token = await refreshGoogleToken();
+      await publishDriveToken(token);
+      await playChapter(plan.bookId, plan.chapterIndex, {
+        startAt: plan.position,
+        authRetry: true,
+      });
+      driveAuthRetryState = finishDrivePlaybackAuthRetry(driveAuthRetryState, { ok: false });
+      if (audio.error && isDriveMediaPath(audio.currentSrc || audio.src || "")) {
+        showDriveError({ name: "DriveAuthError", status: 401 });
+      }
+    } catch (err) {
+      driveAuthRetryState = finishDrivePlaybackAuthRetry(driveAuthRetryState, { ok: false });
+      if (classifyDriveError(err).kind === "abort") return;
+      showDriveError(err?.name ? err : { name: "DriveAuthError", status: 401 });
+    } finally {
+      driveAuthRecovering = null;
+    }
+  })();
+  return driveAuthRecovering;
 }
 
 function showRestoredBooks(books) {

@@ -822,6 +822,30 @@ body.is-scanning .hint {
   z-index: 10;
 }
 
+.player-bar.has-drive-error {
+  grid-template-areas:
+    "error error error"
+    "cover text controls"
+    "time time time";
+}
+
+.player-drive-error {
+  display: none;
+  margin: 0;
+  color: var(--amber);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.player-bar.has-drive-error .player-drive-error {
+  display: block;
+  grid-area: error;
+}
+
+body:has(.player-bar.has-drive-error) {
+  --player-h: 10.5rem;
+}
+
 .player-cover {
   grid-area: cover;
   width: 3rem;
