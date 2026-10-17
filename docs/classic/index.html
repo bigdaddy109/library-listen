@@ -23,9 +23,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Library Listen" />
     <link rel="manifest" href="../manifest.webmanifest" />
-    <link rel="icon" href="../icon.svg?v=50" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="../apple-touch-icon.png?v=50" />
-    <link rel="stylesheet" href="../styles.css?v=50" />
+    <link rel="icon" href="../icon.svg?v=51" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="../apple-touch-icon.png?v=51" />
+    <link rel="stylesheet" href="../styles.css?v=51" />
     <title>Library Listen · Classic</title>
   </head>
   <body data-shell="classic">
@@ -34,7 +34,7 @@
         <div class="brand">
           <img
             class="brand-mark"
-            src="../icon.svg?v=50"
+            src="../icon.svg?v=51"
             width="36"
             height="36"
             alt="Library Listen"
@@ -101,7 +101,6 @@
               Choose audio files
             </button>
           </div>
-          <p class="hint" id="drive-status" role="status" aria-live="polite"></p>
           <p class="hint" id="capability-hint"></p>
           <p
             id="library-status"
@@ -111,6 +110,7 @@
             hidden
           ></p>
         </section>
+        <p class="hint" id="drive-status" role="status" aria-live="polite"></p>
 
         <section id="shelf" class="shelf hidden" aria-live="polite"></section>
 
@@ -140,6 +140,7 @@
       </main>
 
       <footer id="player-bar" class="player-bar hidden">
+        <p id="player-drive-error" class="player-drive-error" role="status" aria-live="polite"></p>
         <div class="player-cover" id="player-cover"></div>
         <div class="player-text">
           <div class="player-title-row">
@@ -258,6 +259,6 @@
         </div>
       </div>
     </div>
-    <script type="module" src="../app.js?v=50"></script>
+    <script type="module" src="../app.js?v=51"></script>
   </body>
 </html>

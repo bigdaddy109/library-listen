@@ -23,10 +23,10 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="書架" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" href="./icon.svg?v=50" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=50" />
-    <link rel="stylesheet" href="./styles.css?v=50" />
-    <link rel="stylesheet" href="./shelf/shelf.css?v=50" />
+    <link rel="icon" href="./icon.svg?v=51" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=51" />
+    <link rel="stylesheet" href="./styles.css?v=51" />
+    <link rel="stylesheet" href="./shelf/shelf.css?v=51" />
     <title>書架 · Library Listen</title>
   </head>
   <body class="shell-shelf" data-shell="shelf">
@@ -57,7 +57,6 @@
               Choose audio files
             </button>
           </div>
-          <p class="hint" id="drive-status" role="status" aria-live="polite"></p>
           <p class="hint" id="capability-hint"></p>
           <p
             id="library-status"
@@ -67,6 +66,7 @@
             hidden
           ></p>
         </section>
+        <p class="hint" id="drive-status" role="status" aria-live="polite"></p>
         <p id="load-hint" class="hint">尚未選庫時顯示示範書。登入或選資料夾後即可聽。</p>
       </header>
 
@@ -124,6 +124,7 @@
     </section>
 
     <footer id="player-bar" class="player-bar hidden">
+      <p id="player-drive-error" class="player-drive-error" role="status" aria-live="polite"></p>
       <div class="player-cover" id="player-cover"></div>
       <div class="player-text">
         <div class="player-title-row">
@@ -249,6 +250,6 @@
       </div>
     </div>
     <button type="button" id="btn-sort" class="hidden" hidden title="Sort shelf">Sort</button>
-    <script type="module" src="./app.js?v=50"></script>
+    <script type="module" src="./app.js?v=51"></script>
   </body>
 </html>
