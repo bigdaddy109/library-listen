@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-Hant">
   <head>
     <meta charset="utf-8" />
     <meta
@@ -9,10 +9,10 @@
     <meta name="theme-color" content="#1a1712" />
     <meta
       name="description"
-      content="Library Listen — classic dark player. The bookshelf homepage is one level up."
+      content="Library Listen — 舊版深色播放器。書架首頁在上一層。"
     />
-    <meta property="og:title" content="Library Listen · Classic" />
-    <meta property="og:description" content="Library Listen — classic dark player. The bookshelf homepage is one level up." />
+    <meta property="og:title" content="Library Listen · 舊版" />
+    <meta property="og:description" content="Library Listen — 舊版深色播放器。書架首頁在上一層。" />
     <meta property="og:image" content="https://bigdaddy109.github.io/library-listen/og-image.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -23,10 +23,10 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Library Listen" />
     <link rel="manifest" href="../manifest.webmanifest" />
-    <link rel="icon" href="../icon.svg?v=50" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="../apple-touch-icon.png?v=50" />
-    <link rel="stylesheet" href="../styles.css?v=50" />
-    <title>Library Listen · Classic</title>
+    <link rel="icon" href="../icon.svg?v=51" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="../apple-touch-icon.png?v=51" />
+    <link rel="stylesheet" href="../styles.css?v=51" />
+    <title>Library Listen · 舊版</title>
   </head>
   <body data-shell="classic">
     <div id="app">
@@ -34,7 +34,7 @@
         <div class="brand">
           <img
             class="brand-mark"
-            src="../icon.svg?v=50"
+            src="../icon.svg?v=51"
             width="36"
             height="36"
             alt="Library Listen"
@@ -43,16 +43,16 @@
         </div>
         <div class="top-actions">
           <a class="ghost classic-shelf-link" href="../">書架</a>
-          <button type="button" id="btn-sort" class="ghost hidden" title="Sort shelf">
-            Sort
+          <button type="button" id="btn-sort" class="ghost hidden" title="排序書架">
+            排序
           </button>
-          <button type="button" id="btn-change" class="ghost hidden" title="Change library source">
-            Change source
+          <button type="button" id="btn-change" class="ghost hidden" title="更換書庫來源">
+            更換來源
           </button>
         </div>
         <div id="shelf-tools" class="shelf-tools hidden">
           <div class="shelf-search" role="search">
-            <label class="visually-hidden" for="shelf-query">Search title, author, or chapter</label>
+            <label class="visually-hidden" for="shelf-query">搜尋書名、作者或章節</label>
             <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true">
               <path
                 d="M10.5 4.5a6 6 0 1 1 0 12 6 6 0 0 1 0-12zm0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm6.3 9.2 3.7 3.7-1.4 1.4-3.7-3.7 1.4-1.4z"
@@ -61,14 +61,14 @@
             <input
               id="shelf-query"
               type="search"
-              placeholder="Search title, author, or chapter"
+              placeholder="搜尋書名、作者、章節"
               autocomplete="off"
               autocorrect="off"
               autocapitalize="none"
               spellcheck="false"
               enterkeyhint="search"
             />
-            <button type="button" id="btn-clear-search" class="search-clear hidden" aria-label="Clear search">
+            <button type="button" id="btn-clear-search" class="search-clear hidden" aria-label="清除搜尋">
               ×
             </button>
           </div>
@@ -78,27 +78,26 @@
 
       <main>
         <section id="onboarding" class="panel onboarding">
-          <h2>Listen from your shared Library</h2>
+          <h2>聽共享的 Library</h2>
           <p>
-            Jeff shares a Google Drive folder named <code>Library</code>
-            (same <code>listen/</code> + <code>ebooks/</code> layout).
-            Kerry and Daryl sign in with their own Google accounts — this page
-            only reads Drive, and never uploads your books.
+            Jeff 分享了一個名為 <code>Library</code> 的 Google 雲端硬碟資料夾
+            （同樣是 <code>listen/</code> + <code>ebooks/</code> 的結構）。
+            Kerry 和 Daryl 用自己的 Google 帳號登入。這一頁只讀取雲端硬碟，不會上傳你的書。
           </p>
           <ol>
-            <li>Tap <strong>用 Google 登入</strong>. The player loads the Drive folder named <code>Library</code> (including Shared with me).</li>
-            <li>Play from the shelf. Audio streams from Drive.</li>
-            <li>Local fallback: tap <strong>Use a local folder instead</strong> (download in Files first on iPhone).</li>
+            <li>按<strong>用 Google 登入</strong>。播放器會載入名為 <code>Library</code> 的資料夾（包含「與我共用」）。</li>
+            <li>從書架播放。音檔從雲端硬碟串流。</li>
+            <li>本機備援：按<strong>改用本機資料夾</strong>（iPhone 請先在「檔案」裡下載）。</li>
           </ol>
           <div class="cta-row cta-stack">
-            <button type="button" id="btn-google" class="primary large" title="Sign in with Google">
+            <button type="button" id="btn-google" class="primary large" title="用 Google 登入">
               用 Google 登入
             </button>
             <button type="button" id="btn-pick-main" class="text-link">
-              Use a local folder instead
+              改用本機資料夾
             </button>
             <button type="button" id="btn-pick-files" class="ghost hidden" hidden>
-              Choose audio files
+              選擇音檔
             </button>
           </div>
           <p class="hint" id="drive-status" role="status" aria-live="polite"></p>
@@ -115,7 +114,7 @@
         <section id="shelf" class="shelf hidden" aria-live="polite"></section>
 
         <section id="book" class="book-screen hidden">
-          <button type="button" id="btn-back" class="ghost back">← Shelf</button>
+          <button type="button" id="btn-back" class="ghost back">← 書架</button>
           <div class="book-hero">
             <div id="book-cover" class="cover large"></div>
             <div class="book-meta">
@@ -127,12 +126,12 @@
             </div>
           </div>
           <div class="offline-row">
-            <button type="button" id="btn-offline" class="ghost">Save to this device</button>
+            <button type="button" id="btn-offline" class="ghost">存到這台裝置</button>
             <p class="hint" id="book-offline-status"></p>
           </div>
           <div id="book-tabs" class="book-tabs hidden">
-            <button type="button" id="tab-audio" aria-pressed="true">Audio</button>
-            <button type="button" id="tab-concepts" aria-pressed="false">Concepts</button>
+            <button type="button" id="tab-audio" aria-pressed="true">音檔</button>
+            <button type="button" id="tab-concepts" aria-pressed="false">概念</button>
           </div>
           <ul id="chapter-list" class="chapter-list"></ul>
           <div id="concept-list" class="concept-list hidden"></div>
@@ -148,16 +147,16 @@
           </div>
           <div class="player-sub">
             <div id="player-chapter" class="player-chapter">—</div>
-            <button type="button" id="btn-rate" class="skip rate" aria-label="Playback speed 1.0×">
+            <button type="button" id="btn-rate" class="skip rate" aria-label="播放速度 1.0×">
               1.0×
             </button>
-            <button type="button" id="btn-sleep" class="skip sleep" aria-label="Sleep timer off">
-              Sleep
+            <button type="button" id="btn-sleep" class="skip sleep" aria-label="睡眠計時關閉">
+              睡眠
             </button>
           </div>
         </div>
         <div class="player-controls">
-          <button type="button" id="btn-prev" class="icon" aria-label="Back to start or previous part">
+          <button type="button" id="btn-prev" class="icon" aria-label="回到開頭或上一段">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M6 6h2.2v12H6V6zm3.2 6 8.8 6.2V5.8L9.2 12z" />
             </svg>
@@ -166,7 +165,7 @@
             type="button"
             id="btn-play"
             class="icon play is-paused"
-            aria-label="Play"
+            aria-label="播放"
           >
             <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M8 5.5v13l11-6.5-11-6.5z" />
@@ -175,14 +174,14 @@
               <path d="M7 5h3.5v14H7V5zm6.5 0H17v14h-3.5V5z" />
             </svg>
           </button>
-          <button type="button" id="btn-next" class="icon" aria-label="Next chapter">
+          <button type="button" id="btn-next" class="icon" aria-label="下一章">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M15.8 6H18v12h-2.2V6zM6 5.8v12.4L14.8 12 6 5.8z" />
             </svg>
           </button>
         </div>
         <div class="player-time">
-          <button type="button" id="btn-back30" class="skip" aria-label="Back 30 seconds">
+          <button type="button" id="btn-back30" class="skip" aria-label="倒退 30 秒">
             −30
           </button>
           <span id="player-pos">0:00</span>
@@ -193,10 +192,10 @@
             max="1000"
             step="1"
             value="0"
-            aria-label="Seek"
+            aria-label="進度"
           />
           <span id="player-dur">0:00</span>
-          <button type="button" id="btn-fwd30" class="skip" aria-label="Forward 30 seconds">
+          <button type="button" id="btn-fwd30" class="skip" aria-label="快轉 30 秒">
             +30
           </button>
         </div>
@@ -222,42 +221,42 @@
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
     <div id="source-sheet" class="sheet hidden" hidden role="dialog" aria-modal="true" aria-labelledby="source-sheet-title">
       <div class="sheet-card">
-        <h2 id="source-sheet-title">Library source</h2>
+        <h2 id="source-sheet-title">書庫來源</h2>
         <p id="source-sheet-copy" class="hint">
-          Sign in with Google to load the shared <code>Library</code> folder.
+          用 Google 登入以載入共享的 <code>Library</code> 資料夾。
         </p>
         <ul id="source-sheet-list" class="source-list"></ul>
         <div class="cta-row cta-stack">
           <button type="button" id="btn-sheet-reload" class="primary hidden">
-            Reload library
+            重新載入書庫
           </button>
           <button type="button" id="btn-sheet-google" class="primary hidden">
             用 Google 登入
           </button>
           <button type="button" id="btn-sheet-local-link" class="text-link hidden">
-            Use a local folder instead
+            改用本機資料夾
           </button>
           <button type="button" id="btn-sheet-signout" class="ghost hidden">
-            Sign out
+            登出
           </button>
           <details id="source-sheet-advanced" class="source-advanced hidden" hidden>
-            <summary>Advanced</summary>
+            <summary>進階</summary>
             <div class="cta-row cta-stack">
               <button type="button" id="btn-sheet-local" class="ghost hidden">
-                Choose Library folder
+                選擇 Library 資料夾
               </button>
               <button type="button" id="btn-sheet-files" class="ghost hidden">
-                Choose audio files
+                選擇音檔
               </button>
             </div>
           </details>
           <button type="button" id="btn-sheet-picker" class="ghost hidden" hidden>
-            Browse Google Drive
+            瀏覽 Google 雲端硬碟
           </button>
-          <button type="button" id="btn-sheet-cancel" class="ghost">Cancel</button>
+          <button type="button" id="btn-sheet-cancel" class="ghost">取消</button>
         </div>
       </div>
     </div>
-    <script type="module" src="../app.js?v=50"></script>
+    <script type="module" src="../app.js?v=51"></script>
   </body>
 </html>

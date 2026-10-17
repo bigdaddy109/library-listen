@@ -76,16 +76,16 @@ export function emptyLibraryMessage(entries, skipped, known = KNOWN_COLLECTIONS)
     .filter(Boolean)
     .join("\n");
   const folders = knownCollectionFolders(known);
-  const folderHint = folders.length ? ` (or ${folders.join(" / ")})` : "";
+  const folderHint = folders.length ? `（或 ${folders.join(" / ")}）` : "";
   let msg =
-    "No audiobooks found.\n\n" +
-    `Files seen: ${list.length} (audio: ${audio.length}` +
-    (skipped ? `, skipped/unread: ${skipped}` : "") +
-    ").\n\n" +
-    `Pick the Library folder${folderHint} that contains listen/ with mp3/m4b.\n` +
-    "On iPhone/iPad: in Files, tap Download Now on listen/ first.\n" +
-    "Or 用 Google 登入 and open the shared Drive Library.";
-  if (samples) msg += `\n\nSample paths:\n${samples}`;
+    "找不到有聲書。\n\n" +
+    `看到 ${list.length} 個檔案（音檔 ${audio.length}` +
+    (skipped ? `，略過或讀不到 ${skipped}` : "") +
+    "）。\n\n" +
+    `請選擇含有 listen/（mp3／m4b）的 Library 資料夾${folderHint}。\n` +
+    "在 iPhone／iPad：請先到「檔案」對 listen/ 按「現在下載」。\n" +
+    "或用 Google 登入，打開共享的雲端硬碟 Library。";
+  if (samples) msg += `\n\n範例路徑：\n${samples}`;
   return msg;
 }
 
@@ -381,6 +381,13 @@ export function shelfBadge(book) {
   if (bookHasAudio(book)) return "Audio";
   if (bookHasEbook(book)) return "Read";
   return "Audio";
+}
+
+/** User-facing badge. shelfBadge() stays the English identifier. */
+export function shelfBadgeLabel(badgeOrBook) {
+  const badge = typeof badgeOrBook === "string" ? badgeOrBook : shelfBadge(badgeOrBook);
+  if (badge === "Read") return "閱讀";
+  return "音檔";
 }
 
 export function isImmuneBook(book) {
