@@ -183,6 +183,7 @@ describe("Drive token expiry during listen", { concurrency: false }, () => {
     assert.ok(start > 0 && end > start);
     const fn = APP.slice(start, end);
     assert.doesNotMatch(fn, /alert\s*\(/);
+    assert.match(APP, /getAccessToken\(\) && !freshAccessToken\(\)/);
     assert.match(APP, /tokenForChapterFetch\(\)/);
     assert.match(APP, /planDrivePlaybackAuthRetry/);
     assert.match(APP, /authRetry:\s*true/);

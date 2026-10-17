@@ -1658,9 +1658,10 @@ async function playChapter(
     driveAuthRetryState = null;
     driveFilePosition = 0;
   }
-  // Fresh token: no await before audio.play() — iOS drops the user gesture.
-  // Near expiry or missing: silent refresh (prompt ""), then start the chapter.
-  if (chapterStreamsFromDrive(chapter) && !freshAccessToken()) {
+  // Fresh token, or none yet: no await before audio.play() — iOS drops the gesture.
+  // A stored token inside the skew window is refreshed with prompt "" first.
+  // No stored token still starts playback; a 401 refreshes and replays once.
+  if (chapterStreamsFromDrive(chapter) && getAccessToken() && !freshAccessToken()) {
     try {
       const token = await tokenForChapterFetch();
       await publishDriveToken(token);
@@ -2376,7 +2377,7 @@ function maybeRefreshDriveToken() {
   driveTokenCheckAt = now;
   const book = findBook(playback.bookId);
   const chapter = book?.chapters?.[playback.chapterIndex];
-  if (!chapterStreamsFromDrive(chapter) || freshAccessToken(now)) return;
+  if (!getAccessToken() || !chapterStreamsFromDrive(chapter) || freshAccessToken(now)) return;
   if (driveTokenRefresh) return;
   driveTokenRefresh = tokenForChapterFetch()
     .then((token) => publishDriveToken(token))
