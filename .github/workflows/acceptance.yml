@@ -19,6 +19,7 @@ jobs:
           node --check docs/app.js
           node --check docs/drive.js
           node --check docs/immune-cards.js
+          node --check docs/sleep.js
           node --check docs/sw.js
           node --test
 

@@ -6,9 +6,9 @@ import {
   buildLibrary,
   extOf,
   isBookPlayable,
-  shelfBadge,
-} from "../library.js?v=51";
-import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=51";
+  shelfBadgeLabel,
+} from "../library.js?v=52";
+import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=52";
 import {
   COVER_MORPH,
   bookFlipFrames,
@@ -34,8 +34,8 @@ import {
   seriesMeta,
   shelfStatusLabel,
   volumeNumber,
-} from "./catalog.js?v=51";
-import { coverSvg, spineMetrics } from "./covers.js?v=51";
+} from "./catalog.js?v=52";
+import { coverSvg, spineMetrics } from "./covers.js?v=52";
 
 /* v2: the cover wall became the default; the old key mostly held the old default. */
 const VIEW_KEY = "librarylisten.shelfView.v2";
@@ -175,7 +175,7 @@ function renderViews() {
 
 function tipText(book) {
   const hits = chapterHitLine(matchingChapterTitles(book, state.query));
-  const badge = shelfBadge(book);
+  const badge = shelfBadgeLabel(book);
   return hits ? `${badge} · ${hits}` : badge;
 }
 
@@ -197,7 +197,7 @@ function spineButton(book) {
   btn.style.setProperty("--h", `${metrics.height}px`);
   btn.style.setProperty("--cloth", series.cloth);
   btn.style.setProperty("--lean", `${metrics.lean}deg`);
-  btn.setAttribute("aria-label", `${book.title} · ${shelfBadge(book)}`);
+  btn.setAttribute("aria-label", `${book.title} · ${shelfBadgeLabel(book)}`);
   btn.innerHTML = `
     <span class="spine-box">
       <span class="spine-cloth">
@@ -255,11 +255,11 @@ function renderCovers(books) {
     card.type = "button";
     card.className = "cover-card";
     card.dataset.id = book.id;
-    card.setAttribute("aria-label", `${book.title} · ${shelfBadge(book)}`);
+    card.setAttribute("aria-label", `${book.title} · ${shelfBadgeLabel(book)}`);
     card.innerHTML = `<span class="cover-art"></span><h3></h3><p></p>`;
     card.querySelector(".cover-art").innerHTML = coverSvg(book);
     card.querySelector("h3").textContent = book.title;
-    card.querySelector("p").textContent = `${book.author} · ${shelfBadge(book)}`;
+    card.querySelector("p").textContent = `${book.author} · ${shelfBadgeLabel(book)}`;
     card.addEventListener("click", () => openFromShelf(book));
     grid.appendChild(card);
   }
@@ -633,7 +633,7 @@ function renderSpread(book, phase = "open", { cover = false, opened = true } = {
   }
   els.bookStage.querySelector(".bookplate-card strong").textContent = series.title;
   els.bookStage.querySelector(".vol").textContent = `編號 ${volume}`;
-  els.bookStage.querySelector(".kicker").textContent = `${series.title} · ${flags.badge}`;
+  els.bookStage.querySelector(".kicker").textContent = `${series.title} · ${shelfBadgeLabel(flags.badge)}`;
   els.bookStage.querySelector("h2").textContent = book.title;
   els.bookStage.querySelector(".author").textContent = book.author || "";
   els.bookStage.querySelector(".progress").textContent = progress.line;

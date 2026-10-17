@@ -60,10 +60,10 @@ export function filterBooks(books, query) {
 
 export function shelfCountLabel(count, query) {
   const n = Number.isFinite(count) ? count : 0;
-  return trimQuery(query) ? `${n} matches` : `${n} books`;
+  return trimQuery(query) ? `${n} 本符合` : `${n} 本`;
 }
 
 export function emptySearchMessage(query) {
   const q = trimQuery(query);
-  return q ? `No books match “${q}”.` : "";
+  return q ? `沒有書符合「${q}」。` : "";
 }

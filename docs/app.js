@@ -1,4 +1,5 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=51";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=52";
+import { SLEEP_CHAPTER, nearestSleepMinute, nextSleepChoice } from "./sleep.js?v=52";
 import {
   AUDIO_EXT,
   EPUB_EXT,
@@ -12,13 +13,15 @@ import {
   buildLibrary,
   emptyLibraryMessage,
   isBookPlayable,
+  isImmuneBook,
   mergeLibraryScans,
   latestProgressKind,
   loadProgress,
   chapterProgress,
   saveProgress,
   shelfBadge,
-} from "./library.js?v=51";
+  shelfBadgeLabel,
+} from "./library.js?v=52";
 import {
   DRIVE_UNAUTHORIZED_MESSAGE,
   attachDriveMedia,
@@ -47,7 +50,7 @@ import {
   signOutGoogle,
   sourceDialogActions,
   tokenForChapterFetch,
-} from "./drive.js?v=51";
+} from "./drive.js?v=52";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -55,7 +58,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=51";
+} from "./search.js?v=52";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -70,17 +73,17 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=51";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=51";
-import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=51";
-import { coverSvg } from "./shelf/covers.js?v=51";
-import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=51";
+} from "./markers.js?v=52";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=52";
+import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=52";
+import { coverSvg } from "./shelf/covers.js?v=52";
+import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=52";
 import {
   closeRiceBook,
   initRiceShelf,
   isRiceShelfPage,
   setRiceShelfLibrary,
-} from "./shelf/shelf.js?v=51";
+} from "./shelf/shelf.js?v=52";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -89,7 +92,12 @@ const RATES = [1, 1.25, 1.5];
 const LIBRARY_KEY = "librarylisten.library.v1";
 const DB_NAME = "library-listen";
 const COVER_KEY = "__cover__";
-const SLEEP_MINUTES = [0, 15, 30, 45, 60];
+const SORT_LABELS = {
+  collection: "系列",
+  title: "書名",
+  author: "作者",
+  recent: "最近",
+};
 
 /** @type {{ books: any[], activeBookId: string|null, sort: string, query: string }} */
 const state = {
@@ -156,6 +164,8 @@ let savingBookId = null;
 /** @type {number | null} epoch ms when sleep timer should pause playback */
 let sleepUntil = null;
 let sleepTick = null;
+/** Stop at the end of the current chapter instead of a clock time. */
+let sleepAtChapterEnd = false;
 /** Offer Save-to-device banner after a fresh folder pick */
 let offerSaveBanner = false;
 /** bookIds already asked to save this session */
@@ -394,7 +404,7 @@ async function saveBookOffline(book) {
     const saved = new Map();
     for (let i = 0; i < items.length; i += 1) {
       const [chapterId, raw] = items[i];
-      updateOfflineButton(book, `Saving ${i + 1}/${items.length}…`);
+      updateOfflineButton(book, `正在儲存 ${i + 1}/${items.length}…`);
       const blob = await materializeFile(raw);
       if (!blob) continue;
       await idb("offline", "readwrite", (s) =>
@@ -408,8 +418,8 @@ async function saveBookOffline(book) {
     await removeBookOffline(book).catch(() => {});
     alert(
       err?.name === "QuotaExceededError"
-        ? "Not enough storage on this device to save the whole book."
-        : "Could not save this book on the device.\n\nIf this is iCloud: Download Now on listen/ first, then try again. Private Browsing cannot save books."
+        ? "這台裝置的空間不夠，無法存完整本書。"
+        : "無法把這本書存到裝置。\n\n若在 iCloud：請先在 listen/ 按「現在下載」，再試一次。私人瀏覽無法存書。"
     );
   } finally {
     savingBookId = null;
@@ -433,17 +443,17 @@ function updateOfflineButton(book, busyLabel) {
   if (busyLabel) {
     btn.textContent = busyLabel;
   } else if (offline) {
-    btn.textContent = "Remove from device";
+    btn.textContent = "從裝置移除";
   } else {
-    btn.textContent = "Save to this device";
+    btn.textContent = "存到這台裝置";
   }
   if (offline) {
-    status.textContent = "Saved on this device — plays without picking the folder again.";
+    status.textContent = "已存在這台裝置，重新打開也不必再選資料夾。";
   } else if (!isBookOpenable(book)) {
-    status.textContent = "Reconnect the Library folder to play this book.";
+    status.textContent = "請重新連接 Library 資料夾才能播放這本書。";
   } else {
     const bytes = blobsToSave(book).reduce((n, [, file]) => n + (file?.size || 0), 0);
-    status.textContent = `Save a copy (${formatBytes(bytes)}) so it opens after the app restarts.`;
+    status.textContent = `存一份（${formatBytes(bytes)}），重新打開後仍可播放。`;
   }
 }
 
@@ -490,7 +500,7 @@ function applyPlaybackRate() {
   if (!btn) return;
   const label = rateLabel(playbackRate);
   btn.textContent = label;
-  btn.setAttribute("aria-label", `Playback speed ${label}`);
+  btn.setAttribute("aria-label", `播放速度 ${label}`);
 }
 
 function cycleRate() {
@@ -519,12 +529,12 @@ function relativeTime(iso) {
   if (!iso) return "";
   const elapsed = Math.max(0, Date.now() - new Date(iso).getTime());
   const minutes = Math.floor(elapsed / 60000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1) return "剛剛";
+  if (minutes < 60) return `${minutes} 分鐘前`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  if (hours < 48) return "yesterday";
-  return `${Math.floor(hours / 24)}d ago`;
+  if (hours < 24) return `${hours} 小時前`;
+  if (hours < 48) return "昨天";
+  return `${Math.floor(hours / 24)} 天前`;
 }
 
 function revokeAllUrls() {
@@ -665,7 +675,7 @@ function setScanning(active) {
   if (!hint) return;
   if (active) {
     hint.dataset.prev = hint.textContent || "";
-    hint.textContent = "Scanning Library… if this is iCloud, wait for Download Now to finish.";
+    hint.textContent = "正在掃描 Library…若在 iCloud，請等「現在下載」完成。";
   } else if (hint.dataset.prev != null) {
     hint.textContent = hint.dataset.prev;
     delete hint.dataset.prev;
@@ -733,7 +743,7 @@ function updateDriveStatus() {
     el.textContent = `${who} · ${session.folderName || "Library"}`;
   } else if (!isGoogleClientConfigured()) {
     el.textContent =
-      "Google Drive sign-in needs a Web Client ID in docs/drive.js (see README). Local folder pick still works.";
+      "Google 雲端硬碟登入需要在 docs/drive.js 填入 Web Client ID（見 README）。本機資料夾仍然可用。";
   } else {
     el.textContent = "";
   }
@@ -803,7 +813,7 @@ function openSourceSheet({ title, copy, folders = [], actions = {} } = {}) {
   if (!sheetReturnFocus && document.activeElement instanceof HTMLElement) {
     sheetReturnFocus = document.activeElement;
   }
-  if (els.sourceSheetTitle) els.sourceSheetTitle.textContent = title || "Library source";
+  if (els.sourceSheetTitle) els.sourceSheetTitle.textContent = title || "書庫來源";
   if (els.sourceSheetCopy) els.sourceSheetCopy.textContent = copy || "";
   if (els.sourceSheetList) {
     els.sourceSheetList.innerHTML = "";
@@ -836,7 +846,7 @@ async function loadFromDrive({ silent } = {}) {
   if (!isGoogleClientConfigured()) {
     const err = Object.assign(
       new Error(
-        "Google sign-in is not configured yet.\n\nPaste a Web application Client ID into GOOGLE_OAUTH_CLIENT_ID in docs/drive.js. Setup steps are in the README.\n\nChoose Library folder still works as a local fallback."
+        "尚未設定 Google 登入。\n\n請把網頁應用程式的 Client ID 貼到 docs/drive.js 的 GOOGLE_OAUTH_CLIENT_ID。步驟在 README。\n\n本機仍可選 Library 資料夾。"
       ),
       { name: "DriveConfigError" }
     );
@@ -984,8 +994,8 @@ async function loadLibrary(mode) {
       return;
     }
     showLibraryStatus(
-      (err?.message || "Could not open the library.") +
-        "\n\nIf this is iCloud: Download Now on the Library/listen folders, then try again."
+      (err?.message || "無法打開書庫。") +
+        "\n\n若在 iCloud：請先在 Library/listen 資料夾按「現在下載」，再試一次。"
     );
   } finally {
     setScanning(false);
@@ -1017,17 +1027,17 @@ function sortedBooks() {
 
 function progressLine(book) {
   const p = loadProgress()[book.id];
-  if (!p) return { line: "Not started", fraction: null };
+  if (!p) return { line: "尚未開始", fraction: null };
   if (latestProgressKind(p) === "text") {
     const fraction = Number.isFinite(p.text?.fraction) ? clamp01(p.text.fraction) : null;
-    let line = p.text?.label || "Reading";
+    let line = p.text?.label || "閱讀中";
     if (fraction != null) line += ` · ${Math.round(fraction * 100)}%`;
     if (p.text?.updatedAt) line += ` · ${relativeTime(p.text.updatedAt)}`;
     return { line, fraction };
   }
   const chapter =
     book.chapters.find((c) => c.id === p.chapterId) || book.chapters[0];
-  if (!chapter) return { line: "Not started", fraction: null };
+  if (!chapter) return { line: "尚未開始", fraction: null };
   const pos = chapterRelativePosition(chapter, p.positionSeconds || 0);
   const dur = resolvedChapterDuration(chapter, p.chapterDurationSeconds);
   let line = `${chapter.title} · ${formatClock(pos)}`;
@@ -1144,7 +1154,7 @@ function continueCard(resume) {
     <p class="title"></p>
     <p class="progress"></p>
   `;
-  body.querySelector(".continue-label").textContent = "Continue listening";
+  body.querySelector(".continue-label").textContent = "繼續聽";
   body.querySelector(".title").textContent = resume.book.title;
   body.querySelector(".progress").textContent =
     `${resume.chapter.title} · ${formatClock(resume.pos)}` +
@@ -1162,25 +1172,25 @@ function saveBanner(targetBook) {
   row.className = "save-banner";
   const text = document.createElement("p");
   text.textContent = targetBook
-    ? `Save “${targetBook.title}” on this phone so it opens after a restart?`
-    : "Save books on this phone so they open after a restart?";
+    ? `要把「${targetBook.title}」存到這支手機，重新打開後仍可播放嗎？`
+    : "要把書存到這支手機，重新打開後仍可播放嗎？";
   const actions = document.createElement("div");
   actions.className = "cta-row";
   const saveBtn = document.createElement("button");
   saveBtn.type = "button";
   saveBtn.className = "primary";
-  saveBtn.textContent = targetBook ? "Save this book" : "Save";
+  saveBtn.textContent = targetBook ? "儲存這本書" : "儲存";
   const dismiss = document.createElement("button");
   dismiss.type = "button";
   dismiss.className = "ghost";
-  dismiss.textContent = "Not now";
+  dismiss.textContent = "現在不要";
   saveBtn.addEventListener("click", async () => {
     const book = targetBook || mostRecentResume()?.book || state.books.find(isBookOpenable);
     if (!book) return;
     offerSaveBanner = false;
     openBook(book.id);
     await saveBookOffline(book);
-    showToast(`Saved “${book.title}” on this device`);
+    showToast(`已把「${book.title}」存到這台裝置`);
   });
   dismiss.addEventListener("click", () => {
     offerSaveBanner = false;
@@ -1283,13 +1293,13 @@ function bookCard(book) {
   `;
   body.querySelector(".title").textContent = book.title;
   const badgeEl = body.querySelector(".shelf-badge");
-  badgeEl.textContent = badge;
+  badgeEl.textContent = shelfBadgeLabel(badge);
   badgeEl.classList.add(`shelf-badge-${badge.toLowerCase()}`);
   const hasAudio = bookHasAudio(book);
   let meta = book.author;
-  if (hasAudio) meta += ` · ${book.chapters.length} chapters`;
-  if (isBookOffline(book)) meta += " · on device";
-  else if (hasAudio && !isBookPlayable(book)) meta += " · reconnect to play";
+  if (hasAudio) meta += ` · ${book.chapters.length} 章`;
+  if (isBookOffline(book)) meta += " · 已在裝置";
+  else if (hasAudio && !isBookPlayable(book)) meta += " · 重新連接才能播放";
   body.querySelector(".meta").textContent = meta;
   btn.classList.toggle("unavailable", !isBookOpenable(book));
   body.querySelector(".progress").textContent = line;
@@ -1317,6 +1327,22 @@ function resolvedBookPane(book, pane = state.bookPane) {
   return tabs[0] || "audio";
 }
 
+function cacheImmuneConcepts() {
+  const urls = IMMUNE_CARDS.map(
+    (card) => new URL(`./concepts/immune/${card.file}`, import.meta.url).href
+  );
+  const post = (worker) => {
+    try {
+      worker?.postMessage({ type: "librarylisten.cache-concepts", urls });
+    } catch {
+      /* service worker not ready */
+    }
+  };
+  if (!navigator.serviceWorker) return;
+  if (navigator.serviceWorker.controller) post(navigator.serviceWorker.controller);
+  navigator.serviceWorker.ready.then((reg) => post(reg.active)).catch(() => {});
+}
+
 function openBook(bookId, { pane } = {}) {
   const book = findBook(bookId);
   if (state.activeBookId !== bookId) {
@@ -1325,6 +1351,7 @@ function openBook(bookId, { pane } = {}) {
     state.bookPane = resolvedBookPane(book, pane);
   }
   state.activeBookId = bookId;
+  if (isImmuneBook(book)) cacheImmuneConcepts();
   render();
 }
 
@@ -1333,7 +1360,7 @@ function renderConceptCards() {
   const note = document.createElement("p");
   note.className = "concept-note";
   note.textContent =
-    "Original notes for the main cast, in listening order. Not the book's text, and not its illustrations. Audio keeps playing.";
+    "依收聽順序整理的原創筆記。不是書的正文，也不是書裡的圖。音檔會繼續播放。";
   els.conceptList.appendChild(note);
   for (const card of IMMUNE_CARDS) {
     const article = document.createElement("article");
@@ -1788,56 +1815,90 @@ function maybeOfferSaveWhileListening(book) {
     ) {
       return;
     }
-    if (!confirm(`Save “${book.title}” on this phone so it still plays after a restart?`)) return;
+    if (!confirm(`要把「${book.title}」存到這支手機，重新打開後仍可播放嗎？`)) return;
     saveBookOffline(book).then(() => {
-      showToast(`Saved “${book.title}” on this device`);
+      showToast(`已把「${book.title}」存到這台裝置`);
     });
   }, 12000);
 }
 
-function clearSleepTimer() {
+function clearSleepClock() {
   sleepUntil = null;
   if (sleepTick) {
     window.clearInterval(sleepTick);
     sleepTick = null;
   }
+}
+
+function clearSleepTimer() {
+  sleepAtChapterEnd = false;
+  clearSleepClock();
   updateSleepButton();
 }
 
 function remainingSleepLabel() {
-  if (!sleepUntil) return "Sleep";
+  if (sleepAtChapterEnd) return "本章結束";
+  if (!sleepUntil) return "睡眠";
   const left = Math.max(0, sleepUntil - Date.now());
   const mins = Math.ceil(left / 60000);
-  if (mins <= 0) return "Sleep";
-  return `${mins}m`;
+  if (mins <= 0) return "睡眠";
+  return `${mins} 分`;
 }
 
 function updateSleepButton() {
   const btn = document.getElementById("btn-sleep");
   if (!btn) return;
   const label = remainingSleepLabel();
+  const on = sleepAtChapterEnd || !!sleepUntil;
   btn.textContent = label;
-  btn.classList.toggle("is-on", !!sleepUntil);
+  btn.classList.toggle("is-on", on);
   btn.setAttribute(
     "aria-label",
-    sleepUntil ? `Sleep timer ${label} left` : "Sleep timer off"
+    sleepAtChapterEnd ? "本章結束後停止" : sleepUntil ? `睡眠計時還剩 ${label}` : "睡眠計時關閉"
   );
+}
+
+function pauseForSleep(message) {
+  clearSleepTimer();
+  audio.pause();
+  persistCurrent();
+  showToast(message);
+  updatePlayerBar();
+}
+
+function finishChapterSleep() {
+  const book = playback ? findBook(playback.bookId) : null;
+  const index = playback?.chapterIndex ?? 0;
+  const chapter = book?.chapters?.[index];
+  const following = book?.chapters?.[index + 1];
+  sleepAtChapterEnd = false;
+  if (chapter && following && isAudiobook(book)) {
+    const boundary = Number.isFinite(chapter.end) ? chapter.end : chapterStart(following);
+    const hold = Math.max(chapterStart(chapter), boundary - 0.05);
+    if ((audio.currentTime || 0) > hold) applyPlaybackPosition(hold);
+  }
+  audio.pause();
+  persistCurrent();
+  updateSleepButton();
+  showToast("已停在本章結束");
+  updatePlayerBar();
 }
 
 function cycleSleepTimer() {
   const remaining = sleepUntil ? Math.ceil((sleepUntil - Date.now()) / 60000) : 0;
-  let nearest = 0;
-  for (let i = 0; i < SLEEP_MINUTES.length; i += 1) {
-    if (SLEEP_MINUTES[i] >= remaining) {
-      nearest = i;
-      break;
-    }
-    nearest = i;
+  const current = sleepAtChapterEnd ? SLEEP_CHAPTER : nearestSleepMinute(remaining);
+  const next = nextSleepChoice(current);
+  if (next === SLEEP_CHAPTER) {
+    clearSleepClock();
+    sleepAtChapterEnd = true;
+    updateSleepButton();
+    showToast("本章結束後停止");
+    return;
   }
-  const next = SLEEP_MINUTES[(nearest + 1) % SLEEP_MINUTES.length];
+  sleepAtChapterEnd = false;
   if (!next) {
     clearSleepTimer();
-    showToast("Sleep timer off");
+    showToast("睡眠計時已關閉");
     return;
   }
   sleepUntil = Date.now() + next * 60 * 1000;
@@ -1845,17 +1906,13 @@ function cycleSleepTimer() {
   sleepTick = window.setInterval(() => {
     if (!sleepUntil) return;
     if (Date.now() >= sleepUntil) {
-      clearSleepTimer();
-      audio.pause();
-      persistCurrent();
-      showToast("Sleep timer — paused");
-      updatePlayerBar();
+      pauseForSleep("睡眠計時到了，已暫停");
       return;
     }
     updateSleepButton();
   }, 15000);
   updateSleepButton();
-  showToast(`Sleep in ${next} minutes`);
+  showToast(`${next} 分鐘後暫停`);
 }
 
 function persistCurrent() {
@@ -1884,13 +1941,17 @@ function syncChapterFromTime({ toast = false } = {}) {
   if (!isAudiobook(book)) return;
   const next = chapterIndexAtTime(book.chapters, audio.currentTime || 0);
   if (next < 0 || next === playback.chapterIndex) return;
+  if (sleepAtChapterEnd && next > playback.chapterIndex) {
+    finishChapterSleep();
+    return;
+  }
   const crossedForward = next > playback.chapterIndex;
   playback = { bookId: playback.bookId, chapterIndex: next };
   persistCurrent();
   updateMediaSession();
   if (state.activeBookId === book.id) renderBook();
   if (toast && crossedForward && !audio.paused) {
-    showToast(`Next: ${book.chapters[next].title}`);
+    showToast(`下一章：${book.chapters[next].title}`);
   }
 }
 
@@ -1960,7 +2021,7 @@ function updatePlayerBar() {
   document.getElementById("player-chapter").textContent = chapter.title;
   const playBtn = document.getElementById("btn-play");
   playBtn.classList.toggle("is-paused", audio.paused);
-  playBtn.setAttribute("aria-label", audio.paused ? "Play" : "Pause");
+  playBtn.setAttribute("aria-label", audio.paused ? "播放" : "暫停");
 
   const { pos, dur } = displayClock();
   document.getElementById("player-pos").textContent = formatClock(pos);
@@ -1981,7 +2042,7 @@ function cycleSort() {
   state.sort = order[(i + 1) % order.length];
   localStorage.setItem(SORT_KEY, state.sort);
   const sortBtn = document.getElementById("btn-sort");
-  if (sortBtn) sortBtn.textContent = `Sort: ${state.sort}`;
+  if (sortBtn) sortBtn.textContent = `排序：${SORT_LABELS[state.sort] || state.sort}`;
   if (!state.activeBookId) render();
 }
 
@@ -1995,13 +2056,13 @@ function setupCapabilityHint() {
 
   if (isGoogleClientConfigured()) {
     els.capabilityHint.textContent =
-      "用 Google 登入 loads the shared Drive Library. Use a local folder instead if you already have a copy.";
+      "「用 Google 登入」會載入共享的雲端硬碟 Library。若你已經有一份，可以改用本機資料夾。";
   } else if (typeof window.showDirectoryPicker === "function") {
     els.capabilityHint.textContent =
-      "Choose Library folder, then pick Library or a collection (門羅-WhatIf / Immune). On iPhone/iPad, pick the folder in Files after Download Now.";
+      "選擇 Library 資料夾，或選一個系列（門羅-WhatIf / Immune）。在 iPhone／iPad 上，請先按「現在下載」，再從「檔案」選資料夾。";
   } else {
     els.capabilityHint.textContent =
-      "Choose Library folder to select a folder (works in Files on iPhone/iPad and desktop). Or use Choose audio files to pick files one by one.";
+      "用「選擇 Library 資料夾」選一個資料夾（iPhone／iPad 的「檔案」與桌面都可以）。或用「選擇音檔」逐一挑選。";
   }
   updateDriveStatus();
 }
@@ -2021,17 +2082,17 @@ function updateChangeButtonLabel() {
   const btn = document.getElementById("btn-change");
   if (!btn) return;
   if (libraryNeedsReconnect() && libraryUsesDrive()) {
-    btn.textContent = "Reconnect Drive";
-    btn.title = "Sign in with Google again to stream from the shared Library";
+    btn.textContent = "重新連接雲端硬碟";
+    btn.title = "再登入 Google，才能從共享的 Library 串流";
   } else if (libraryNeedsReconnect()) {
-    btn.textContent = "Reconnect Library";
-    btn.title = "Pick the Library folder again to play every book";
+    btn.textContent = "重新連接書庫";
+    btn.title = "再選一次 Library 資料夾，才能播放每一本書";
   } else if (libraryUsesDrive()) {
-    btn.textContent = "Change source";
-    btn.title = "Switch between Google Drive and a local folder";
+    btn.textContent = "更換來源";
+    btn.title = "在 Google 雲端硬碟與本機資料夾之間切換";
   } else {
-    btn.textContent = "Change folder";
-    btn.title = "Pick a different Library folder";
+    btn.textContent = "更換資料夾";
+    btn.title = "選擇另一個 Library 資料夾";
   }
 }
 
@@ -2039,12 +2100,12 @@ function showChangeSourceSheet() {
   const session = loadDriveSession();
   const signedIn = !!(session || getAccessToken());
   openSourceSheet({
-    title: "Library source",
+    title: "書庫來源",
     copy: session?.email
-      ? `Signed in as ${session.email}. Reload the Drive library or sign out.`
+      ? `已登入 ${session.email}。可重新載入雲端硬碟書庫，或登出。`
       : signedIn
-        ? "Signed in to Google. Reload the Drive library or sign out."
-        : "Sign in with Google to load the shared Library folder, or use a local folder.",
+        ? "已登入 Google。可重新載入雲端硬碟書庫，或登出。"
+        : "用 Google 登入以載入共享的 Library 資料夾，或改用本機資料夾。",
     actions: sourceDialogActions({ signedIn }),
   }).then((folder) => {
     if (!folder?.id) return;
@@ -2151,7 +2212,7 @@ function bind() {
       els.driveStatus.textContent = "";
     }
     updateDriveStatus();
-    showToast("Signed out of Google");
+    showToast("已登出 Google");
   });
   els.sourceSheet?.addEventListener("click", (event) => {
     if (event.target === els.sourceSheet) closeSourceSheet(null);
@@ -2160,7 +2221,7 @@ function bind() {
     const book = findBook(state.activeBookId);
     if (!book || savingBookId) return;
     if (isBookOffline(book)) {
-      if (!confirm(`Remove the saved copy of “${book.title}” from this device?`)) return;
+      if (!confirm(`要從這台裝置移除「${book.title}」的離線副本嗎？`)) return;
       await removeBookOffline(book).catch(() => {});
       for (const ch of book.chapters) {
         if (!ch.fromDevice) continue;
@@ -2255,10 +2316,7 @@ function bind() {
     syncChapterFromTime({ toast: true });
     updatePlayerBar();
     if (sleepUntil && Date.now() >= sleepUntil) {
-      clearSleepTimer();
-      audio.pause();
-      persistCurrent();
-      showToast("Sleep timer — paused");
+      pauseForSleep("睡眠計時到了，已暫停");
       return;
     }
     if (!audio.paused) {
@@ -2290,13 +2348,17 @@ function bind() {
     if (!playback) return;
     const book = findBook(playback.bookId);
     if (!book) return;
+    if (sleepAtChapterEnd) {
+      finishChapterSleep();
+      return;
+    }
     const next = playback.chapterIndex + 1;
     if (next < book.chapters.length) {
       const nextChapter = book.chapters[next];
-      showToast(`Next: ${nextChapter.title}`);
+      showToast(`下一章：${nextChapter.title}`);
       playChapter(book.id, next, { forceStart: true });
     } else {
-      showToast("End of book");
+      showToast("全書結束");
       updatePlayerBar();
     }
   });
@@ -2462,8 +2524,8 @@ async function restoreSession() {
   if (showRestoredBooks(restored)) return;
   if (restored.length && els.capabilityHint) {
     els.capabilityHint.textContent = libraryUsesDrive()
-      ? "用 Google 登入 again to keep listening. Your progress is still here."
-      : "Pick the Library folder again to keep listening. Your progress is still here.";
+      ? "請再按一次「用 Google 登入」才能繼續聽。進度還在。"
+      : "請再選一次 Library 資料夾才能繼續聽。進度還在。";
   }
 }
 
@@ -2497,7 +2559,7 @@ setupCapabilityHint();
 const versionEl = document.getElementById("app-version");
 if (versionEl && APP_VERSION) versionEl.textContent = `v${APP_VERSION}`;
 const sortBtn = document.getElementById("btn-sort");
-if (sortBtn) sortBtn.textContent = `Sort: ${state.sort}`;
+if (sortBtn) sortBtn.textContent = `排序：${SORT_LABELS[state.sort] || state.sort}`;
 if (isRiceShelfPage()) {
   initRiceShelf({
     onOpenBook(book) {

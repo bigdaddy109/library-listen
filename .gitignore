@@ -23,6 +23,7 @@ DerivedData/
 # Playwright
 /test-results/
 /playwright-report/
+/deploy-smoke-screenshots/
 /blob-report/
 /playwright/.cache/
 
