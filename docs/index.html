@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta
@@ -11,8 +11,8 @@
       name="description"
       content="Library Listen — rice-paper bookshelf. Sign in with Google to play from the shared Library folder."
     />
-    <meta property="og:title" content="書架 · Library Listen" />
-    <meta property="og:description" content="紙色封面牆。用 Google 登入聽共享的 Library 資料夾，或改用本機檔案。" />
+    <meta property="og:title" content="Shelf · Library Listen" />
+    <meta property="og:description" content="Rice-paper cover wall. Sign in with Google to play the shared Library folder, or use local files." />
     <meta property="og:image" content="https://bigdaddy109.github.io/library-listen/og-image.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -21,34 +21,34 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="書架" />
+    <meta name="apple-mobile-web-app-title" content="Shelf" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" href="./icon.svg?v=52" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=52" />
-    <link rel="stylesheet" href="./styles.css?v=52" />
-    <link rel="stylesheet" href="./shelf/shelf.css?v=52" />
-    <title>書架 · Library Listen</title>
+    <link rel="icon" href="./icon.svg?v=53" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=53" />
+    <link rel="stylesheet" href="./styles.css?v=53" />
+    <link rel="stylesheet" href="./shelf/shelf.css?v=53" />
+    <title>Shelf · Library Listen</title>
   </head>
   <body class="shell-shelf" data-shell="shelf">
     <div id="app" class="paper">
       <header class="mast">
         <p class="eyebrow">Library Listen <span id="app-version" class="app-version"></span></p>
         <div class="mast-row">
-          <h1>書架</h1>
+          <h1>Shelf</h1>
           <div class="mast-links">
             <button type="button" id="btn-change" class="ghost hidden" title="Change library source">
               Change source
             </button>
-            <a class="player-link" href="./classic/index.html">舊版播放器</a>
+            <a class="player-link" href="./classic/index.html">Classic player</a>
           </div>
         </div>
         <p class="lede">
-          紙色書架。用 Google 登入聽共享的 <code>Library</code> 資料夾，或改用本機檔案。
+          Rice-paper shelf. Sign in with Google to play the shared <code>Library</code> folder, or use local files.
         </p>
         <section id="onboarding" class="onboarding">
           <div class="load-row cta-stack">
             <button type="button" id="btn-google" class="primary large" title="Sign in with Google">
-              用 Google 登入
+              Sign in with Google
             </button>
             <button type="button" id="btn-pick-main" class="text-link">
               Use a local folder instead
@@ -67,40 +67,40 @@
           ></p>
         </section>
         <p class="hint" id="drive-status" role="status" aria-live="polite"></p>
-        <p id="load-hint" class="hint">尚未選庫時顯示示範書。登入或選資料夾後即可聽。</p>
+        <p id="load-hint" class="hint">Demo books show until you pick a library. Sign in or choose a folder to listen.</p>
       </header>
 
       <div class="toolbar">
         <div class="search" role="search">
-          <label class="visually-hidden" for="shelf-query">搜尋書名、作者或章節</label>
+          <label class="visually-hidden" for="shelf-query">Search title, author, or chapter</label>
           <input
             id="shelf-query"
             type="search"
-            placeholder="搜尋書名、作者、章節"
+            placeholder="Search title, author, or chapter"
             autocomplete="off"
             autocorrect="off"
             autocapitalize="none"
             spellcheck="false"
             enterkeyhint="search"
           />
-          <button type="button" id="btn-clear-search" class="search-clear hidden" aria-label="清除搜尋">
+          <button type="button" id="btn-clear-search" class="search-clear hidden" aria-label="Clear search">
             ×
           </button>
         </div>
-        <div class="view-toggle" role="tablist" aria-label="檢視">
-          <button type="button" data-view="covers" aria-pressed="true">封面牆</button>
-          <button type="button" data-view="spines" aria-pressed="false">書架</button>
+        <div class="view-toggle" role="tablist" aria-label="View">
+          <button type="button" data-view="covers" aria-pressed="true">Cover wall</button>
+          <button type="button" data-view="spines" aria-pressed="false">Bookshelf</button>
         </div>
       </div>
 
-      <div id="series-chips" class="chips" aria-label="系列"></div>
+      <div id="series-chips" class="chips" aria-label="Series"></div>
       <p id="shelf-count" class="count"></p>
       <div id="shelf-banners" class="shelf-banners"></div>
       <main id="stage" class="stage" aria-live="polite"></main>
     </div>
 
     <section id="book" class="book-screen hidden">
-      <button type="button" id="btn-back" class="ghost back">← 書架</button>
+      <button type="button" id="btn-back" class="ghost back">← Shelf</button>
       <div class="book-hero">
         <div id="book-cover" class="cover large"></div>
         <div class="book-meta">
@@ -108,7 +108,7 @@
           <h2 id="book-title"></h2>
           <p class="author" id="book-author"></p>
           <p class="subtitle" id="book-subtitle"></p>
-          <a id="read-this-book" class="read-this-book hidden" hidden>讀這本</a>
+          <a id="read-this-book" class="read-this-book hidden" hidden>Read this book</a>
         </div>
       </div>
       <div class="offline-row">
@@ -129,7 +129,7 @@
       <div class="player-text">
         <div class="player-title-row">
           <div id="player-title" class="player-title">—</div>
-          <a id="player-read-this-book" class="read-this-book hidden" hidden>讀這本</a>
+          <a id="player-read-this-book" class="read-this-book hidden" hidden>Read this book</a>
         </div>
         <div class="player-sub">
           <div id="player-chapter" class="player-chapter">—</div>
@@ -188,8 +188,8 @@
     </footer>
 
     <div id="book-layer" class="book-layer hidden" hidden>
-      <button type="button" id="btn-close-book" class="close-book" aria-label="放回書架">
-        放回
+      <button type="button" id="btn-close-book" class="close-book" aria-label="Put back on the shelf">
+        Put back
       </button>
       <div id="book-stage" class="book-stage"></div>
     </div>
@@ -223,7 +223,7 @@
             Reload library
           </button>
           <button type="button" id="btn-sheet-google" class="primary hidden">
-            用 Google 登入
+            Sign in with Google
           </button>
           <button type="button" id="btn-sheet-local-link" class="text-link hidden">
             Use a local folder instead
@@ -250,6 +250,6 @@
       </div>
     </div>
     <button type="button" id="btn-sort" class="hidden" hidden title="Sort shelf">Sort</button>
-    <script type="module" src="./app.js?v=52"></script>
+    <script type="module" src="./app.js?v=53"></script>
   </body>
 </html>

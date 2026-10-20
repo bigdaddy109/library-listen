@@ -19,15 +19,15 @@ export const VIEWS = ["covers", "spines"];
 export const DEFAULT_VIEW = "covers";
 
 export const VIEW_LABELS = {
-  covers: "封面牆",
-  spines: "書架",
+  covers: "Cover wall",
+  spines: "Bookshelf",
 };
 
 export const OPEN_INTENT_KEY = "librarylisten.open.v1";
 
 /**
  * Legacy 3D pull-out timing — only for ?pull= / ?flip= URL preview freezes.
- * UI taps on 封面牆 and 書架 never use this; they share COVER_OPEN_SEQUENCE.
+ * UI taps on Cover wall and Bookshelf never use this; they share COVER_OPEN_SEQUENCE.
  */
 export const PULL_TIMING = {
   totalMs: 820,
@@ -57,10 +57,10 @@ export function openBookPhase({
 
 /**
  * Cover wall + spine shelf → book (Jeff 10/13–14): NOT a 2D zoom into the open page,
- * and NOT a separate 3D pull-out for 書架 taps.
+ * and NOT a separate 3D pull-out for Bookshelf taps.
  * 1) Zoom / move the tapped cover onto the closed-book position.
  * 2) Then the front board swings open to the LEFT on its spine hinge
- *    (rotateY 0 → −90 → −180), revealing the inner spread (聽 / 讀).
+ *    (rotateY 0 → −90 → −180), revealing the inner spread.
  * Closing runs the same frames backwards. Transform + opacity only.
  * prefers-reduced-motion: reduce → instant cut (mode "none").
  */
@@ -74,7 +74,7 @@ export const COVER_MORPH = {
   flipEasing: "cubic-bezier(0.45, 0.05, 0.18, 1)",
 };
 
-/** Documented two-phase sequence for 封面牆 and 書架 open (same path). */
+/** Documented two-phase sequence for Cover wall and Bookshelf open (same path). */
 export const COVER_OPEN_SEQUENCE = ["zoom-to-closed", "hinge-left"];
 
 function reverseFrames(frames) {
@@ -213,7 +213,7 @@ export function pullTransformVars(rect, viewport = {}) {
 export const SERIES = {
   school: {
     id: "school",
-    title: "上學不容易",
+    title: "School Isn't Easy",
     author: "Library",
     accent: "#c45c3e",
     ink: "#5a2a1c",
@@ -222,7 +222,7 @@ export const SERIES = {
   },
   munroe: {
     id: "munroe",
-    title: "門羅 What If",
+    title: "Munroe",
     author: "Randall Munroe",
     accent: "#3d6b6a",
     ink: "#1d3333",
@@ -257,6 +257,7 @@ export function seriesIdForBook(book) {
     .map((s) => String(s || ""))
     .join(" ");
   if (/immune/i.test(hay)) return "immune";
+  // Folder-name fragments so a Drive folder still maps after the English display title.
   if (/munroe|whatif|what-if|門羅/i.test(hay)) return "munroe";
   if (/上學|school/i.test(hay)) return "school";
   const id = String(book?.collectionId || "").toLowerCase();
@@ -268,7 +269,7 @@ export function seriesMeta(bookOrId) {
   return (
     SERIES[id] || {
       id: id || "other",
-      title: typeof bookOrId === "object" ? bookOrId?.collectionTitle || "其他" : "其他",
+      title: typeof bookOrId === "object" ? bookOrId?.collectionTitle || "Other" : "Other",
       author: "Unknown",
       accent: "#6b6358",
       ink: "#2a261f",
@@ -330,7 +331,7 @@ export function demoCatalog() {
       id: "school/kaixue",
       collectionId: "school",
       folder: "kaixue",
-      title: "開學",
+      title: "First Day",
       subtitle: "Preview stand-in — not a scanned file",
       chapters: parts(4),
     }),
@@ -338,7 +339,7 @@ export function demoCatalog() {
       id: "school/gongke",
       collectionId: "school",
       folder: "gongke",
-      title: "功課",
+      title: "Homework",
       subtitle: "Preview stand-in — not a scanned file",
       chapters: parts(3),
       ebook: { id: "gongke.epub", name: "gongke.epub", file: null },
@@ -347,7 +348,7 @@ export function demoCatalog() {
       id: "school/fangjia",
       collectionId: "school",
       folder: "fangjia",
-      title: "放假",
+      title: "Vacation",
       subtitle: "Preview stand-in — not a scanned file",
       ebook: { id: "fangjia.epub", name: "fangjia.epub", file: null },
     }),
@@ -399,7 +400,7 @@ export function seriesChips(books) {
     const id = seriesIdForBook(book);
     counts.set(id, (counts.get(id) || 0) + 1);
   }
-  const chips = [{ id: "all", title: "全部", count: list.length, accent: "#1c1914" }];
+  const chips = [{ id: "all", title: "All", count: list.length, accent: "#1c1914" }];
   const seen = new Set();
   for (const id of SERIES_ORDER) {
     if (!counts.has(id)) continue;
@@ -453,20 +454,20 @@ export function mediaFlags(book) {
 
 export function previewProgress(book, store) {
   const record = loadProgress(store)[book?.id];
-  if (!record) return { line: "尚未開始", fraction: null };
+  if (!record) return { line: "Not started", fraction: null };
   if (latestProgressKind(record) === "text") {
     const fraction = Number.isFinite(record.text?.fraction) ? record.text.fraction : null;
-    let line = record.text?.label || "閱讀中";
+    let line = record.text?.label || "Reading";
     if (fraction != null) line += ` · ${Math.round(fraction * 100)}%`;
     return { line, fraction };
   }
   const chapter =
     (book?.chapters || []).find((c) => c.id === record.chapterId) || book?.chapters?.[0];
-  if (!chapter) return { line: "尚未開始", fraction: null };
+  if (!chapter) return { line: "Not started", fraction: null };
   const dur = record.chapterDurationSeconds;
   const pos = record.positionSeconds || 0;
   const fraction = dur > 0 ? Math.min(1, Math.max(0, pos / dur)) : null;
-  let line = chapter.title || "收聽中";
+  let line = chapter.title || "Listening";
   if (fraction != null) line += ` · ${Math.round(fraction * 100)}%`;
   return { line, fraction };
 }
@@ -504,7 +505,7 @@ export function shelfStatusLabel(count, query, seriesId) {
 export function emptyShelfMessage(query, seriesId) {
   const searchEmpty = emptySearchMessage(query);
   if (searchEmpty) return searchEmpty;
-  if (seriesId && seriesId !== "all") return `這個系列還沒有書。`;
+  if (seriesId && seriesId !== "all") return "This series has no books yet.";
   return "";
 }
 

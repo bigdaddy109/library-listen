@@ -17,7 +17,7 @@ test.describe("Jeff Drive fixture: every series listens (listen-only)", () => {
 
   test("every series is on the shelf; listen books are Audio; no Read UI", async ({ page }) => {
     const chips = await page.locator("#series-chips .chip").allTextContents();
-    for (const label of ["上學不容易", "門羅", "Immune"]) {
+    for (const label of ["School Isn't Easy", "Munroe", "Immune"]) {
       expect(chips.some((c) => c.includes(label)), label).toBe(true);
     }
     const ids = await page.locator(".cover-card[data-id]").evaluateAll((els) => els.map((e) => e.dataset.id));
@@ -29,7 +29,7 @@ test.describe("Jeff Drive fixture: every series listens (listen-only)", () => {
     await expect(page.locator("#tab-read")).toHaveCount(0);
     await expect(page.locator("#reader")).toHaveCount(0);
     const toggle = await page.locator(".view-toggle button").allTextContents();
-    expect(toggle).toEqual(["封面牆", "書架"]);
+    expect(toggle).toEqual(["Cover wall", "Bookshelf"]);
   });
 
   test("stale 2-book localStorage still becomes a multi-series Drive shelf", async ({ page }) => {

@@ -403,7 +403,7 @@ h1 {
   visibility: hidden;
 }
 
-/* Morph source for the shared openCoverBook path (same SVG as 封面牆).
+/* Morph source for the shared openCoverBook path (same SVG as the cover wall).
    Sized like a cover from the spine height; invisible but measurable. */
 .spine .cover-art {
   position: absolute;
@@ -601,7 +601,7 @@ h1 {
   opacity: 0;
 }
 
-/* Keep 聽 / 讀 out of sight until the cover has hinged past edge-on. */
+/* Keep listen / read actions out of sight until the cover has hinged past edge-on. */
 .draw-root.is-cover.is-closed .page.right .actions {
   visibility: hidden;
 }

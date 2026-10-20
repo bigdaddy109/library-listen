@@ -8,7 +8,7 @@ export const SKIP_FOLDERS = new Set(["_source"]);
 export const KNOWN_COLLECTIONS = {
   "門羅-WhatIf": { id: "munroe", title: "Munroe", author: "Randall Munroe" },
   Immune: { id: "immune", title: "Immune", author: "Philipp Dettmer" },
-  上學不容易: { id: "school", title: "上學不容易", author: "Library" },
+  上學不容易: { id: "school", title: "School Isn't Easy", author: "Library" },
 };
 
 export const KNOWN_BOOKS = {
@@ -65,7 +65,8 @@ export function knownCollectionFolders(known = KNOWN_COLLECTIONS) {
 }
 
 /**
- * Copy for an empty scan. Folder names come from KNOWN_COLLECTIONS.
+ * Copy for an empty scan. The hint uses each collection's display title.
+ * Object keys stay the Drive folder names and are not shown here.
  */
 export function emptyLibraryMessage(entries, skipped, known = KNOWN_COLLECTIONS) {
   const list = Array.isArray(entries) ? entries : [];
@@ -75,8 +76,8 @@ export function emptyLibraryMessage(entries, skipped, known = KNOWN_COLLECTIONS)
     .map((e) => e.path || e.file?.name)
     .filter(Boolean)
     .join("\n");
-  const folders = knownCollectionFolders(known);
-  const folderHint = folders.length ? ` (or ${folders.join(" / ")})` : "";
+  const labels = Object.entries(known || {}).map(([folder, meta]) => meta?.title || folder);
+  const folderHint = labels.length ? ` (or ${labels.join(" / ")})` : "";
   let msg =
     "No audiobooks found.\n\n" +
     `Files seen: ${list.length} (audio: ${audio.length}` +
@@ -84,7 +85,7 @@ export function emptyLibraryMessage(entries, skipped, known = KNOWN_COLLECTIONS)
     ").\n\n" +
     `Pick the Library folder${folderHint} that contains listen/ with mp3/m4b.\n` +
     "On iPhone/iPad: in Files, tap Download Now on listen/ first.\n" +
-    "Or 用 Google 登入 and open the shared Drive Library.";
+    "Or sign in with Google and open the shared Drive Library.";
   if (samples) msg += `\n\nSample paths:\n${samples}`;
   return msg;
 }

@@ -1,5 +1,5 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=52";
-import { SLEEP_CHAPTER, nearestSleepMinute, nextSleepChoice } from "./sleep.js?v=52";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=53";
+import { SLEEP_CHAPTER, nearestSleepMinute, nextSleepChoice } from "./sleep.js?v=53";
 import {
   AUDIO_EXT,
   EPUB_EXT,
@@ -20,7 +20,7 @@ import {
   chapterProgress,
   saveProgress,
   shelfBadge,
-} from "./library.js?v=52";
+} from "./library.js?v=53";
 import {
   DRIVE_UNAUTHORIZED_MESSAGE,
   attachDriveMedia,
@@ -49,7 +49,7 @@ import {
   signOutGoogle,
   sourceDialogActions,
   tokenForChapterFetch,
-} from "./drive.js?v=52";
+} from "./drive.js?v=53";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -57,7 +57,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=52";
+} from "./search.js?v=53";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -72,17 +72,17 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=52";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=52";
-import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=52";
-import { coverSvg } from "./shelf/covers.js?v=52";
-import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=52";
+} from "./markers.js?v=53";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=53";
+import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=53";
+import { coverSvg } from "./shelf/covers.js?v=53";
+import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=53";
 import {
   closeRiceBook,
   initRiceShelf,
   isRiceShelfPage,
   setRiceShelfLibrary,
-} from "./shelf/shelf.js?v=52";
+} from "./shelf/shelf.js?v=53";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -2048,10 +2048,10 @@ function setupCapabilityHint() {
 
   if (isGoogleClientConfigured()) {
     els.capabilityHint.textContent =
-      "用 Google 登入 loads the shared Drive Library. Use a local folder instead if you already have a copy.";
+      "Sign in with Google loads the shared Drive Library. Use a local folder instead if you already have a copy.";
   } else if (typeof window.showDirectoryPicker === "function") {
     els.capabilityHint.textContent =
-      "Choose Library folder, then pick Library or a collection (門羅-WhatIf / Immune). On iPhone/iPad, pick the folder in Files after Download Now.";
+      "Choose Library folder, then pick Library or a collection (Munroe / Immune). On iPhone/iPad, pick the folder in Files after Download Now.";
   } else {
     els.capabilityHint.textContent =
       "Choose Library folder to select a folder (works in Files on iPhone/iPad and desktop). Or use Choose audio files to pick files one by one.";
@@ -2516,7 +2516,7 @@ async function restoreSession() {
   if (showRestoredBooks(restored)) return;
   if (restored.length && els.capabilityHint) {
     els.capabilityHint.textContent = libraryUsesDrive()
-      ? "用 Google 登入 again to keep listening. Your progress is still here."
+      ? "Sign in with Google again to keep listening. Your progress is still here."
       : "Pick the Library folder again to keep listening. Your progress is still here.";
   }
 }

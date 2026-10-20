@@ -5,13 +5,13 @@
  */
 
 export const JEFF_SERIES = [
-  { id: "school", title: "上學不容易", bookIds: [
+  { id: "school", title: "School Isn't Easy", bookIds: [
     "school/middle-school-01-first-day",
     "school/middle-school-02-get-me",
     "school/middle-school-03-homework",
     "school/middle-school-04-summer",
   ]},
-  { id: "munroe", title: "門羅-WhatIf", bookIds: [
+  { id: "munroe", title: "Munroe", bookIds: [
     "munroe/what-if-1",
     "munroe/how-to",
     "munroe/what-if-2",

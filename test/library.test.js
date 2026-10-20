@@ -221,7 +221,7 @@ describe("buildLibrary scan", () => {
       "thing-explainer/thing-explainer",
     ]);
     assert.equal(books.find((b) => b.id === "school/middle-school-02-get-me").title, "Middle School 02 Get Me");
-    assert.equal(books.find((b) => b.id === "school/middle-school-02-get-me").collectionTitle, "上學不容易");
+    assert.equal(books.find((b) => b.id === "school/middle-school-02-get-me").collectionTitle, "School Isn't Easy");
     assert.equal(books.filter((b) => b.collectionId === "school").length, 4);
     assert.ok(books.some((b) => b.collectionId === "munroe"));
     assert.ok(books.some((b) => b.id === "thing-explainer/thing-explainer"));
@@ -707,8 +707,8 @@ describe("emptyLibraryMessage", () => {
     assert.deepEqual(knownCollectionFolders(), Object.keys(KNOWN_COLLECTIONS));
     const msg = emptyLibraryMessage([], 0);
     assert.match(msg, /No audiobooks found/);
-    assert.match(msg, /門羅-WhatIf \/ Immune \/ 上學不容易/);
-    assert.match(msg, /用 Google 登入/);
+    assert.match(msg, /Munroe \/ Immune \/ School Isn't Easy/);
+    assert.match(msg, /sign in with Google/);
     assert.match(msg, /Files seen: 0 \(audio: 0\)/);
   });
 

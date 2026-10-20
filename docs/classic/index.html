@@ -23,9 +23,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Library Listen" />
     <link rel="manifest" href="../manifest.webmanifest" />
-    <link rel="icon" href="../icon.svg?v=52" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="../apple-touch-icon.png?v=52" />
-    <link rel="stylesheet" href="../styles.css?v=52" />
+    <link rel="icon" href="../icon.svg?v=53" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="../apple-touch-icon.png?v=53" />
+    <link rel="stylesheet" href="../styles.css?v=53" />
     <title>Library Listen · Classic</title>
   </head>
   <body data-shell="classic">
@@ -34,7 +34,7 @@
         <div class="brand">
           <img
             class="brand-mark"
-            src="../icon.svg?v=52"
+            src="../icon.svg?v=53"
             width="36"
             height="36"
             alt="Library Listen"
@@ -42,7 +42,7 @@
           <h1>Library Listen</h1>
         </div>
         <div class="top-actions">
-          <a class="ghost classic-shelf-link" href="../">書架</a>
+          <a class="ghost classic-shelf-link" href="../">Shelf</a>
           <button type="button" id="btn-sort" class="ghost hidden" title="Sort shelf">
             Sort
           </button>
@@ -86,13 +86,13 @@
             only reads Drive, and never uploads your books.
           </p>
           <ol>
-            <li>Tap <strong>用 Google 登入</strong>. The player loads the Drive folder named <code>Library</code> (including Shared with me).</li>
+            <li>Tap <strong>Sign in with Google</strong>. The player loads the Drive folder named <code>Library</code> (including Shared with me).</li>
             <li>Play from the shelf. Audio streams from Drive.</li>
             <li>Local fallback: tap <strong>Use a local folder instead</strong> (download in Files first on iPhone).</li>
           </ol>
           <div class="cta-row cta-stack">
             <button type="button" id="btn-google" class="primary large" title="Sign in with Google">
-              用 Google 登入
+              Sign in with Google
             </button>
             <button type="button" id="btn-pick-main" class="text-link">
               Use a local folder instead
@@ -123,7 +123,7 @@
               <h2 id="book-title"></h2>
               <p class="author" id="book-author"></p>
               <p class="subtitle" id="book-subtitle"></p>
-              <a id="read-this-book" class="read-this-book hidden" hidden>讀這本</a>
+              <a id="read-this-book" class="read-this-book hidden" hidden>Read this book</a>
             </div>
           </div>
           <div class="offline-row">
@@ -145,7 +145,7 @@
         <div class="player-text">
           <div class="player-title-row">
             <div id="player-title" class="player-title">—</div>
-            <a id="player-read-this-book" class="read-this-book hidden" hidden>讀這本</a>
+            <a id="player-read-this-book" class="read-this-book hidden" hidden>Read this book</a>
           </div>
           <div class="player-sub">
             <div id="player-chapter" class="player-chapter">—</div>
@@ -233,7 +233,7 @@
             Reload library
           </button>
           <button type="button" id="btn-sheet-google" class="primary hidden">
-            用 Google 登入
+            Sign in with Google
           </button>
           <button type="button" id="btn-sheet-local-link" class="text-link hidden">
             Use a local folder instead
@@ -259,6 +259,6 @@
         </div>
       </div>
     </div>
-    <script type="module" src="../app.js?v=52"></script>
+    <script type="module" src="../app.js?v=53"></script>
   </body>
 </html>
