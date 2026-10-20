@@ -51,8 +51,7 @@ export const DRIVE_ERROR_KIND = {
 export const DRIVE_ERROR_MESSAGES = {
   testUser:
     "This Google account is not a test user for Library Listen. While the OAuth consent screen is in Testing mode, only approved testers can sign in. Ask Jeff to add this account as a test user.",
-  expired:
-    "Google sign-in expired. Tap 用 Google 登入 again to keep streaming or reading from Drive.",
+  expired: "登入已過期。請再點「用 Google 登入」才能繼續從雲端播放。",
   noLibrary:
     "This Google account cannot see a folder named Library. Ask Jeff to share Library (Viewer) with this account, or Choose Library folder as a local fallback.",
   accessDenied:
@@ -64,8 +63,16 @@ export const DRIVE_ERROR_MESSAGES = {
 const PLACEHOLDER_CLIENT = /YOUR_GOOGLE_OAUTH_CLIENT_ID/i;
 const PLACEHOLDER_PICKER = /YOUR_GOOGLE_PICKER_API_KEY/i;
 
+/** Refresh this long before Google's expires_in so a chapter does not start on a dying token. */
+const TOKEN_SKEW_MS = 60_000;
+const DEFAULT_TOKEN_TTL_SEC = 3600;
+
 /** @type {string | null} */
 let accessToken = null;
+/** Epoch ms when `accessToken` stops being safe to send. 0 = none. */
+let tokenExpiresAt = 0;
+/** @type {Promise<string> | null} */
+let gisInflight = null;
 /** @type {((token: string) => void) | null} */
 let rangeFetchImpl = null;
 
@@ -87,8 +94,41 @@ export function getAccessToken() {
   return accessToken;
 }
 
-export function setAccessToken(token) {
-  accessToken = token || null;
+/**
+ * Remember a token. Publishing the same string again keeps the expiry already
+ * stored, so a service-worker post does not stretch a dying token.
+ * `expiresIn` is seconds (GIS `expires_in`). Omitted → 1 hour.
+ */
+export function setAccessToken(token, { expiresIn, now = Date.now() } = {}) {
+  if (!token) {
+    accessToken = null;
+    tokenExpiresAt = 0;
+    return null;
+  }
+  if (token === accessToken && tokenExpiresAt) return accessToken;
+  accessToken = token;
+  const seconds = Number(expiresIn);
+  const ttlSec = Number.isFinite(seconds) && seconds > 0 ? seconds : DEFAULT_TOKEN_TTL_SEC;
+  tokenExpiresAt = now + ttlSec * 1000;
+  return accessToken;
+}
+
+export function clearAccessToken() {
+  return setAccessToken(null);
+}
+
+/** In-memory token still inside its lifetime (minus skew). Never calls GIS. */
+export function freshAccessToken(now = Date.now()) {
+  if (!accessToken || !tokenExpiresAt) return null;
+  if (now >= tokenExpiresAt - TOKEN_SKEW_MS) return null;
+  return accessToken;
+}
+
+function applyGisToken(resp, now = Date.now()) {
+  const seconds = Number(resp?.expires_in);
+  const ttlSec = Number.isFinite(seconds) && seconds > 0 ? seconds : DEFAULT_TOKEN_TTL_SEC;
+  accessToken = resp.access_token;
+  tokenExpiresAt = now + ttlSec * 1000;
   return accessToken;
 }
 
@@ -325,6 +365,44 @@ export function driveMediaProxyOutHeaders(upstreamHeaders) {
 
 export function shouldNotifyDriveUnauthorized(status) {
   return Number(status) === 401;
+}
+
+/**
+ * First 401 for a chapter: refresh and replay once at the same file position.
+ * Further 401s while that replay is in flight are ignored.
+ * A 401 after the replay has finished is a failure — do not loop.
+ * Another chapter gets its own single retry.
+ */
+export function planDrivePlaybackAuthRetry(previous, { bookId, chapterIndex, position } = {}) {
+  const index = Number(chapterIndex);
+  if (!bookId || !Number.isInteger(index) || index < 0) {
+    return { action: "fail", state: previous || null };
+  }
+  const key = `${bookId}:${index}`;
+  const at = Number(position);
+  const filePosition = Number.isFinite(at) && at > 0 ? at : 0;
+  if (previous?.key === key && previous.attempts >= 1) {
+    if (previous.pending) {
+      return { action: "ignore", state: previous, key, position: filePosition };
+    }
+    return { action: "fail", state: previous, key, position: filePosition };
+  }
+  const state = { key, attempts: 1, pending: true, position: filePosition };
+  return {
+    action: "retry",
+    key,
+    bookId,
+    chapterIndex: index,
+    position: filePosition,
+    state,
+  };
+}
+
+/** `ok` clears the one-shot so a later hour can retry. Otherwise the next 401 fails closed. */
+export function finishDrivePlaybackAuthRetry(state, { ok = false } = {}) {
+  if (!state) return null;
+  if (ok) return null;
+  return { ...state, pending: false };
 }
 
 export async function proxyDriveMediaRequest({ fileId, range, token } = {}, fetchImpl = fetch) {
@@ -880,14 +958,25 @@ export function tokenClientOptions(callback, errorCallback) {
   };
 }
 
-export async function signInWithGoogle({ prompt = "consent" } = {}) {
+function gisOauth() {
+  return globalThis.google?.accounts?.oauth2 || null;
+}
+
+/**
+ * Call GIS. `prompt` "" is a silent refresh; "consent" is the sign-in button.
+ * When the script is already loaded this invokes requestAccessToken immediately.
+ */
+function requestGisToken(prompt) {
   requireClientId();
-  await loadScript(GIS_SRC);
-  const gis = globalThis.google?.accounts?.oauth2;
+  const gis = gisOauth();
   if (!gis?.initTokenClient) {
-    throw new Error("Google Identity Services did not load.");
+    const err = new Error("Google Identity Services did not load.");
+    err.name = "DriveConfigError";
+    throw err;
   }
-  return new Promise((resolve, reject) => {
+  if (gisInflight) return gisInflight;
+  const promptValue = prompt == null ? "consent" : String(prompt);
+  gisInflight = new Promise((resolve, reject) => {
     let settled = false;
     const finish = (fn, value) => {
       if (settled) return;
@@ -901,8 +990,7 @@ export async function signInWithGoogle({ prompt = "consent" } = {}) {
             finish(reject, gisAuthFailure(resp) || driveErrorFrom(resp));
             return;
           }
-          setAccessToken(resp.access_token);
-          finish(resolve, resp.access_token);
+          finish(resolve, applyGisToken(resp));
         },
         (err) => {
           // COOP can make GIS log window.closed; ignore that and keep waiting
@@ -913,12 +1001,46 @@ export async function signInWithGoogle({ prompt = "consent" } = {}) {
         }
       )
     );
-    client.requestAccessToken({ prompt });
+    client.requestAccessToken({ prompt: promptValue });
+  }).finally(() => {
+    gisInflight = null;
   });
+  return gisInflight;
+}
+
+export async function signInWithGoogle({ prompt = "consent" } = {}) {
+  requireClientId();
+  if (!gisOauth()?.initTokenClient) await loadScript(GIS_SRC);
+  return requestGisToken(prompt);
 }
 
 export async function refreshGoogleToken() {
-  return signInWithGoogle({ prompt: "" });
+  requireClientId();
+  if (!gisOauth()?.initTokenClient) await loadScript(GIS_SRC);
+  return requestGisToken("");
+}
+
+/**
+ * Token for a chapter fetch. Reuses a fresh token, or refreshes with prompt:''
+ * (no popup) when the stored expiry is inside the skew window.
+ */
+export function tokenForRead({ now = Date.now() } = {}) {
+  const fresh = freshAccessToken(now);
+  if (fresh) return Promise.resolve(fresh);
+  const silent = () => {
+    try {
+      return Promise.resolve(requestGisToken(""));
+    } catch (err) {
+      return Promise.reject(err);
+    }
+  };
+  if (gisOauth()?.initTokenClient) return silent();
+  return loadScript(GIS_SRC).then(() => requestGisToken(""));
+}
+
+/** Same policy as tokenForRead. Named for the post-gesture chapter fetch. */
+export function tokenForChapterFetch(opts) {
+  return tokenForRead(opts);
 }
 
 export async function signOutGoogle() {

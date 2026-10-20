@@ -652,8 +652,8 @@ describe("Drive user-visible errors", () => {
 
     const expired = classifyDriveError({ status: 401, name: "DriveAuthError" });
     assert.equal(expired.kind, DRIVE_ERROR_KIND.expired);
-    assert.match(expired.message, /expired/);
-    assert.match(expired.message, /用 Google 登入/);
+    assert.equal(expired.message, "登入已過期。請再點「用 Google 登入」才能繼續從雲端播放。");
+    assert.doesNotMatch(expired.message, /reading|閱讀/);
 
     const closed = classifyDriveError({ type: "popup_closed" });
     assert.equal(closed.kind, DRIVE_ERROR_KIND.abort);

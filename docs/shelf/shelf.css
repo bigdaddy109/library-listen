@@ -1272,6 +1272,12 @@ body.shell-shelf .onboarding {
   margin-top: 0.85rem;
 }
 
+body.shell-shelf #drive-status.drive-error {
+  color: #8a3b12;
+  font-weight: 600;
+  margin-top: 0.75rem;
+}
+
 body.shell-shelf .onboarding .load-row {
   margin-top: 0;
 }
