@@ -706,10 +706,10 @@ describe("emptyLibraryMessage", () => {
   it("lists KNOWN_COLLECTIONS folders including 上學不容易", () => {
     assert.deepEqual(knownCollectionFolders(), Object.keys(KNOWN_COLLECTIONS));
     const msg = emptyLibraryMessage([], 0);
-    assert.match(msg, /找不到有聲書/);
+    assert.match(msg, /No audiobooks found/);
     assert.match(msg, /門羅-WhatIf \/ Immune \/ 上學不容易/);
     assert.match(msg, /用 Google 登入/);
-    assert.match(msg, /看到 0 個檔案（音檔 0）/);
+    assert.match(msg, /Files seen: 0 \(audio: 0\)/);
   });
 
   it("includes skipped counts and sample audio paths", () => {
@@ -720,14 +720,13 @@ describe("emptyLibraryMessage", () => {
       ],
       3
     );
-    assert.match(msg, /看到 2 個檔案（音檔 1，略過或讀不到 3）/);
-    assert.match(msg, /範例路徑：\nPodcast\/clip\.mp3/);
+    assert.match(msg, /Files seen: 2 \(audio: 1, skipped\/unread: 3\)/);
+    assert.match(msg, /Sample paths:\nPodcast\/clip\.mp3/);
   });
 
   it("follows the known-collection map so a later folder can be added without leftover names", () => {
     const msg = emptyLibraryMessage([], 0, { Immune: { id: "immune" } });
-    assert.match(msg, /或 Immune/);
-    assert.match(msg, /listen\//);
+    assert.match(msg, /or Immune\) that contains listen/);
     assert.equal(msg.includes("門羅-WhatIf"), false);
     assert.equal(msg.includes("上學不容易"), false);
   });

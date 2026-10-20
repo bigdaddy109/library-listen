@@ -652,7 +652,7 @@ describe("Drive user-visible errors", () => {
 
     const expired = classifyDriveError({ status: 401, name: "DriveAuthError" });
     assert.equal(expired.kind, DRIVE_ERROR_KIND.expired);
-    assert.equal(expired.message, "登入已過期。請再點「用 Google 登入」才能繼續從雲端播放。");
+    assert.equal(expired.message, "Sign-in expired. Tap Sign in with Google again to keep playing from Drive.");
     assert.doesNotMatch(expired.message, /reading|閱讀/);
 
     const closed = classifyDriveError({ type: "popup_closed" });
@@ -804,15 +804,15 @@ describe("Drive audio proxy and EPUB reader", () => {
     const html = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../docs/index.html"), "utf8");
     assert.match(html, /id="btn-google"/);
     assert.match(html, /id="btn-pick-main"/);
-    assert.match(html, /改用本機資料夾/);
-    assert.match(html, /選擇 Library 資料夾/);
+    assert.match(html, /Use a local folder instead/);
+    assert.match(html, /Choose Library folder/);
     assert.match(html, /id="btn-pick-files"/);
     assert.match(html, /id="drive-status"/);
     assert.match(html, /id="btn-sheet-reload"/);
-    assert.match(html, /重新載入書庫/);
+    assert.match(html, /Reload library/);
     assert.match(html, /id="source-sheet-advanced"/);
-    assert.match(html, />進階</);
+    assert.match(html, />Advanced</);
     assert.match(html, /id="btn-sheet-signout"/);
-    assert.match(html, /登出/);
+    assert.match(html, /Sign out/);
   });
 });

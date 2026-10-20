@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       expected_cache:
-        description: "預期的 sw.js 快取名稱。留空則用 docs/sw.js。填錯可證明檢查會失敗。"
+        description: "Expected sw.js cache name. Leave empty to use docs/sw.js. A wrong name proves the check fails."
         required: false
         default: ""
         type: string

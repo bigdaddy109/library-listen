@@ -9,7 +9,7 @@
     <meta name="theme-color" content="#f3eee4" />
     <meta
       name="description"
-      content="Library Listen — 紙色書架。用 Google 登入，播放共享的 Library 資料夾。"
+      content="Library Listen — rice-paper bookshelf. Sign in with Google to play from the shared Library folder."
     />
     <meta property="og:title" content="書架 · Library Listen" />
     <meta property="og:description" content="紙色封面牆。用 Google 登入聽共享的 Library 資料夾，或改用本機檔案。" />
@@ -36,8 +36,8 @@
         <div class="mast-row">
           <h1>書架</h1>
           <div class="mast-links">
-            <button type="button" id="btn-change" class="ghost hidden" title="更換書庫來源">
-              更換來源
+            <button type="button" id="btn-change" class="ghost hidden" title="Change library source">
+              Change source
             </button>
             <a class="player-link" href="./classic/index.html">舊版播放器</a>
           </div>
@@ -47,14 +47,14 @@
         </p>
         <section id="onboarding" class="onboarding">
           <div class="load-row cta-stack">
-            <button type="button" id="btn-google" class="primary large" title="用 Google 登入">
+            <button type="button" id="btn-google" class="primary large" title="Sign in with Google">
               用 Google 登入
             </button>
             <button type="button" id="btn-pick-main" class="text-link">
-              改用本機資料夾
+              Use a local folder instead
             </button>
             <button type="button" id="btn-pick-files" class="ghost hidden" hidden>
-              選擇音檔
+              Choose audio files
             </button>
           </div>
           <p class="hint" id="capability-hint"></p>
@@ -112,12 +112,12 @@
         </div>
       </div>
       <div class="offline-row">
-        <button type="button" id="btn-offline" class="ghost">存到這台裝置</button>
+        <button type="button" id="btn-offline" class="ghost">Save to this device</button>
         <p class="hint" id="book-offline-status"></p>
       </div>
       <div id="book-tabs" class="book-tabs hidden">
-        <button type="button" id="tab-audio" aria-pressed="true">音檔</button>
-        <button type="button" id="tab-concepts" aria-pressed="false">概念</button>
+        <button type="button" id="tab-audio" aria-pressed="true">Audio</button>
+        <button type="button" id="tab-concepts" aria-pressed="false">Concepts</button>
       </div>
       <ul id="chapter-list" class="chapter-list"></ul>
       <div id="concept-list" class="concept-list hidden"></div>
@@ -133,16 +133,16 @@
         </div>
         <div class="player-sub">
           <div id="player-chapter" class="player-chapter">—</div>
-          <button type="button" id="btn-rate" class="skip rate" aria-label="播放速度 1.0×">
+          <button type="button" id="btn-rate" class="skip rate" aria-label="Playback speed 1.0×">
             1.0×
           </button>
-          <button type="button" id="btn-sleep" class="skip sleep" aria-label="睡眠計時關閉">
-            睡眠
+          <button type="button" id="btn-sleep" class="skip sleep" aria-label="Sleep timer off">
+            Sleep
           </button>
         </div>
       </div>
       <div class="player-controls">
-        <button type="button" id="btn-prev" class="icon" aria-label="回到開頭或上一段">
+        <button type="button" id="btn-prev" class="icon" aria-label="Back to start or previous part">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M6 6h2.2v12H6V6zm3.2 6 8.8 6.2V5.8L9.2 12z" />
           </svg>
@@ -151,7 +151,7 @@
           type="button"
           id="btn-play"
           class="icon play is-paused"
-          aria-label="播放"
+          aria-label="Play"
         >
           <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M8 5.5v13l11-6.5-11-6.5z" />
@@ -160,14 +160,14 @@
             <path d="M7 5h3.5v14H7V5zm6.5 0H17v14h-3.5V5z" />
           </svg>
         </button>
-        <button type="button" id="btn-next" class="icon" aria-label="下一章">
+        <button type="button" id="btn-next" class="icon" aria-label="Next chapter">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M15.8 6H18v12h-2.2V6zM6 5.8v12.4L14.8 12 6 5.8z" />
           </svg>
         </button>
       </div>
       <div class="player-time">
-        <button type="button" id="btn-back30" class="skip" aria-label="倒退 30 秒">
+        <button type="button" id="btn-back30" class="skip" aria-label="Back 30 seconds">
           −30
         </button>
         <span id="player-pos">0:00</span>
@@ -178,10 +178,10 @@
           max="1000"
           step="1"
           value="0"
-          aria-label="進度"
+          aria-label="Seek"
         />
         <span id="player-dur">0:00</span>
-        <button type="button" id="btn-fwd30" class="skip" aria-label="快轉 30 秒">
+        <button type="button" id="btn-fwd30" class="skip" aria-label="Forward 30 seconds">
           +30
         </button>
       </div>
@@ -213,43 +213,43 @@
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
     <div id="source-sheet" class="sheet hidden" hidden role="dialog" aria-modal="true" aria-labelledby="source-sheet-title">
       <div class="sheet-card">
-        <h2 id="source-sheet-title">書庫來源</h2>
+        <h2 id="source-sheet-title">Library source</h2>
         <p id="source-sheet-copy" class="hint">
-          用 Google 登入以載入共享的 <code>Library</code> 資料夾。
+          Sign in with Google to load the shared <code>Library</code> folder.
         </p>
         <ul id="source-sheet-list" class="source-list"></ul>
         <div class="cta-row cta-stack">
           <button type="button" id="btn-sheet-reload" class="primary hidden">
-            重新載入書庫
+            Reload library
           </button>
           <button type="button" id="btn-sheet-google" class="primary hidden">
             用 Google 登入
           </button>
           <button type="button" id="btn-sheet-local-link" class="text-link hidden">
-            改用本機資料夾
+            Use a local folder instead
           </button>
           <button type="button" id="btn-sheet-signout" class="ghost hidden">
-            登出
+            Sign out
           </button>
           <details id="source-sheet-advanced" class="source-advanced hidden" hidden>
-            <summary>進階</summary>
+            <summary>Advanced</summary>
             <div class="cta-row cta-stack">
               <button type="button" id="btn-sheet-local" class="ghost hidden">
-                選擇 Library 資料夾
+                Choose Library folder
               </button>
               <button type="button" id="btn-sheet-files" class="ghost hidden">
-                選擇音檔
+                Choose audio files
               </button>
             </div>
           </details>
           <button type="button" id="btn-sheet-picker" class="ghost hidden" hidden>
-            瀏覽 Google 雲端硬碟
+            Browse Google Drive
           </button>
-          <button type="button" id="btn-sheet-cancel" class="ghost">取消</button>
+          <button type="button" id="btn-sheet-cancel" class="ghost">Cancel</button>
         </div>
       </div>
     </div>
-    <button type="button" id="btn-sort" class="hidden" hidden title="排序書架">排序</button>
+    <button type="button" id="btn-sort" class="hidden" hidden title="Sort shelf">Sort</button>
     <script type="module" src="./app.js?v=52"></script>
   </body>
 </html>

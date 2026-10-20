@@ -124,8 +124,8 @@ describe("filterShelf", () => {
     assert.equal(filterShelf(books, { query: "Part 09" }).map((b) => b.id).join(), "immune/immune");
     assert.equal(filterShelf(books, { seriesId: "school", query: "功課" }).length, 1);
     assert.equal(filterShelf(books, { seriesId: "immune", query: "開學" }).length, 0);
-    assert.match(emptyShelfMessage("zzz"), /沒有書符合/);
-    assert.match(shelfStatusLabel(2, "immune", "all"), /2 本符合/);
+    assert.match(emptyShelfMessage("zzz"), /No books match/);
+    assert.match(shelfStatusLabel(2, "immune", "all"), /2 matches/);
   });
 });
 

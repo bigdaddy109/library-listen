@@ -173,10 +173,10 @@ describe("matchingChapterTitles + chapterHitLine", () => {
 
 describe("shelf labels", () => {
   it("uses books vs matches and native empty copy", () => {
-    assert.equal(shelfCountLabel(3, ""), "3 本");
-    assert.equal(shelfCountLabel(1, "immune"), "1 本符合");
-    assert.equal(shelfCountLabel(0, "xyz"), "0 本符合");
-    assert.equal(emptySearchMessage("xyz"), "沒有書符合「xyz」。");
+    assert.equal(shelfCountLabel(3, ""), "3 books");
+    assert.equal(shelfCountLabel(1, "immune"), "1 matches");
+    assert.equal(shelfCountLabel(0, "xyz"), "0 matches");
+    assert.equal(emptySearchMessage("xyz"), "No books match “xyz”.");
     assert.equal(emptySearchMessage("  "), "");
   });
 });

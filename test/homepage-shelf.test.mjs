@@ -31,10 +31,10 @@ describe("homepage is the rice-paper shelf", () => {
     assert.match(home, /id="btn-google"/);
     assert.match(home, /用 Google 登入/);
     assert.match(home, /id="btn-pick-main"/);
-    assert.match(home, /改用本機資料夾/);
+    assert.match(home, /Use a local folder instead/);
     assert.match(home, /id="source-sheet"/);
     assert.match(home, /id="btn-sheet-reload"/);
-    assert.match(home, /重新載入書庫/);
+    assert.match(home, /Reload library/);
     assert.match(home, /id="source-sheet-advanced"/);
     assert.match(home, /id="btn-sheet-signout"/);
     assert.match(home, /id="player-bar"/);
@@ -76,7 +76,7 @@ describe("homepage is the rice-paper shelf", () => {
 
   it("keeps the old dark player at /classic/ and redirects /shelf/ home", () => {
     assert.match(classic, /data-shell="classic"/);
-    assert.match(classic, /聽共享的 Library/);
+    assert.match(classic, /Listen from your shared Library/);
     assert.match(classic, /id="shelf"/);
     assert.match(classic, /src="\.\.\/app\.js\?v=\d+"/);
     assert.match(classic, /href="\.\.\/"/);

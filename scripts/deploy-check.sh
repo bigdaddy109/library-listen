@@ -86,13 +86,13 @@ check_once() {
   asset_report+="sw.js ${code}"$'\n'
   if [[ "$code" != "200" ]]; then
     http_status="$code"
-    note_fail "sw.js 回 HTTP ${code}"
+    note_fail "sw.js returned HTTP ${code}"
   else
     live_cache="$(sed -n 's/^const CACHE = "\(library-listen-shell-v[0-9][0-9]*\)";$/\1/p' "$dest" | head -n 1)"
     if [[ -z "$live_cache" ]]; then
-      note_fail "線上 sw.js 沒有 library-listen-shell-vN"
+      note_fail "live sw.js has no library-listen-shell-vN"
     elif [[ "$live_cache" != "$expected" ]]; then
-      note_fail "線上 sw.js 快取名稱與預期版本不符"
+      note_fail "live sw.js cache name does not match the expected version"
     fi
   fi
 
@@ -108,20 +108,20 @@ check_once() {
       if [[ "$http_status" == "200" ]]; then
         http_status="$code"
       fi
-      note_fail "核心殼層資源 ${label} 回 HTTP ${code}"
+      note_fail "core shell asset ${label} returned HTTP ${code}"
       continue
     fi
     if [[ "$rel" == "index.html" && -n "$live_cache" && "$live_cache" == "$expected" ]]; then
       n="${live_cache#library-listen-shell-v}"
       if ! grep -q "app.js?v=${n}" "$dest"; then
-        note_fail "線上 index.html 的 ?v= 與 sw.js 的 ${live_cache} 不一致"
+        note_fail "live index.html ?v= does not match sw.js ${live_cache}"
       fi
     fi
   done
 
   rm -rf "$tmp"
   if [[ "$ok" == 1 ]]; then
-    detail="線上版本與預期一致，核心殼層資源皆為 HTTP 200"
+    detail="live version matches; core shell assets are HTTP 200"
   fi
 }
 
@@ -129,23 +129,23 @@ write_comment() {
   local when result version_line
   when="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   if [[ "$ok" == 1 ]]; then
-    result="通過"
+    result="passed"
     version_line="${live_cache}"
   else
-    result="失敗"
-    version_line="線上 ${live_cache:-（讀不到）}；預期 ${expected}"
+    result="failed"
+    version_line="live ${live_cache:-unreadable}; expected ${expected}"
   fi
   {
-    printf '上線檢查：%s\n\n' "$result"
-    printf '%s\n' "- 網址：${BASE}"
-    printf '%s\n' "- HTTP 狀態：${http_status}"
-    printf '%s\n' "- 版本：${version_line}"
-    printf '%s\n' "- 時間：${when}"
+    printf 'Deploy check: %s\n\n' "$result"
+    printf '%s\n' "- URL: ${BASE}"
+    printf '%s\n' "- HTTP status: ${http_status}"
+    printf '%s\n' "- Version: ${version_line}"
+    printf '%s\n' "- Time: ${when}"
     if [[ -n "${GITHUB_RUN_ID:-}" && -n "${GITHUB_REPOSITORY:-}" ]]; then
-      printf '%s\n' "- 執行：${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+      printf '%s\n' "- Run: ${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
     fi
     if [[ -n "$detail" ]]; then
-      printf '%s\n' "- 說明：${detail}"
+      printf '%s\n' "- Detail: ${detail}"
     fi
   } > "$OUT_DIR/comment.md"
   echo "$when" > "$OUT_DIR/checked-at.txt"
@@ -153,7 +153,7 @@ write_comment() {
 }
 
 if [[ ! "$expected" =~ ^library-listen-shell-v[0-9]+$ ]]; then
-  detail="預期版本格式不正確：${expected}"
+  detail="expected cache name is not library-listen-shell-vN: ${expected}"
   ok=0
   http_status="0"
   write_comment
@@ -165,7 +165,7 @@ while true; do
   attempt=$((attempt + 1))
   echo "attempt ${attempt}: expected ${expected} (repo ${repo_cache})"
   check_once "${attempt}-$(date +%s)"
-  echo "attempt ${attempt}: http ${http_status}; live ${live_cache:-（讀不到）}; ${detail}"
+  echo "attempt ${attempt}: http ${http_status}; live ${live_cache:-unreadable}; ${detail}"
   printf '%s' "$asset_report" | sed 's/^/  /'
   if [[ "$ok" == 1 ]]; then
     break

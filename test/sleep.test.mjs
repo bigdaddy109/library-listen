@@ -8,7 +8,7 @@ import {
 } from "../docs/sleep.js";
 
 describe("sleep timer choices", () => {
-  it("keeps the minute steps and puts 本章結束 after 60", () => {
+  it("keeps the minute steps and puts End of chapter after 60", () => {
     assert.deepEqual(SLEEP_MINUTES, [0, 15, 30, 45, 60]);
     assert.equal(nextSleepChoice(0), 15);
     assert.equal(nextSleepChoice(15), 30);

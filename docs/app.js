@@ -20,7 +20,6 @@ import {
   chapterProgress,
   saveProgress,
   shelfBadge,
-  shelfBadgeLabel,
 } from "./library.js?v=52";
 import {
   DRIVE_UNAUTHORIZED_MESSAGE,
@@ -92,13 +91,6 @@ const RATES = [1, 1.25, 1.5];
 const LIBRARY_KEY = "librarylisten.library.v1";
 const DB_NAME = "library-listen";
 const COVER_KEY = "__cover__";
-const SORT_LABELS = {
-  collection: "系列",
-  title: "書名",
-  author: "作者",
-  recent: "最近",
-};
-
 /** @type {{ books: any[], activeBookId: string|null, sort: string, query: string }} */
 const state = {
   books: [],
@@ -404,7 +396,7 @@ async function saveBookOffline(book) {
     const saved = new Map();
     for (let i = 0; i < items.length; i += 1) {
       const [chapterId, raw] = items[i];
-      updateOfflineButton(book, `正在儲存 ${i + 1}/${items.length}…`);
+      updateOfflineButton(book, `Saving ${i + 1}/${items.length}…`);
       const blob = await materializeFile(raw);
       if (!blob) continue;
       await idb("offline", "readwrite", (s) =>
@@ -418,8 +410,8 @@ async function saveBookOffline(book) {
     await removeBookOffline(book).catch(() => {});
     alert(
       err?.name === "QuotaExceededError"
-        ? "這台裝置的空間不夠，無法存完整本書。"
-        : "無法把這本書存到裝置。\n\n若在 iCloud：請先在 listen/ 按「現在下載」，再試一次。私人瀏覽無法存書。"
+        ? "Not enough storage on this device to save the whole book."
+        : "Could not save this book on the device.\n\nIf this is iCloud: Download Now on listen/ first, then try again. Private Browsing cannot save books."
     );
   } finally {
     savingBookId = null;
@@ -443,17 +435,17 @@ function updateOfflineButton(book, busyLabel) {
   if (busyLabel) {
     btn.textContent = busyLabel;
   } else if (offline) {
-    btn.textContent = "從裝置移除";
+    btn.textContent = "Remove from device";
   } else {
-    btn.textContent = "存到這台裝置";
+    btn.textContent = "Save to this device";
   }
   if (offline) {
-    status.textContent = "已存在這台裝置，重新打開也不必再選資料夾。";
+    status.textContent = "Saved on this device — plays without picking the folder again.";
   } else if (!isBookOpenable(book)) {
-    status.textContent = "請重新連接 Library 資料夾才能播放這本書。";
+    status.textContent = "Reconnect the Library folder to play this book.";
   } else {
     const bytes = blobsToSave(book).reduce((n, [, file]) => n + (file?.size || 0), 0);
-    status.textContent = `存一份（${formatBytes(bytes)}），重新打開後仍可播放。`;
+    status.textContent = `Save a copy (${formatBytes(bytes)}) so it opens after the app restarts.`;
   }
 }
 
@@ -500,7 +492,7 @@ function applyPlaybackRate() {
   if (!btn) return;
   const label = rateLabel(playbackRate);
   btn.textContent = label;
-  btn.setAttribute("aria-label", `播放速度 ${label}`);
+  btn.setAttribute("aria-label", `Playback speed ${label}`);
 }
 
 function cycleRate() {
@@ -529,12 +521,12 @@ function relativeTime(iso) {
   if (!iso) return "";
   const elapsed = Math.max(0, Date.now() - new Date(iso).getTime());
   const minutes = Math.floor(elapsed / 60000);
-  if (minutes < 1) return "剛剛";
-  if (minutes < 60) return `${minutes} 分鐘前`;
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} 小時前`;
-  if (hours < 48) return "昨天";
-  return `${Math.floor(hours / 24)} 天前`;
+  if (hours < 24) return `${hours}h ago`;
+  if (hours < 48) return "yesterday";
+  return `${Math.floor(hours / 24)}d ago`;
 }
 
 function revokeAllUrls() {
@@ -675,7 +667,7 @@ function setScanning(active) {
   if (!hint) return;
   if (active) {
     hint.dataset.prev = hint.textContent || "";
-    hint.textContent = "正在掃描 Library…若在 iCloud，請等「現在下載」完成。";
+    hint.textContent = "Scanning Library… if this is iCloud, wait for Download Now to finish.";
   } else if (hint.dataset.prev != null) {
     hint.textContent = hint.dataset.prev;
     delete hint.dataset.prev;
@@ -743,7 +735,7 @@ function updateDriveStatus() {
     el.textContent = `${who} · ${session.folderName || "Library"}`;
   } else if (!isGoogleClientConfigured()) {
     el.textContent =
-      "Google 雲端硬碟登入需要在 docs/drive.js 填入 Web Client ID（見 README）。本機資料夾仍然可用。";
+      "Google Drive sign-in needs a Web Client ID in docs/drive.js (see README). Local folder pick still works.";
   } else {
     el.textContent = "";
   }
@@ -813,7 +805,7 @@ function openSourceSheet({ title, copy, folders = [], actions = {} } = {}) {
   if (!sheetReturnFocus && document.activeElement instanceof HTMLElement) {
     sheetReturnFocus = document.activeElement;
   }
-  if (els.sourceSheetTitle) els.sourceSheetTitle.textContent = title || "書庫來源";
+  if (els.sourceSheetTitle) els.sourceSheetTitle.textContent = title || "Library source";
   if (els.sourceSheetCopy) els.sourceSheetCopy.textContent = copy || "";
   if (els.sourceSheetList) {
     els.sourceSheetList.innerHTML = "";
@@ -846,7 +838,7 @@ async function loadFromDrive({ silent } = {}) {
   if (!isGoogleClientConfigured()) {
     const err = Object.assign(
       new Error(
-        "尚未設定 Google 登入。\n\n請把網頁應用程式的 Client ID 貼到 docs/drive.js 的 GOOGLE_OAUTH_CLIENT_ID。步驟在 README。\n\n本機仍可選 Library 資料夾。"
+        "Google sign-in is not configured yet.\n\nPaste a Web application Client ID into GOOGLE_OAUTH_CLIENT_ID in docs/drive.js. Setup steps are in the README.\n\nChoose Library folder still works as a local fallback."
       ),
       { name: "DriveConfigError" }
     );
@@ -994,8 +986,8 @@ async function loadLibrary(mode) {
       return;
     }
     showLibraryStatus(
-      (err?.message || "無法打開書庫。") +
-        "\n\n若在 iCloud：請先在 Library/listen 資料夾按「現在下載」，再試一次。"
+      (err?.message || "Could not open the library.") +
+        "\n\nIf this is iCloud: Download Now on the Library/listen folders, then try again."
     );
   } finally {
     setScanning(false);
@@ -1027,17 +1019,17 @@ function sortedBooks() {
 
 function progressLine(book) {
   const p = loadProgress()[book.id];
-  if (!p) return { line: "尚未開始", fraction: null };
+  if (!p) return { line: "Not started", fraction: null };
   if (latestProgressKind(p) === "text") {
     const fraction = Number.isFinite(p.text?.fraction) ? clamp01(p.text.fraction) : null;
-    let line = p.text?.label || "閱讀中";
+    let line = p.text?.label || "Reading";
     if (fraction != null) line += ` · ${Math.round(fraction * 100)}%`;
     if (p.text?.updatedAt) line += ` · ${relativeTime(p.text.updatedAt)}`;
     return { line, fraction };
   }
   const chapter =
     book.chapters.find((c) => c.id === p.chapterId) || book.chapters[0];
-  if (!chapter) return { line: "尚未開始", fraction: null };
+  if (!chapter) return { line: "Not started", fraction: null };
   const pos = chapterRelativePosition(chapter, p.positionSeconds || 0);
   const dur = resolvedChapterDuration(chapter, p.chapterDurationSeconds);
   let line = `${chapter.title} · ${formatClock(pos)}`;
@@ -1154,7 +1146,7 @@ function continueCard(resume) {
     <p class="title"></p>
     <p class="progress"></p>
   `;
-  body.querySelector(".continue-label").textContent = "繼續聽";
+  body.querySelector(".continue-label").textContent = "Continue listening";
   body.querySelector(".title").textContent = resume.book.title;
   body.querySelector(".progress").textContent =
     `${resume.chapter.title} · ${formatClock(resume.pos)}` +
@@ -1172,25 +1164,25 @@ function saveBanner(targetBook) {
   row.className = "save-banner";
   const text = document.createElement("p");
   text.textContent = targetBook
-    ? `要把「${targetBook.title}」存到這支手機，重新打開後仍可播放嗎？`
-    : "要把書存到這支手機，重新打開後仍可播放嗎？";
+    ? `Save “${targetBook.title}” on this phone so it opens after a restart?`
+    : "Save books on this phone so they open after a restart?";
   const actions = document.createElement("div");
   actions.className = "cta-row";
   const saveBtn = document.createElement("button");
   saveBtn.type = "button";
   saveBtn.className = "primary";
-  saveBtn.textContent = targetBook ? "儲存這本書" : "儲存";
+  saveBtn.textContent = targetBook ? "Save this book" : "Save";
   const dismiss = document.createElement("button");
   dismiss.type = "button";
   dismiss.className = "ghost";
-  dismiss.textContent = "現在不要";
+  dismiss.textContent = "Not now";
   saveBtn.addEventListener("click", async () => {
     const book = targetBook || mostRecentResume()?.book || state.books.find(isBookOpenable);
     if (!book) return;
     offerSaveBanner = false;
     openBook(book.id);
     await saveBookOffline(book);
-    showToast(`已把「${book.title}」存到這台裝置`);
+    showToast(`Saved “${book.title}” on this device`);
   });
   dismiss.addEventListener("click", () => {
     offerSaveBanner = false;
@@ -1293,13 +1285,13 @@ function bookCard(book) {
   `;
   body.querySelector(".title").textContent = book.title;
   const badgeEl = body.querySelector(".shelf-badge");
-  badgeEl.textContent = shelfBadgeLabel(badge);
+  badgeEl.textContent = badge;
   badgeEl.classList.add(`shelf-badge-${badge.toLowerCase()}`);
   const hasAudio = bookHasAudio(book);
   let meta = book.author;
-  if (hasAudio) meta += ` · ${book.chapters.length} 章`;
-  if (isBookOffline(book)) meta += " · 已在裝置";
-  else if (hasAudio && !isBookPlayable(book)) meta += " · 重新連接才能播放";
+  if (hasAudio) meta += ` · ${book.chapters.length} chapters`;
+  if (isBookOffline(book)) meta += " · on device";
+  else if (hasAudio && !isBookPlayable(book)) meta += " · reconnect to play";
   body.querySelector(".meta").textContent = meta;
   btn.classList.toggle("unavailable", !isBookOpenable(book));
   body.querySelector(".progress").textContent = line;
@@ -1360,7 +1352,7 @@ function renderConceptCards() {
   const note = document.createElement("p");
   note.className = "concept-note";
   note.textContent =
-    "依收聽順序整理的原創筆記。不是書的正文，也不是書裡的圖。音檔會繼續播放。";
+    "Original notes for the main cast, in listening order. Not the book's text, and not its illustrations. Audio keeps playing.";
   els.conceptList.appendChild(note);
   for (const card of IMMUNE_CARDS) {
     const article = document.createElement("article");
@@ -1815,9 +1807,9 @@ function maybeOfferSaveWhileListening(book) {
     ) {
       return;
     }
-    if (!confirm(`要把「${book.title}」存到這支手機，重新打開後仍可播放嗎？`)) return;
+    if (!confirm(`Save “${book.title}” on this phone so it still plays after a restart?`)) return;
     saveBookOffline(book).then(() => {
-      showToast(`已把「${book.title}」存到這台裝置`);
+      showToast(`Saved “${book.title}” on this device`);
     });
   }, 12000);
 }
@@ -1837,12 +1829,12 @@ function clearSleepTimer() {
 }
 
 function remainingSleepLabel() {
-  if (sleepAtChapterEnd) return "本章結束";
-  if (!sleepUntil) return "睡眠";
+  if (sleepAtChapterEnd) return "End of chapter";
+  if (!sleepUntil) return "Sleep";
   const left = Math.max(0, sleepUntil - Date.now());
   const mins = Math.ceil(left / 60000);
-  if (mins <= 0) return "睡眠";
-  return `${mins} 分`;
+  if (mins <= 0) return "Sleep";
+  return `${mins}m`;
 }
 
 function updateSleepButton() {
@@ -1854,7 +1846,7 @@ function updateSleepButton() {
   btn.classList.toggle("is-on", on);
   btn.setAttribute(
     "aria-label",
-    sleepAtChapterEnd ? "本章結束後停止" : sleepUntil ? `睡眠計時還剩 ${label}` : "睡眠計時關閉"
+    sleepAtChapterEnd ? "Stop at the end of this chapter" : sleepUntil ? `Sleep timer ${label} left` : "Sleep timer off"
   );
 }
 
@@ -1880,7 +1872,7 @@ function finishChapterSleep() {
   audio.pause();
   persistCurrent();
   updateSleepButton();
-  showToast("已停在本章結束");
+  showToast("Stopped at the end of this chapter");
   updatePlayerBar();
 }
 
@@ -1892,13 +1884,13 @@ function cycleSleepTimer() {
     clearSleepClock();
     sleepAtChapterEnd = true;
     updateSleepButton();
-    showToast("本章結束後停止");
+    showToast("Stops at the end of this chapter");
     return;
   }
   sleepAtChapterEnd = false;
   if (!next) {
     clearSleepTimer();
-    showToast("睡眠計時已關閉");
+    showToast("Sleep timer off");
     return;
   }
   sleepUntil = Date.now() + next * 60 * 1000;
@@ -1906,13 +1898,13 @@ function cycleSleepTimer() {
   sleepTick = window.setInterval(() => {
     if (!sleepUntil) return;
     if (Date.now() >= sleepUntil) {
-      pauseForSleep("睡眠計時到了，已暫停");
+      pauseForSleep("Sleep timer — paused");
       return;
     }
     updateSleepButton();
   }, 15000);
   updateSleepButton();
-  showToast(`${next} 分鐘後暫停`);
+  showToast(`Sleep in ${next} minutes`);
 }
 
 function persistCurrent() {
@@ -1951,7 +1943,7 @@ function syncChapterFromTime({ toast = false } = {}) {
   updateMediaSession();
   if (state.activeBookId === book.id) renderBook();
   if (toast && crossedForward && !audio.paused) {
-    showToast(`下一章：${book.chapters[next].title}`);
+    showToast(`Next: ${book.chapters[next].title}`);
   }
 }
 
@@ -2021,7 +2013,7 @@ function updatePlayerBar() {
   document.getElementById("player-chapter").textContent = chapter.title;
   const playBtn = document.getElementById("btn-play");
   playBtn.classList.toggle("is-paused", audio.paused);
-  playBtn.setAttribute("aria-label", audio.paused ? "播放" : "暫停");
+  playBtn.setAttribute("aria-label", audio.paused ? "Play" : "Pause");
 
   const { pos, dur } = displayClock();
   document.getElementById("player-pos").textContent = formatClock(pos);
@@ -2042,7 +2034,7 @@ function cycleSort() {
   state.sort = order[(i + 1) % order.length];
   localStorage.setItem(SORT_KEY, state.sort);
   const sortBtn = document.getElementById("btn-sort");
-  if (sortBtn) sortBtn.textContent = `排序：${SORT_LABELS[state.sort] || state.sort}`;
+  if (sortBtn) sortBtn.textContent = `Sort: ${state.sort}`;
   if (!state.activeBookId) render();
 }
 
@@ -2056,13 +2048,13 @@ function setupCapabilityHint() {
 
   if (isGoogleClientConfigured()) {
     els.capabilityHint.textContent =
-      "「用 Google 登入」會載入共享的雲端硬碟 Library。若你已經有一份，可以改用本機資料夾。";
+      "用 Google 登入 loads the shared Drive Library. Use a local folder instead if you already have a copy.";
   } else if (typeof window.showDirectoryPicker === "function") {
     els.capabilityHint.textContent =
-      "選擇 Library 資料夾，或選一個系列（門羅-WhatIf / Immune）。在 iPhone／iPad 上，請先按「現在下載」，再從「檔案」選資料夾。";
+      "Choose Library folder, then pick Library or a collection (門羅-WhatIf / Immune). On iPhone/iPad, pick the folder in Files after Download Now.";
   } else {
     els.capabilityHint.textContent =
-      "用「選擇 Library 資料夾」選一個資料夾（iPhone／iPad 的「檔案」與桌面都可以）。或用「選擇音檔」逐一挑選。";
+      "Choose Library folder to select a folder (works in Files on iPhone/iPad and desktop). Or use Choose audio files to pick files one by one.";
   }
   updateDriveStatus();
 }
@@ -2082,17 +2074,17 @@ function updateChangeButtonLabel() {
   const btn = document.getElementById("btn-change");
   if (!btn) return;
   if (libraryNeedsReconnect() && libraryUsesDrive()) {
-    btn.textContent = "重新連接雲端硬碟";
-    btn.title = "再登入 Google，才能從共享的 Library 串流";
+    btn.textContent = "Reconnect Drive";
+    btn.title = "Sign in with Google again to stream from the shared Library";
   } else if (libraryNeedsReconnect()) {
-    btn.textContent = "重新連接書庫";
-    btn.title = "再選一次 Library 資料夾，才能播放每一本書";
+    btn.textContent = "Reconnect Library";
+    btn.title = "Pick the Library folder again to play every book";
   } else if (libraryUsesDrive()) {
-    btn.textContent = "更換來源";
-    btn.title = "在 Google 雲端硬碟與本機資料夾之間切換";
+    btn.textContent = "Change source";
+    btn.title = "Switch between Google Drive and a local folder";
   } else {
-    btn.textContent = "更換資料夾";
-    btn.title = "選擇另一個 Library 資料夾";
+    btn.textContent = "Change folder";
+    btn.title = "Pick a different Library folder";
   }
 }
 
@@ -2100,12 +2092,12 @@ function showChangeSourceSheet() {
   const session = loadDriveSession();
   const signedIn = !!(session || getAccessToken());
   openSourceSheet({
-    title: "書庫來源",
+    title: "Library source",
     copy: session?.email
-      ? `已登入 ${session.email}。可重新載入雲端硬碟書庫，或登出。`
+      ? `Signed in as ${session.email}. Reload the Drive library or sign out.`
       : signedIn
-        ? "已登入 Google。可重新載入雲端硬碟書庫，或登出。"
-        : "用 Google 登入以載入共享的 Library 資料夾，或改用本機資料夾。",
+        ? "Signed in to Google. Reload the Drive library or sign out."
+        : "Sign in with Google to load the shared Library folder, or use a local folder.",
     actions: sourceDialogActions({ signedIn }),
   }).then((folder) => {
     if (!folder?.id) return;
@@ -2212,7 +2204,7 @@ function bind() {
       els.driveStatus.textContent = "";
     }
     updateDriveStatus();
-    showToast("已登出 Google");
+    showToast("Signed out of Google");
   });
   els.sourceSheet?.addEventListener("click", (event) => {
     if (event.target === els.sourceSheet) closeSourceSheet(null);
@@ -2221,7 +2213,7 @@ function bind() {
     const book = findBook(state.activeBookId);
     if (!book || savingBookId) return;
     if (isBookOffline(book)) {
-      if (!confirm(`要從這台裝置移除「${book.title}」的離線副本嗎？`)) return;
+      if (!confirm(`Remove the saved copy of “${book.title}” from this device?`)) return;
       await removeBookOffline(book).catch(() => {});
       for (const ch of book.chapters) {
         if (!ch.fromDevice) continue;
@@ -2316,7 +2308,7 @@ function bind() {
     syncChapterFromTime({ toast: true });
     updatePlayerBar();
     if (sleepUntil && Date.now() >= sleepUntil) {
-      pauseForSleep("睡眠計時到了，已暫停");
+      pauseForSleep("Sleep timer — paused");
       return;
     }
     if (!audio.paused) {
@@ -2355,10 +2347,10 @@ function bind() {
     const next = playback.chapterIndex + 1;
     if (next < book.chapters.length) {
       const nextChapter = book.chapters[next];
-      showToast(`下一章：${nextChapter.title}`);
+      showToast(`Next: ${nextChapter.title}`);
       playChapter(book.id, next, { forceStart: true });
     } else {
-      showToast("全書結束");
+      showToast("End of book");
       updatePlayerBar();
     }
   });
@@ -2524,8 +2516,8 @@ async function restoreSession() {
   if (showRestoredBooks(restored)) return;
   if (restored.length && els.capabilityHint) {
     els.capabilityHint.textContent = libraryUsesDrive()
-      ? "請再按一次「用 Google 登入」才能繼續聽。進度還在。"
-      : "請再選一次 Library 資料夾才能繼續聽。進度還在。";
+      ? "用 Google 登入 again to keep listening. Your progress is still here."
+      : "Pick the Library folder again to keep listening. Your progress is still here.";
   }
 }
 
@@ -2559,7 +2551,7 @@ setupCapabilityHint();
 const versionEl = document.getElementById("app-version");
 if (versionEl && APP_VERSION) versionEl.textContent = `v${APP_VERSION}`;
 const sortBtn = document.getElementById("btn-sort");
-if (sortBtn) sortBtn.textContent = `排序：${SORT_LABELS[state.sort] || state.sort}`;
+if (sortBtn) sortBtn.textContent = `Sort: ${state.sort}`;
 if (isRiceShelfPage()) {
   initRiceShelf({
     onOpenBook(book) {

@@ -331,7 +331,7 @@ export function demoCatalog() {
       collectionId: "school",
       folder: "kaixue",
       title: "開學",
-      subtitle: "示範書，不是掃描檔",
+      subtitle: "Preview stand-in — not a scanned file",
       chapters: parts(4),
     }),
     demoBook({
@@ -339,7 +339,7 @@ export function demoCatalog() {
       collectionId: "school",
       folder: "gongke",
       title: "功課",
-      subtitle: "示範書，不是掃描檔",
+      subtitle: "Preview stand-in — not a scanned file",
       chapters: parts(3),
       ebook: { id: "gongke.epub", name: "gongke.epub", file: null },
     }),
@@ -348,7 +348,7 @@ export function demoCatalog() {
       collectionId: "school",
       folder: "fangjia",
       title: "放假",
-      subtitle: "示範書，不是掃描檔",
+      subtitle: "Preview stand-in — not a scanned file",
       ebook: { id: "fangjia.epub", name: "fangjia.epub", file: null },
     }),
     demoBook({
