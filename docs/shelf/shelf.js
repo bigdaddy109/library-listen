@@ -7,8 +7,8 @@ import {
   extOf,
   isBookPlayable,
   shelfBadge,
-} from "../library.js?v=51";
-import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=51";
+} from "../library.js?v=53";
+import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=53";
 import {
   COVER_MORPH,
   bookFlipFrames,
@@ -34,8 +34,8 @@ import {
   seriesMeta,
   shelfStatusLabel,
   volumeNumber,
-} from "./catalog.js?v=51";
-import { coverSvg, spineMetrics } from "./covers.js?v=51";
+} from "./catalog.js?v=53";
+import { coverSvg, spineMetrics } from "./covers.js?v=53";
 
 /* v2: the cover wall became the default; the old key mostly held the old default. */
 const VIEW_KEY = "librarylisten.shelfView.v2";
@@ -121,8 +121,8 @@ function updateHint() {
   if (!els.hint) return;
   els.hint.textContent =
     state.source === "library"
-      ? `已載入 ${state.books.length} 本書。點封面即可聽。`
-      : "尚未選庫時顯示示範書。登入或選資料夾後即可聽。";
+      ? `Loaded ${state.books.length} books. Tap a cover to listen.`
+      : "Demo books show until you pick a library. Sign in or choose a folder to listen.";
 }
 
 function setLibrary(books, source = "library") {
@@ -275,7 +275,7 @@ function render() {
   if (!books.length) {
     const empty = document.createElement("p");
     empty.className = "shelf-empty";
-    empty.textContent = emptyShelfMessage(state.query, state.seriesId) || "書架是空的。";
+    empty.textContent = emptyShelfMessage(state.query, state.seriesId) || "The shelf is empty.";
     els.stage.appendChild(empty);
     return;
   }
@@ -327,7 +327,7 @@ function coverMode() {
   return coverTransitionMode({ reducedMotion: prefersReducedMotion() });
 }
 
-/** Cover SVG used as the shared-element morph source (封面牆 card or 書架 spine). */
+/** Cover SVG used as the shared-element morph source (cover-wall card or bookshelf spine). */
 function cardArtFor(bookId) {
   for (const el of els.stage?.querySelectorAll(".cover-card, .spine") || []) {
     if (el.dataset.id === bookId) return el.querySelector(".cover-art svg");
@@ -464,10 +464,10 @@ async function openCoverBook(book) {
   beginListening(book);
 }
 
-/** After the cover opens, go straight into audio — no 聽/讀 chooser. */
+/** After the cover opens, go straight into audio — no listen/read chooser. */
 function beginListening(book) {
   if (!bookHasAudio(book)) {
-    showToast("這本書還沒有聽的音檔。");
+    showToast("This book has no audio to play.");
     return;
   }
   goToPlayer(book, "audio", isBookPlayable(book));
@@ -503,7 +503,7 @@ function dismissBook() {
 }
 
 /**
- * Shelf tap (封面牆 or 書架): same openCoverBook path — cover zoom → hinge left.
+ * Shelf tap (cover wall or bookshelf): same openCoverBook path — cover zoom → hinge left.
  * phaseHint is only for ?flip= / ?pull= / ?spread= preview freezes (not UI taps).
  */
 function openFromShelf(book, phaseHint) {
@@ -591,8 +591,8 @@ function renderSpread(book, phase = "open", { cover = false, opened = true } = {
   const bookplate = `
           <div class="bookplate">
             <div class="bookplate-card">
-              <div class="seal" style="--accent:${series.accent}">藏</div>
-              <p>藏書票</p>
+              <div class="seal" style="--accent:${series.accent}">Ex</div>
+              <p>Bookplate</p>
               <strong></strong>
               <p class="vol"></p>
             </div>
@@ -632,7 +632,7 @@ function renderSpread(book, phase = "open", { cover = false, opened = true } = {
     els.bookStage.querySelector(".book-3d-spine-title").textContent = book.title;
   }
   els.bookStage.querySelector(".bookplate-card strong").textContent = series.title;
-  els.bookStage.querySelector(".vol").textContent = `編號 ${volume}`;
+  els.bookStage.querySelector(".vol").textContent = `No. ${volume}`;
   els.bookStage.querySelector(".kicker").textContent = `${series.title} · ${flags.badge}`;
   els.bookStage.querySelector("h2").textContent = book.title;
   els.bookStage.querySelector(".author").textContent = book.author || "";
@@ -642,7 +642,7 @@ function renderSpread(book, phase = "open", { cover = false, opened = true } = {
 
 function goToPlayer(book, pane, ready) {
   if (state.source === "demo" || !ready) {
-    showToast("先登入 Google 或選擇 Library 資料夾，才能聽。");
+    showToast("Sign in with Google or choose a Library folder to listen.");
     if (typeof shelfOptions.onNeedLibrary === "function") {
       shelfOptions.onNeedLibrary(book, pane);
     }
@@ -739,7 +739,7 @@ async function loadFromFiles() {
 
 function applyLoaded(books) {
   if (!books.length) {
-    showToast("沒有找到能聽的書。示範書架還在。");
+    showToast("No playable books found. The demo shelf is still here.");
     return;
   }
   setLibrary(books, "library");
@@ -756,10 +756,10 @@ function bindDriveHook() {
       const result = await load();
       const books = Array.isArray(result) ? result : result?.books;
       if (books?.length) applyLoaded(books);
-      else showToast("Drive 沒有帶回書。");
+      else showToast("Drive did not return any books.");
     } catch (err) {
       if (err?.name === "AbortError") return;
-      showToast("Drive 載入沒有完成。");
+      showToast("Drive did not finish loading.");
     }
   });
 }
@@ -796,7 +796,7 @@ function bind() {
         applyLoaded(await loadFromFolder());
       } catch (err) {
         if (err?.name === "AbortError") return;
-        showToast("無法打開資料夾。");
+        showToast("Could not open the folder.");
       }
     });
     document.getElementById("btn-pick-files")?.addEventListener("click", async () => {
@@ -804,7 +804,7 @@ function bind() {
         applyLoaded(await loadFromFiles());
       } catch (err) {
         if (err?.name === "AbortError") return;
-        showToast("無法打開檔案。");
+        showToast("Could not open the files.");
       }
     });
     bindDriveHook();

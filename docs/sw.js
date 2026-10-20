@@ -1,5 +1,6 @@
 /* Shell-only cache. Audiobook files are never cached here. */
-const CACHE = "library-listen-shell-v51";
+const CACHE = "library-listen-shell-v53";
+const CACHE_CONCEPTS_MESSAGE = "librarylisten.cache-concepts";
 const DRIVE_MEDIA_PREFIX = "/drive-media/";
 const DRIVE_TOKEN_MESSAGE = "librarylisten.drive-token";
 const DRIVE_UNAUTHORIZED_MESSAGE = "librarylisten.drive-unauthorized";
@@ -12,47 +13,45 @@ self.addEventListener("message", (event) => {
   }
 });
 
+/** Immune concept cards are not in the shell precache. The page asks for them when that book opens. */
+self.addEventListener("message", (event) => {
+  if (event.data?.type !== CACHE_CONCEPTS_MESSAGE) return;
+  const urls = Array.isArray(event.data.urls) ? event.data.urls : [];
+  const allowed = urls.filter((url) => {
+    try {
+      const parsed = new URL(url, self.location.href);
+      return parsed.origin === self.location.origin && parsed.pathname.includes("/concepts/immune/");
+    } catch {
+      return false;
+    }
+  });
+  if (!allowed.length) return;
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(allowed)));
+});
+
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=51",
-  "./app.js?v=51",
-  "./library.js?v=51",
-  "./drive.js?v=51",
-  "./search.js?v=51",
-  "./markers.js?v=51",
-  "./save-prompt.js?v=51",
-  "./media-session.js?v=51",
-  "./epub.js?v=51",
-  "./immune-cards.js?v=51",
+  "./styles.css?v=53",
+  "./app.js?v=53",
+  "./library.js?v=53",
+  "./drive.js?v=53",
+  "./search.js?v=53",
+  "./markers.js?v=53",
+  "./save-prompt.js?v=53",
+  "./media-session.js?v=53",
+  "./sleep.js?v=53",
+  "./immune-cards.js?v=53",
   "./manifest.webmanifest",
-  "./icon.svg?v=51",
-  "./apple-touch-icon.png?v=51",
+  "./icon.svg?v=53",
+  "./apple-touch-icon.png?v=53",
   "./og-image.png",
   "./classic/index.html",
   "./shelf/index.html",
-  "./shelf/shelf.css?v=51",
-  "./shelf/shelf.js?v=51",
-  "./shelf/catalog.js?v=51",
-  "./shelf/covers.js?v=51",
-  "./concepts/immune/skin.jpg",
-  "./concepts/immune/bacteria.jpg",
-  "./concepts/immune/inflammation.jpg",
-  "./concepts/immune/neutrophil.jpg",
-  "./concepts/immune/macrophage.jpg",
-  "./concepts/immune/complement.jpg",
-  "./concepts/immune/cytokines.jpg",
-  "./concepts/immune/dendritic.jpg",
-  "./concepts/immune/lymph-node.jpg",
-  "./concepts/immune/thymus.jpg",
-  "./concepts/immune/t-cell.jpg",
-  "./concepts/immune/b-cell.jpg",
-  "./concepts/immune/mucosa.jpg",
-  "./concepts/immune/virus.jpg",
-  "./concepts/immune/interferon.jpg",
-  "./concepts/immune/natural-killer.jpg",
-  "./concepts/immune/mast-cell.jpg",
-  "./concepts/immune/memory.jpg",
+  "./shelf/shelf.css?v=53",
+  "./shelf/shelf.js?v=53",
+  "./shelf/catalog.js?v=53",
+  "./shelf/covers.js?v=53",
 ];
 
 self.addEventListener("install", (event) => {

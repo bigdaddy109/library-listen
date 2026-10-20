@@ -57,7 +57,7 @@ describe("demo catalog", () => {
     const books = demoCatalog();
     const ids = new Set(books.map(seriesIdForBook));
     assert.deepEqual([...ids].sort(), ["immune", "munroe", "school"]);
-    assert.ok(books.some((b) => b.title === "開學"));
+    assert.ok(books.some((b) => b.title === "First Day"));
     assert.ok(books.some((b) => b.id === "munroe/what-if-1"));
     assert.ok(books.some((b) => b.id === "immune/immune"));
   });
@@ -66,7 +66,7 @@ describe("demo catalog", () => {
     const books = demoCatalog();
     const listen = books.filter((b) => (b.chapters || []).length);
     assert.ok(listen.every((b) => shelfBadge(b) === "Audio"));
-    assert.equal(mediaFlags(books.find((b) => b.title === "放假")).badge, "Read");
+    assert.equal(mediaFlags(books.find((b) => b.title === "Vacation")).badge, "Read");
   });
 });
 
@@ -74,7 +74,7 @@ describe("series + views", () => {
   it("keeps one accent per known series", () => {
     const accents = SERIES_ORDER.map((id) => SERIES[id].accent);
     assert.equal(new Set(accents).size, 3);
-    assert.equal(seriesMeta("school").title, "上學不容易");
+    assert.equal(seriesMeta("school").title, "School Isn't Easy");
     assert.equal(seriesIdForBook({ collectionTitle: "門羅-WhatIf" }), "munroe");
     assert.equal(seriesIdForBook({ id: "collection/kaixue", collectionTitle: "上學不容易" }), "school");
   });
@@ -122,8 +122,8 @@ describe("filterShelf", () => {
     const books = demoCatalog();
     assert.equal(filterShelf(books, { query: "munroe" }).length, 3);
     assert.equal(filterShelf(books, { query: "Part 09" }).map((b) => b.id).join(), "immune/immune");
-    assert.equal(filterShelf(books, { seriesId: "school", query: "功課" }).length, 1);
-    assert.equal(filterShelf(books, { seriesId: "immune", query: "開學" }).length, 0);
+    assert.equal(filterShelf(books, { seriesId: "school", query: "Homework" }).length, 1);
+    assert.equal(filterShelf(books, { seriesId: "immune", query: "First Day" }).length, 0);
     assert.match(emptyShelfMessage("zzz"), /No books match/);
     assert.match(shelfStatusLabel(2, "immune", "all"), /2 matches/);
   });
@@ -145,7 +145,7 @@ describe("preview progress", () => {
   it("reads the same progress key as the player", () => {
     const book = demoCatalog().find((b) => b.id === "immune/immune");
     const store = memoryStore();
-    assert.equal(previewProgress(book, store).line, "尚未開始");
+    assert.equal(previewProgress(book, store).line, "Not started");
     saveProgress(book.id, book.chapters[2].id, 12, 120, store);
     assert.match(previewProgress(book, store).line, /Part 03/);
     saveTextProgress(book.id, { kind: "epub-cfi", locator: "/6/4", fraction: 0.4, label: "Ch 2" }, store);

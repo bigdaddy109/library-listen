@@ -1,4 +1,5 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=51";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=53";
+import { SLEEP_CHAPTER, nearestSleepMinute, nextSleepChoice } from "./sleep.js?v=53";
 import {
   AUDIO_EXT,
   EPUB_EXT,
@@ -12,13 +13,14 @@ import {
   buildLibrary,
   emptyLibraryMessage,
   isBookPlayable,
+  isImmuneBook,
   mergeLibraryScans,
   latestProgressKind,
   loadProgress,
   chapterProgress,
   saveProgress,
   shelfBadge,
-} from "./library.js?v=51";
+} from "./library.js?v=53";
 import {
   DRIVE_UNAUTHORIZED_MESSAGE,
   attachDriveMedia,
@@ -47,7 +49,7 @@ import {
   signOutGoogle,
   sourceDialogActions,
   tokenForChapterFetch,
-} from "./drive.js?v=51";
+} from "./drive.js?v=53";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -55,7 +57,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=51";
+} from "./search.js?v=53";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -70,17 +72,17 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=51";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=51";
-import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=51";
-import { coverSvg } from "./shelf/covers.js?v=51";
-import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=51";
+} from "./markers.js?v=53";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=53";
+import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=53";
+import { coverSvg } from "./shelf/covers.js?v=53";
+import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=53";
 import {
   closeRiceBook,
   initRiceShelf,
   isRiceShelfPage,
   setRiceShelfLibrary,
-} from "./shelf/shelf.js?v=51";
+} from "./shelf/shelf.js?v=53";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -89,8 +91,6 @@ const RATES = [1, 1.25, 1.5];
 const LIBRARY_KEY = "librarylisten.library.v1";
 const DB_NAME = "library-listen";
 const COVER_KEY = "__cover__";
-const SLEEP_MINUTES = [0, 15, 30, 45, 60];
-
 /** @type {{ books: any[], activeBookId: string|null, sort: string, query: string }} */
 const state = {
   books: [],
@@ -156,6 +156,8 @@ let savingBookId = null;
 /** @type {number | null} epoch ms when sleep timer should pause playback */
 let sleepUntil = null;
 let sleepTick = null;
+/** Stop at the end of the current chapter instead of a clock time. */
+let sleepAtChapterEnd = false;
 /** Offer Save-to-device banner after a fresh folder pick */
 let offerSaveBanner = false;
 /** bookIds already asked to save this session */
@@ -1317,6 +1319,22 @@ function resolvedBookPane(book, pane = state.bookPane) {
   return tabs[0] || "audio";
 }
 
+function cacheImmuneConcepts() {
+  const urls = IMMUNE_CARDS.map(
+    (card) => new URL(`./concepts/immune/${card.file}`, import.meta.url).href
+  );
+  const post = (worker) => {
+    try {
+      worker?.postMessage({ type: "librarylisten.cache-concepts", urls });
+    } catch {
+      /* service worker not ready */
+    }
+  };
+  if (!navigator.serviceWorker) return;
+  if (navigator.serviceWorker.controller) post(navigator.serviceWorker.controller);
+  navigator.serviceWorker.ready.then((reg) => post(reg.active)).catch(() => {});
+}
+
 function openBook(bookId, { pane } = {}) {
   const book = findBook(bookId);
   if (state.activeBookId !== bookId) {
@@ -1325,6 +1343,7 @@ function openBook(bookId, { pane } = {}) {
     state.bookPane = resolvedBookPane(book, pane);
   }
   state.activeBookId = bookId;
+  if (isImmuneBook(book)) cacheImmuneConcepts();
   render();
 }
 
@@ -1795,16 +1814,22 @@ function maybeOfferSaveWhileListening(book) {
   }, 12000);
 }
 
-function clearSleepTimer() {
+function clearSleepClock() {
   sleepUntil = null;
   if (sleepTick) {
     window.clearInterval(sleepTick);
     sleepTick = null;
   }
+}
+
+function clearSleepTimer() {
+  sleepAtChapterEnd = false;
+  clearSleepClock();
   updateSleepButton();
 }
 
 function remainingSleepLabel() {
+  if (sleepAtChapterEnd) return "End of chapter";
   if (!sleepUntil) return "Sleep";
   const left = Math.max(0, sleepUntil - Date.now());
   const mins = Math.ceil(left / 60000);
@@ -1816,25 +1841,53 @@ function updateSleepButton() {
   const btn = document.getElementById("btn-sleep");
   if (!btn) return;
   const label = remainingSleepLabel();
+  const on = sleepAtChapterEnd || !!sleepUntil;
   btn.textContent = label;
-  btn.classList.toggle("is-on", !!sleepUntil);
+  btn.classList.toggle("is-on", on);
   btn.setAttribute(
     "aria-label",
-    sleepUntil ? `Sleep timer ${label} left` : "Sleep timer off"
+    sleepAtChapterEnd ? "Stop at the end of this chapter" : sleepUntil ? `Sleep timer ${label} left` : "Sleep timer off"
   );
+}
+
+function pauseForSleep(message) {
+  clearSleepTimer();
+  audio.pause();
+  persistCurrent();
+  showToast(message);
+  updatePlayerBar();
+}
+
+function finishChapterSleep() {
+  const book = playback ? findBook(playback.bookId) : null;
+  const index = playback?.chapterIndex ?? 0;
+  const chapter = book?.chapters?.[index];
+  const following = book?.chapters?.[index + 1];
+  sleepAtChapterEnd = false;
+  if (chapter && following && isAudiobook(book)) {
+    const boundary = Number.isFinite(chapter.end) ? chapter.end : chapterStart(following);
+    const hold = Math.max(chapterStart(chapter), boundary - 0.05);
+    if ((audio.currentTime || 0) > hold) applyPlaybackPosition(hold);
+  }
+  audio.pause();
+  persistCurrent();
+  updateSleepButton();
+  showToast("Stopped at the end of this chapter");
+  updatePlayerBar();
 }
 
 function cycleSleepTimer() {
   const remaining = sleepUntil ? Math.ceil((sleepUntil - Date.now()) / 60000) : 0;
-  let nearest = 0;
-  for (let i = 0; i < SLEEP_MINUTES.length; i += 1) {
-    if (SLEEP_MINUTES[i] >= remaining) {
-      nearest = i;
-      break;
-    }
-    nearest = i;
+  const current = sleepAtChapterEnd ? SLEEP_CHAPTER : nearestSleepMinute(remaining);
+  const next = nextSleepChoice(current);
+  if (next === SLEEP_CHAPTER) {
+    clearSleepClock();
+    sleepAtChapterEnd = true;
+    updateSleepButton();
+    showToast("Stops at the end of this chapter");
+    return;
   }
-  const next = SLEEP_MINUTES[(nearest + 1) % SLEEP_MINUTES.length];
+  sleepAtChapterEnd = false;
   if (!next) {
     clearSleepTimer();
     showToast("Sleep timer off");
@@ -1845,11 +1898,7 @@ function cycleSleepTimer() {
   sleepTick = window.setInterval(() => {
     if (!sleepUntil) return;
     if (Date.now() >= sleepUntil) {
-      clearSleepTimer();
-      audio.pause();
-      persistCurrent();
-      showToast("Sleep timer — paused");
-      updatePlayerBar();
+      pauseForSleep("Sleep timer — paused");
       return;
     }
     updateSleepButton();
@@ -1884,6 +1933,10 @@ function syncChapterFromTime({ toast = false } = {}) {
   if (!isAudiobook(book)) return;
   const next = chapterIndexAtTime(book.chapters, audio.currentTime || 0);
   if (next < 0 || next === playback.chapterIndex) return;
+  if (sleepAtChapterEnd && next > playback.chapterIndex) {
+    finishChapterSleep();
+    return;
+  }
   const crossedForward = next > playback.chapterIndex;
   playback = { bookId: playback.bookId, chapterIndex: next };
   persistCurrent();
@@ -1995,10 +2048,10 @@ function setupCapabilityHint() {
 
   if (isGoogleClientConfigured()) {
     els.capabilityHint.textContent =
-      "用 Google 登入 loads the shared Drive Library. Use a local folder instead if you already have a copy.";
+      "Sign in with Google loads the shared Drive Library. Use a local folder instead if you already have a copy.";
   } else if (typeof window.showDirectoryPicker === "function") {
     els.capabilityHint.textContent =
-      "Choose Library folder, then pick Library or a collection (門羅-WhatIf / Immune). On iPhone/iPad, pick the folder in Files after Download Now.";
+      "Choose Library folder, then pick Library or a collection (Munroe / Immune). On iPhone/iPad, pick the folder in Files after Download Now.";
   } else {
     els.capabilityHint.textContent =
       "Choose Library folder to select a folder (works in Files on iPhone/iPad and desktop). Or use Choose audio files to pick files one by one.";
@@ -2255,10 +2308,7 @@ function bind() {
     syncChapterFromTime({ toast: true });
     updatePlayerBar();
     if (sleepUntil && Date.now() >= sleepUntil) {
-      clearSleepTimer();
-      audio.pause();
-      persistCurrent();
-      showToast("Sleep timer — paused");
+      pauseForSleep("Sleep timer — paused");
       return;
     }
     if (!audio.paused) {
@@ -2290,6 +2340,10 @@ function bind() {
     if (!playback) return;
     const book = findBook(playback.bookId);
     if (!book) return;
+    if (sleepAtChapterEnd) {
+      finishChapterSleep();
+      return;
+    }
     const next = playback.chapterIndex + 1;
     if (next < book.chapters.length) {
       const nextChapter = book.chapters[next];
@@ -2462,7 +2516,7 @@ async function restoreSession() {
   if (showRestoredBooks(restored)) return;
   if (restored.length && els.capabilityHint) {
     els.capabilityHint.textContent = libraryUsesDrive()
-      ? "用 Google 登入 again to keep listening. Your progress is still here."
+      ? "Sign in with Google again to keep listening. Your progress is still here."
       : "Pick the Library folder again to keep listening. Your progress is still here.";
   }
 }

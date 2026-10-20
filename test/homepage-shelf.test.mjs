@@ -13,10 +13,10 @@ const sw = readFileSync(join(ROOT, "docs/sw.js"), "utf8");
 describe("homepage is the rice-paper shelf", () => {
   it("puts 書架 / 封面牆 and search-first on the root page", () => {
     assert.match(home, /class="shell-shelf"/);
-    assert.match(home, />書架</);
+    assert.match(home, />Shelf</);
     assert.match(home, /data-view="spines"/);
     assert.match(home, /data-view="covers"/);
-    assert.match(home, /封面牆/);
+    assert.match(home, /Cover wall/);
     assert.doesNotMatch(home, /data-view="topics"/);
     assert.doesNotMatch(home, /主題卡片/);
     assert.match(home, /id="series-chips"/);
@@ -29,7 +29,7 @@ describe("homepage is the rice-paper shelf", () => {
 
   it("keeps Drive sign-in, source sheet, player, and Immune Concepts (no Read/ebook UI)", () => {
     assert.match(home, /id="btn-google"/);
-    assert.match(home, /用 Google 登入/);
+    assert.match(home, /Sign in with Google/);
     assert.match(home, /id="btn-pick-main"/);
     assert.match(home, /Use a local folder instead/);
     assert.match(home, /id="source-sheet"/);
