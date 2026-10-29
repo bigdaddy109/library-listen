@@ -9,6 +9,7 @@ import {
   freshAccessToken,
   planDrivePlaybackAuthRetry,
   setAccessToken,
+  setDriveTokenAppliedListener,
   signInWithGoogle,
   tokenForChapterFetch,
   tokenForRead,
@@ -175,6 +176,65 @@ describe("Drive token expiry during listen", { concurrency: false }, () => {
       planDrivePlaybackAuthRetry(null, { bookId: "b", chapterIndex: 0, position: 0 }).position,
       0
     );
+  });
+
+  it("keeps a token when popup_failed_to_open fires and sign-in still succeeds", async () => {
+    clearAccessToken();
+    let applied = 0;
+    setDriveTokenAppliedListener(() => {
+      applied += 1;
+    });
+    globalThis.google = {
+      accounts: {
+        oauth2: {
+          initTokenClient(opts) {
+            return {
+              requestAccessToken() {
+                opts.error_callback?.({
+                  type: "popup_failed_to_open",
+                  message: "Failed to open popup window",
+                });
+                setTimeout(() => {
+                  opts.callback?.({ access_token: "recovered", expires_in: 3600 });
+                }, 20);
+              },
+            };
+          },
+        },
+      },
+    };
+    try {
+      const token = await signInWithGoogle();
+      assert.equal(token, "recovered");
+      assert.equal(freshAccessToken(), "recovered");
+      assert.equal(applied, 1);
+    } finally {
+      setDriveTokenAppliedListener(null);
+    }
+  });
+
+  it("rejects popup_failed_to_open when no token follows", async () => {
+    clearAccessToken();
+    globalThis.google = {
+      accounts: {
+        oauth2: {
+          initTokenClient(opts) {
+            return {
+              requestAccessToken() {
+                opts.error_callback?.({
+                  type: "popup_failed_to_open",
+                  message: "Failed to open popup window",
+                });
+              },
+            };
+          },
+        },
+      },
+    };
+    await assert.rejects(signInWithGoogle(), (err) => {
+      assert.match(String(err?.message || ""), /Failed to open popup window/);
+      return true;
+    });
   });
 
   it("shows Drive failures inline and replays a 401 at the saved position", () => {

@@ -1,5 +1,5 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=56";
-import { SLEEP_CHAPTER, nearestSleepMinute, nextSleepChoice } from "./sleep.js?v=56";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=57";
+import { SLEEP_CHAPTER, nearestSleepMinute, nextSleepChoice } from "./sleep.js?v=57";
 import {
   bookHasAudio,
   bookScreenTabs,
@@ -22,7 +22,7 @@ import {
   chapterProgress,
   saveProgress,
   shelfBadge,
-} from "./library.js?v=56";
+} from "./library.js?v=57";
 import {
   DRIVE_MEDIA_ERROR_MESSAGE,
   DRIVE_UNAUTHORIZED_MESSAGE,
@@ -34,8 +34,10 @@ import {
   fetchDriveUser,
   formatDriveWalkErrors,
   finishDrivePlaybackAuthRetry,
+  driveChromeAfterSignIn,
   freshAccessToken,
   getAccessToken,
+  isPopupWindowFailure,
   hydrateDriveCovers,
   isDriveFile,
   isDriveMediaPath,
@@ -50,11 +52,12 @@ import {
   refreshGoogleToken,
   restoreDriveFile,
   saveDriveSession,
+  setDriveTokenAppliedListener,
   signInWithGoogle,
   signOutGoogle,
   sourceDialogActions,
   tokenForChapterFetch,
-} from "./drive.js?v=56";
+} from "./drive.js?v=57";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -62,7 +65,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=56";
+} from "./search.js?v=57";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -72,22 +75,23 @@ import {
   isAudiobook,
   liveChapterDuration,
   offlineChapterBlob,
+  playbackDisplayClock,
   resolvedChapterDuration,
   restoreChapterFields,
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=56";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=56";
-import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=56";
-import { coverSvg } from "./shelf/covers.js?v=56";
-import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=56";
+} from "./markers.js?v=57";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=57";
+import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=57";
+import { coverSvg } from "./shelf/covers.js?v=57";
+import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=57";
 import {
   closeRiceBook,
   initRiceShelf,
   isRiceShelfPage,
   setRiceShelfLibrary,
-} from "./shelf/shelf.js?v=56";
+} from "./shelf/shelf.js?v=57";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -136,6 +140,9 @@ let playback = null;
 let seekDragging = false;
 let playToken = 0;
 let ignoreSeekInput = 0;
+/** Last finite file duration from audio metadata. A later 0 does not freeze the total. */
+let heldFileDuration = 0;
+let clockFrame = 0;
 let detachChapterMeta = null;
 /** @type {{ token: number, resumeAt: number, until: number } | null} */
 let resumeGuard = null;
@@ -577,16 +584,42 @@ function clearPlayerDriveError() {
   els.playerBar?.classList.remove("has-drive-error");
 }
 
+function readDriveChrome() {
+  const playerEl = document.getElementById("player-drive-error");
+  return {
+    statusText: els.driveStatus?.textContent || "",
+    statusIsError: !!els.driveStatus?.classList.contains("drive-error"),
+    playerText: playerEl?.textContent || "",
+    playerIsError: !!els.playerBar?.classList.contains("has-drive-error"),
+  };
+}
+
+function writeDriveChrome(chrome) {
+  const el = els.driveStatus;
+  if (el) {
+    el.textContent = chrome.statusText || "";
+    el.classList.toggle("drive-error", !!chrome.statusIsError && !!chrome.statusText);
+  }
+  const playerEl = document.getElementById("player-drive-error");
+  if (playerEl) playerEl.textContent = chrome.playerText || "";
+  els.playerBar?.classList.toggle("has-drive-error", !!chrome.playerIsError && !!chrome.playerText);
+}
+
+/** Drop "Failed to open popup window" from the status line and the player bar. */
+function clearStalePopupError() {
+  const next = driveChromeAfterSignIn(readDriveChrome(), { signedIn: true });
+  writeDriveChrome(next);
+  if (!next.statusText) updateDriveStatus();
+}
+
 function clearDriveError() {
   const el = els.driveStatus;
-  const hadStatus = !!el?.classList.contains("drive-error");
-  if (hadStatus && el) {
+  if (el) {
     el.classList.remove("drive-error");
     el.textContent = "";
   }
-  const hadPlayer = !!els.playerBar?.classList.contains("has-drive-error");
   clearPlayerDriveError();
-  if (hadStatus || hadPlayer) updateDriveStatus();
+  updateDriveStatus();
 }
 
 function showPlaybackFailure(line) {
@@ -608,6 +641,10 @@ function showPlaybackFailure(line) {
 function showDriveError(err) {
   const classified = classifyDriveError(err);
   if (classified.kind === "abort" || classified.kind === "coop" || classified.silent) {
+    return classified;
+  }
+  if (isPopupWindowFailure(err) && freshAccessToken()) {
+    clearStalePopupError();
     return classified;
   }
   const text = classified.message;
@@ -1427,15 +1464,52 @@ function currentChapter() {
 
 function displayClock() {
   const ctx = currentChapter();
-  const filePos = audio.currentTime || 0;
-  const fileDur = Number.isFinite(audio.duration) ? audio.duration : null;
-  if (!ctx) {
-    return { pos: filePos, dur: fileDur || 0 };
+  const metaReady = (audio.readyState || 0) >= 1;
+  const reported = metaReady && Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0;
+  const clock = playbackDisplayClock({
+    currentTime: Number.isFinite(audio.currentTime) ? audio.currentTime : 0,
+    mediaDuration: reported,
+    heldDuration: heldFileDuration,
+    chapter: ctx?.chapter || null,
+  });
+  if (clock.heldDuration > 0) heldFileDuration = clock.heldDuration;
+  return clock;
+}
+
+function paintPlaybackClock() {
+  if (!playback) return;
+  const { pos, dur } = displayClock();
+  const posText = formatClock(pos);
+  const durText = formatClock(dur);
+  const posEl = document.getElementById("player-pos");
+  const durEl = document.getElementById("player-dur");
+  const posChanged = !posEl || posEl.textContent !== posText;
+  const durChanged = !durEl || durEl.textContent !== durText;
+  if (posEl) posEl.textContent = posText;
+  if (durEl) durEl.textContent = durText;
+  if (!seekDragging && (posChanged || durChanged)) {
+    writeSeekBar(pos, dur);
+    updatePositionState();
   }
-  return {
-    pos: chapterRelativePosition(ctx.chapter, filePos),
-    dur: liveChapterDuration(ctx.chapter, fileDur) || 0,
+}
+
+function stopPlaybackClock() {
+  if (!clockFrame) return;
+  cancelAnimationFrame(clockFrame);
+  clockFrame = 0;
+}
+
+function startPlaybackClock() {
+  if (clockFrame || !playback || audio.paused || audio.ended) return;
+  const tick = () => {
+    paintPlaybackClock();
+    if (!playback || audio.paused || audio.ended) {
+      clockFrame = 0;
+      return;
+    }
+    clockFrame = requestAnimationFrame(tick);
   };
+  clockFrame = requestAnimationFrame(tick);
 }
 
 function updatePositionState() {
@@ -1585,11 +1659,14 @@ async function playChapter(
 
   const alreadyLoaded = audio.src === chapter.url && audio.readyState >= 1;
   if (!alreadyLoaded) {
+    heldFileDuration = 0;
     // Listener before src so a cached file cannot miss loadedmetadata.
     const onMeta = () => {
       detach();
+      if (Number.isFinite(audio.duration) && audio.duration > 0) heldFileDuration = audio.duration;
       applyPosition();
       maybeFixResumeSnap();
+      updatePlayerBar();
     };
     const detach = () => {
       audio.removeEventListener("loadedmetadata", onMeta);
@@ -1632,6 +1709,7 @@ async function playChapter(
   els.playerBar.classList.remove("hidden");
   updatePlayerBar();
   updateMediaSession();
+  startPlaybackClock();
   if (state.activeBookId === bookId) renderBook();
   maybeOfferSaveWhileListening(book);
 }
@@ -1771,12 +1849,13 @@ function persistCurrent() {
   const book = findBook(playback.bookId);
   const chapter = book?.chapters[playback.chapterIndex];
   if (!chapter) return;
-  const fileDur = Number.isFinite(audio.duration) ? audio.duration : null;
+  const reported =
+    Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : heldFileDuration;
   saveProgress(
     book.id,
     chapter.id,
     audio.currentTime || 0,
-    liveChapterDuration(chapter, fileDur)
+    liveChapterDuration(chapter, reported > 0 ? reported : null)
   );
   updateChapterTimes();
 }
@@ -1817,14 +1896,13 @@ function updateChapterTimes() {
 
 function writeSeekBar(pos, dur) {
   const seek = document.getElementById("player-seek");
+  if (!seek) return;
+  const max = dur > 0 ? String(Math.round(dur * 1000)) : "1000";
+  const value = dur > 0 ? String(Math.round(pos * 1000)) : "0";
+  if (seek.max === max && seek.value === value) return;
   ignoreSeekInput += 1;
-  if (dur > 0) {
-    seek.max = String(Math.round(dur * 1000));
-    seek.value = String(Math.round(pos * 1000));
-  } else {
-    seek.max = "1000";
-    seek.value = "0";
-  }
+  seek.max = max;
+  seek.value = value;
   ignoreSeekInput -= 1;
 }
 
@@ -1845,10 +1923,8 @@ function updatePlayerBar() {
   playBtn.classList.toggle("is-paused", audio.paused);
   playBtn.setAttribute("aria-label", audio.paused ? "Play" : "Pause");
 
-  const { pos, dur } = displayClock();
-  document.getElementById("player-pos").textContent = formatClock(pos);
-  document.getElementById("player-dur").textContent = formatClock(dur);
-  if (!seekDragging) writeSeekBar(pos, dur);
+  paintPlaybackClock();
+  const { pos } = displayClock();
 
   const atStart = pos <= 3;
   document.getElementById("btn-prev").disabled = playback.chapterIndex <= 0 && atStart;
@@ -2112,6 +2188,7 @@ function bind() {
     }
   });
   audio.addEventListener("pause", () => {
+    stopPlaybackClock();
     persistCurrent();
     updatePlayerBar();
     updateMediaSession();
@@ -2120,8 +2197,16 @@ function bind() {
     applyPlaybackRate();
     updatePlayerBar();
     updateMediaSession();
+    startPlaybackClock();
   });
-  audio.addEventListener("durationchange", updatePlayerBar);
+  audio.addEventListener("loadedmetadata", () => {
+    if (Number.isFinite(audio.duration) && audio.duration > 0) heldFileDuration = audio.duration;
+    updatePlayerBar();
+  });
+  audio.addEventListener("durationchange", () => {
+    if (Number.isFinite(audio.duration) && audio.duration > 0) heldFileDuration = audio.duration;
+    updatePlayerBar();
+  });
   audio.addEventListener("error", () => {
     const src = audio.currentSrc || audio.src || "";
     if (!isDriveMediaPath(src)) return;
@@ -2137,6 +2222,7 @@ function bind() {
     if (http === 401) recoverDrivePlaybackAuth();
   });
   audio.addEventListener("ended", () => {
+    stopPlaybackClock();
     persistCurrent();
     if (!playback) return;
     const book = findBook(playback.bookId);
@@ -2363,6 +2449,10 @@ function consumeOpenIntent() {
   if (!bookId || !findBook(bookId)) return;
   openBook(bookId, { pane: "audio" });
 }
+
+setDriveTokenAppliedListener(() => {
+  clearStalePopupError();
+});
 
 setupCapabilityHint();
 const versionEl = document.getElementById("app-version");
