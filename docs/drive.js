@@ -515,6 +515,24 @@ export function isLibraryMediaName(name) {
   return AUDIO_EXT.has(ext) || COVER_EXT.has(ext) || EPUB_EXT.has(ext);
 }
 
+/**
+ * Descend into this Drive child. Flat listen/*.mp3 (Immune) are files.
+ * Nested listen/<book>/ rows are folders — including a folder row that arrived
+ * without the folder mime, and a shortcut to a folder. A media file is never a folder.
+ */
+export function shouldWalkDriveItem(item) {
+  if (!item?.name || shouldSkipDriveName(item.name)) return false;
+  const mime = String(item.mimeType || "");
+  if (mime === DRIVE_FOLDER_MIME) return true;
+  if (mime === DRIVE_SHORTCUT_MIME) {
+    const target = String(item.shortcutDetails?.targetMimeType || "");
+    if (target === DRIVE_FOLDER_MIME) return true;
+    if (target) return false;
+    return !isLibraryMediaName(item.name);
+  }
+  return !mime && !isLibraryMediaName(item.name);
+}
+
 function parentId(item) {
   return item?.parents?.[0] || null;
 }
@@ -810,7 +828,7 @@ export async function walkDriveFolder(
         continue;
       }
       const next = [...parts, item.name];
-      if (item.mimeType === DRIVE_FOLDER_MIME) {
+      if (shouldWalkDriveItem(item)) {
         try {
           await walk(item.id, next);
         } catch {

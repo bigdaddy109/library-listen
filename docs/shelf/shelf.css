@@ -293,6 +293,8 @@ h1 {
 
 .spine {
   position: relative;
+  text-decoration: none;
+  color: inherit;
   flex: 0 0 auto;
   width: var(--w);
   height: var(--h);
@@ -468,6 +470,7 @@ h1 {
 
 .cover-card {
   display: block;
+  text-decoration: none;
   width: 100%;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.46);

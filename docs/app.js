@@ -1,5 +1,5 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=53";
-import { SLEEP_CHAPTER, nearestSleepMinute, nextSleepChoice } from "./sleep.js?v=53";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=54";
+import { SLEEP_CHAPTER, nearestSleepMinute, nextSleepChoice } from "./sleep.js?v=54";
 import {
   AUDIO_EXT,
   EPUB_EXT,
@@ -7,6 +7,8 @@ import {
   bookHasAudio,
   bookScreenTabs,
   libraryReadUrl,
+  listenShelfBooks,
+  READ_THIS_BOOK_LABEL,
   extOf,
   bookHasDriveMedia,
   booksFromLibrarySnapshot,
@@ -20,7 +22,7 @@ import {
   chapterProgress,
   saveProgress,
   shelfBadge,
-} from "./library.js?v=53";
+} from "./library.js?v=54";
 import {
   DRIVE_UNAUTHORIZED_MESSAGE,
   attachDriveMedia,
@@ -49,7 +51,7 @@ import {
   signOutGoogle,
   sourceDialogActions,
   tokenForChapterFetch,
-} from "./drive.js?v=53";
+} from "./drive.js?v=54";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -57,7 +59,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=53";
+} from "./search.js?v=54";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -72,17 +74,17 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=53";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=53";
-import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=53";
-import { coverSvg } from "./shelf/covers.js?v=53";
-import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=53";
+} from "./markers.js?v=54";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=54";
+import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=54";
+import { coverSvg } from "./shelf/covers.js?v=54";
+import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=54";
 import {
   closeRiceBook,
   initRiceShelf,
   isRiceShelfPage,
   setRiceShelfLibrary,
-} from "./shelf/shelf.js?v=53";
+} from "./shelf/shelf.js?v=54";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -995,7 +997,7 @@ async function loadLibrary(mode) {
 }
 
 function sortedBooks() {
-  const books = [...filterBooks(state.books, state.query)];
+  const books = [...filterBooks(listenShelfBooks(state.books), state.query)];
   const progress = loadProgress();
   if (state.sort === "title") {
     return books.sort((a, b) => a.title.localeCompare(b.title));
@@ -1267,15 +1269,17 @@ function renderShelf() {
 }
 
 function bookCard(book) {
-  const btn = document.createElement("button");
-  btn.type = "button";
+  const href = bookHasAudio(book) ? "" : book.readUrl || libraryReadUrl(book) || "";
+  const btn = document.createElement(href ? "a" : "button");
+  if (href) btn.href = href;
+  else btn.type = "button";
   btn.className = "book-card";
   const cover = document.createElement("div");
   cover.className = "cover";
   setCover(cover, book);
   const body = document.createElement("div");
   const { line, fraction } = progressLine(book);
-  const badge = shelfBadge(book);
+  const badge = href ? book.readLabel || READ_THIS_BOOK_LABEL : shelfBadge(book);
   body.innerHTML = `
     <p class="title-row"><span class="title"></span><span class="shelf-badge"></span></p>
     <p class="meta"></p>
@@ -1293,7 +1297,7 @@ function bookCard(book) {
   if (isBookOffline(book)) meta += " · on device";
   else if (hasAudio && !isBookPlayable(book)) meta += " · reconnect to play";
   body.querySelector(".meta").textContent = meta;
-  btn.classList.toggle("unavailable", !isBookOpenable(book));
+  btn.classList.toggle("unavailable", !href && !isBookOpenable(book));
   body.querySelector(".progress").textContent = line;
   const bar = body.querySelector(".progress-track > span");
   if (fraction == null) {
@@ -1308,7 +1312,7 @@ function bookCard(book) {
     hitsEl.classList.remove("hidden");
   }
   btn.append(cover, body);
-  btn.addEventListener("click", () => openBook(book.id));
+  if (!href) btn.addEventListener("click", () => openBook(book.id));
   return btn;
 }
 
