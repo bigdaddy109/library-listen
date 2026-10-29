@@ -16,7 +16,6 @@ import {
   walkDriveFolder,
 } from "../docs/drive.js";
 import {
-  READ_THIS_BOOK_LABEL,
   buildLibrary,
   isBookPlayable,
   listenShelfBooks,
@@ -139,8 +138,8 @@ function assertRealLayout({ entries, books, shelf }) {
   assert.ok(immune);
   assert.equal(immune.chapters.length, 2);
   assert.equal(isBookPlayable(immune), true);
-  assert.match(immune.chapters[0].url, /\/drive-media\/p1$/);
-  assert.match(immune.chapters[1].url, /\/drive-media\/p2$/);
+  assert.match(immune.chapters[0].url, /\/drive-media\/p1(?:\/|$)/);
+  assert.match(immune.chapters[1].url, /\/drive-media\/p2(?:\/|$)/);
 
   const matched = matchKnownCollection("上學不容易-Middle-School");
   assert.equal(matched?.folder, "上學不容易");
@@ -167,22 +166,18 @@ function assertRealLayout({ entries, books, shelf }) {
   const whatIf = books.find((b) => b.id === "munroe/what-if-1");
   assert.equal(howTo?.title, "How To");
   assert.equal(isBookPlayable(howTo), true);
-  assert.match(howTo.chapters[0].url, /\/drive-media\/hta$/);
+  assert.match(howTo.chapters[0].url, /\/drive-media\/hta(?:\/|$)/);
   assert.equal(whatIf?.title, "What If?");
   assert.equal(isBookPlayable(whatIf), true);
-  assert.match(whatIf.chapters[0].url, /\/drive-media\/wia$/);
+  assert.match(whatIf.chapters[0].url, /\/drive-media\/wia(?:\/|$)/);
 
-  const read = shelf.find((b) => b.collectionFolder === "Thing Explainer");
-  assert.ok(read);
-  assert.equal(read.chapters.length, 0);
-  assert.equal(isBookPlayable(read), false);
-  assert.equal(read.readLabel, READ_THIS_BOOK_LABEL);
-  assert.equal(read.readLabel, "讀這本");
-  assert.match(read.readUrl, /^https:\/\/bigdaddy109\.github\.io\/library-read\/\?/);
-  assert.match(read.readUrl, /series=Thing%20Explainer/);
-  assert.match(read.readUrl, /book=Thing%20Explainer/);
+  const explained = books.find((b) => b.collectionFolder === "Thing Explainer");
+  assert.ok(explained);
+  assert.equal(explained.chapters.length, 0);
+  assert.equal(shelf.some((b) => b.collectionFolder === "Thing Explainer"), false);
+  assert.equal(shelf.some((b) => b.readUrl || b.readLabel), false);
   assert.equal(
-    shelf.some((b) => !b.chapters?.length && !b.readUrl),
+    shelf.some((b) => !b.chapters?.length),
     false
   );
   assert.equal(
@@ -220,20 +215,19 @@ describe("real Drive layout: nested listen folders and the Middle-School series 
     assertRealLayout(await playedBooks({ labelBookFolders: false }));
   });
 
-  it("hides a book with no audio and no EPUB, and routes an EPUB to Library Read", () => {
+  it("hides a book with no audio, including an EPUB", () => {
     assert.deepEqual(listenShelfBooks([{ id: "x", title: "Silent", chapters: [], ebook: null }]), []);
-    const shelf = listenShelfBooks([
-      {
-        id: "thing-explainer/thing-explainer",
-        collectionFolder: "Thing Explainer",
-        chapters: [],
-        ebook: { name: "Thing Explainer.epub" },
-      },
-    ]);
-    assert.equal(shelf.length, 1);
-    assert.equal(shelf[0].readLabel, "讀這本");
-    assert.match(shelf[0].readUrl, /library-read/);
-    assert.equal(isBookPlayable(shelf[0]), false);
+    assert.deepEqual(
+      listenShelfBooks([
+        {
+          id: "thing-explainer/thing-explainer",
+          collectionFolder: "Thing Explainer",
+          chapters: [],
+          ebook: { name: "Thing Explainer.epub" },
+        },
+      ]),
+      []
+    );
   });
 });
 

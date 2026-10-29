@@ -1,5 +1,5 @@
 /* Shell-only cache. Audiobook files are never cached here. */
-const CACHE = "library-listen-shell-v54";
+const CACHE = "library-listen-shell-v55";
 const CACHE_CONCEPTS_MESSAGE = "librarylisten.cache-concepts";
 const DRIVE_MEDIA_PREFIX = "/drive-media/";
 const DRIVE_TOKEN_MESSAGE = "librarylisten.drive-token";
@@ -32,26 +32,26 @@ self.addEventListener("message", (event) => {
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=54",
-  "./app.js?v=54",
-  "./library.js?v=54",
-  "./drive.js?v=54",
-  "./search.js?v=54",
-  "./markers.js?v=54",
-  "./save-prompt.js?v=54",
-  "./media-session.js?v=54",
-  "./sleep.js?v=54",
-  "./immune-cards.js?v=54",
+  "./styles.css?v=55",
+  "./app.js?v=55",
+  "./library.js?v=55",
+  "./drive.js?v=55",
+  "./search.js?v=55",
+  "./markers.js?v=55",
+  "./save-prompt.js?v=55",
+  "./media-session.js?v=55",
+  "./sleep.js?v=55",
+  "./immune-cards.js?v=55",
   "./manifest.webmanifest",
-  "./icon.svg?v=54",
-  "./apple-touch-icon.png?v=54",
+  "./icon.svg?v=55",
+  "./apple-touch-icon.png?v=55",
   "./og-image.png",
   "./classic/index.html",
   "./shelf/index.html",
-  "./shelf/shelf.css?v=54",
-  "./shelf/shelf.js?v=54",
-  "./shelf/catalog.js?v=54",
-  "./shelf/covers.js?v=54",
+  "./shelf/shelf.css?v=55",
+  "./shelf/shelf.js?v=55",
+  "./shelf/catalog.js?v=55",
+  "./shelf/covers.js?v=55",
 ];
 
 self.addEventListener("install", (event) => {
@@ -83,6 +83,31 @@ function driveFileIdFromPath(pathname) {
   }
 }
 
+function driveMediaNameFromPath(pathname) {
+  const at = String(pathname || "").lastIndexOf(DRIVE_MEDIA_PREFIX);
+  if (at < 0) return "";
+  const parts = String(pathname).slice(at + DRIVE_MEDIA_PREFIX.length).split("/").filter(Boolean);
+  if (parts.length < 2) return "";
+  const raw = parts.slice(1).join("/");
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+/** Keep in lockstep with rewriteDriveAudioContentType in docs/drive.js. */
+function rewriteDriveAudioContentType(name, contentType) {
+  const baseName = String(name || "");
+  const dot = baseName.lastIndexOf(".");
+  const ext = dot >= 0 ? baseName.slice(dot + 1).toLowerCase() : "";
+  if (ext === "m4a" || ext === "m4b" || ext === "aac") return "audio/mp4";
+  if (ext) return contentType || "";
+  const base = String(contentType || "").split(";")[0].trim().toLowerCase();
+  if (base === "video/mp4") return "audio/mp4";
+  return contentType || "";
+}
+
 async function proxyDriveMedia(request, url) {
   const fileId = driveFileIdFromPath(url.pathname);
   if (!fileId) return new Response("Missing Drive file", { status: 400 });
@@ -101,9 +126,15 @@ async function proxyDriveMedia(request, url) {
     }
   }
   const out = new Headers();
+  const mediaName = driveMediaNameFromPath(url.pathname);
   for (const name of ["content-type", "content-length", "content-range", "accept-ranges"]) {
     const value = res.headers.get(name);
-    if (value) out.set(name, value);
+    if (!value) continue;
+    if (name === "content-type") {
+      out.set(name, rewriteDriveAudioContentType(mediaName, value) || value);
+    } else {
+      out.set(name, value);
+    }
   }
   out.set("Cache-Control", "no-store");
   return new Response(res.body, {

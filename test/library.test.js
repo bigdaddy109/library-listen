@@ -1,11 +1,20 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   PROGRESS_KEY,
   KNOWN_COLLECTIONS,
   bookHasDriveMedia,
   booksFromLibrarySnapshot,
   buildLibrary,
+  LIBRARY_SNAPSHOT_KEY,
+  LIBRARY_SHELL_KEY,
+  applyShelfRestorePlan,
+  planShelfRestore,
+  readLibraryShell,
+  stampLibraryShell,
   chapterIsPlayable,
   emptyLibraryMessage,
   isBookPlayable,
@@ -25,8 +34,7 @@ import {
   saveTextProgress,
   shelfBadge,
   bookScreenTabs,
-  libraryReadUrl,
-  seriesFolderName,
+  listenShelfBooks,
   isImmuneBook,
   shouldSkipPath,
   textProgress,
@@ -298,11 +306,7 @@ describe("buildLibrary scan", () => {
     assert.equal(shelfBadge(whatIf2), "Audio");
     assert.equal(whatIf.collectionFolder, "門羅-WhatIf");
     assert.equal(immune.collectionFolder, "Immune");
-    assert.equal(
-      libraryReadUrl(whatIf, 1),
-      "https://bigdaddy109.github.io/library-read/?series=%E9%96%80%E7%BE%85-WhatIf&book=what-if-1&ch=2"
-    );
-    assert.equal(libraryReadUrl(whatIf2, 0), "");
+    assert.equal(listenShelfBooks(books).some((b) => b.id === whatIf.id), true);
   });
 
   it("adds a searchable ebook-only row and ignores PDF", () => {
@@ -313,7 +317,7 @@ describe("buildLibrary scan", () => {
     ]);
     assert.deepEqual(
       books.map((b) => [b.id, shelfBadge(b), b.chapters.length, b.ebook?.name]),
-      [["library/solo-title", "Read", 0, "solo-title.epub"]]
+      [["library/solo-title", "", 0, "solo-title.epub"]]
     );
     assert.equal(books[0].title, "Solo Title");
   });
@@ -413,41 +417,26 @@ describe("locateEbookPath + pairingKey", () => {
   });
 });
 
-describe("libraryReadUrl", () => {
-  it("uses the series folder and EPUB stem, with a 1-based chapter", () => {
-    const school = {
-      collectionId: "school",
-      ebook: { name: "Middle School 02 Get Me.epub" },
+describe("listen shelf stays off Library Read", () => {
+  it("keeps audio books and drops an EPUB that has no audio", () => {
+    const audio = { id: "immune/immune", chapters: [{ id: "a" }], ebook: { name: "Immune.epub" } };
+    const ebookOnly = {
+      id: "library/solo-title",
+      chapters: [],
+      ebook: { name: "solo-title.epub" },
     };
-    assert.equal(seriesFolderName(school), "上學不容易");
-    assert.equal(
-      libraryReadUrl(school, 0),
-      "https://bigdaddy109.github.io/library-read/?series=%E4%B8%8A%E5%AD%B8%E4%B8%8D%E5%AE%B9%E6%98%93&book=Middle%20School%2002%20Get%20Me&ch=1"
-    );
-  });
-
-  it("omits ch when nothing is playing and hides books without an EPUB", () => {
-    assert.equal(
-      libraryReadUrl({ collectionId: "immune", ebook: { id: "Immune.epub", name: "Immune.epub" } }, null),
-      "https://bigdaddy109.github.io/library-read/?series=Immune&book=Immune"
-    );
-    assert.equal(libraryReadUrl({ collectionFolder: "Immune", ebook: null }, 3), "");
-    assert.equal(libraryReadUrl({ collectionFolder: "Immune", ebook: { name: "notes.pdf" } }, 0), "");
-    assert.equal(libraryReadUrl({ collectionId: "thing-explainer", ebook: { name: "Thing Explainer.epub" } }), "");
-    assert.equal(
-      libraryReadUrl(
-        { collectionId: "thing-explainer", collectionFolder: "Thing Explainer", ebook: { name: "Thing Explainer.epub" } },
-        4
-      ),
-      "https://bigdaddy109.github.io/library-read/?series=Thing%20Explainer&book=Thing%20Explainer&ch=5"
-    );
+    assert.deepEqual(listenShelfBooks([audio, ebookOnly]).map((b) => b.id), ["immune/immune"]);
+    assert.equal(listenShelfBooks([ebookOnly]).length, 0);
+    const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../docs/library.js"), "utf8");
+    assert.doesNotMatch(src, /library-read/);
+    assert.doesNotMatch(src, /libraryReadUrl/);
   });
 });
 
 describe("shelfBadge", () => {
-  it("returns Audio for listen books; Read only for ebook-only leftovers", () => {
+  it("returns Audio for listen books and no Read badge for an EPUB without audio", () => {
     assert.equal(shelfBadge({ chapters: [{ id: "a" }], ebook: null }), "Audio");
-    assert.equal(shelfBadge({ chapters: [], ebook: { name: "solo.epub" } }), "Read");
+    assert.equal(shelfBadge({ chapters: [], ebook: { name: "solo.epub" } }), "");
     assert.equal(
       shelfBadge({ chapters: [{ id: "a" }], ebook: { id: "book.epub" } }),
       "Audio"
@@ -630,6 +619,71 @@ describe("progress", () => {
     assert.equal(isEbookSavedOffline(new Map([[EBOOK_OFFLINE_KEY, { size: 12 }]])), true);
     assert.equal(isEbookSavedOffline(new Map()), false);
     assert.equal(isEbookSavedOffline(null), false);
+  });
+});
+
+describe("shelf snapshot follows the shell version", () => {
+  function memoryStore(initial = {}) {
+    const data = { ...initial };
+    return {
+      getItem(key) {
+        return Object.prototype.hasOwnProperty.call(data, key) ? data[key] : null;
+      },
+      setItem(key, value) {
+        data[key] = String(value);
+      },
+      removeItem(key) {
+        delete data[key];
+      },
+    };
+  }
+
+  it("invalidates the snapshot on a shell change and forces a Drive rescan when a session exists", () => {
+    const store = memoryStore({
+      [LIBRARY_SNAPSHOT_KEY]: JSON.stringify([
+        { id: "immune/immune", title: "Immune", chapters: [{ id: "Immune-Part01.mp3", driveId: "p1" }] },
+      ]),
+    });
+    assert.equal(readLibraryShell(store), "");
+
+    const same = planShelfRestore({ savedShell: "55", currentShell: "55", hasDriveSession: true });
+    assert.equal(same.invalidateSnapshot, false);
+    assert.equal(same.forceDriveRescan, false);
+    assert.equal(same.useSnapshot, true);
+
+    const bumped = planShelfRestore({
+      savedShell: readLibraryShell(store),
+      currentShell: "55",
+      hasDriveSession: true,
+    });
+    assert.equal(bumped.invalidateSnapshot, true);
+    assert.equal(bumped.forceDriveRescan, true);
+    assert.equal(bumped.useSnapshot, false);
+    assert.equal(applyShelfRestorePlan(store, bumped), true);
+    assert.equal(store.getItem(LIBRARY_SNAPSHOT_KEY), null);
+
+    const noSession = planShelfRestore({ savedShell: "54", currentShell: "55", hasDriveSession: false });
+    assert.equal(noSession.invalidateSnapshot, true);
+    assert.equal(noSession.forceDriveRescan, false);
+    assert.equal(noSession.useSnapshot, false);
+
+    stampLibraryShell(store, "55");
+    assert.equal(readLibraryShell(store), "55");
+    const stamped = planShelfRestore({
+      savedShell: readLibraryShell(store),
+      currentShell: "55",
+      hasDriveSession: true,
+    });
+    assert.equal(stamped.invalidateSnapshot, false);
+    assert.equal(stamped.forceDriveRescan, false);
+    assert.equal(stamped.useSnapshot, true);
+
+    const app = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../docs/app.js"), "utf8");
+    assert.match(app, /planShelfRestore\(/);
+    assert.match(app, /applyShelfRestorePlan\(/);
+    assert.match(app, /plan\.forceDriveRescan/);
+    assert.match(app, /formatDriveWalkErrors\(result\.walkErrors\)/);
+    assert.match(app, /showLibraryStatus\(walkNote\)/);
   });
 });
 

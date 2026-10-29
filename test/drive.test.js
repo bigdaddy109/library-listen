@@ -26,7 +26,10 @@ import {
   DRIVE_LIST_PAGE_SIZE,
   driveListUrl,
   driveMediaPath,
+  driveMediaNameFromPath,
   driveMediaProxyOutHeaders,
+  formatDriveWalkErrors,
+  libraryFolderIsEmpty,
   driveProxyHeaders,
   findLibraryFolders,
   gisAuthFailure,
@@ -46,6 +49,7 @@ import {
   planDriveMediaProxy,
   proxyDriveMediaRequest,
   rankLibraryFolders,
+  rewriteDriveAudioContentType,
   resolveDriveItem,
   saveDriveSession,
   setAccessToken,
@@ -234,6 +238,11 @@ describe("Drive queries and media URLs", () => {
     assert.equal(isDriveMediaPath("/styles.css"), false);
     assert.equal(driveFileIdFromPath("/library-listen/drive-media/file%2F1"), "file/1");
     assert.equal(driveMediaPath("abc"), "./drive-media/abc");
+    assert.equal(driveMediaPath("abc", "What If 2.m4b"), "./drive-media/abc/What%20If%202.m4b");
+    assert.equal(
+      driveMediaNameFromPath("/library-listen/drive-media/abc/What%20If%202.m4b"),
+      "What If 2.m4b"
+    );
     assert.match(driveAltMediaUrl("abc"), /files\/abc\?alt=media/);
     assert.deepEqual(driveProxyHeaders({ Range: "bytes=0-99" }, "tok"), {
       Authorization: "Bearer tok",
@@ -275,6 +284,19 @@ describe("Drive folder ranking (Kerry / Daryl shared Library)", () => {
     );
     assert.equal(chooseSoleLibraryFolder(folders), null);
     assert.equal(uniqueDriveFolders(folders).length, 2);
+  });
+
+  it("prefers a non-empty Library folder over an empty one", () => {
+    const folders = rankLibraryFolders([
+      { id: "empty-owned", name: "Library", ownedByMe: true, hasChildren: false },
+      { id: "shared-books", name: "Library", ownedByMe: false, shared: true, hasChildren: true },
+    ]);
+    assert.deepEqual(
+      folders.map((folder) => folder.id),
+      ["shared-books", "empty-owned"]
+    );
+    assert.equal(libraryFolderIsEmpty(folders[1]), true);
+    assert.equal(chooseSoleLibraryFolder(folders)?.id, "shared-books");
   });
 });
 
@@ -361,9 +383,44 @@ describe("Drive walker feeds the existing library pairing", () => {
     assert.equal(immune.source, "drive");
     assert.equal(
       immune.chapters[0].url,
-      "https://bigdaddy109.github.io/library-listen/drive-media/p1"
+      "https://bigdaddy109.github.io/library-listen/drive-media/p1/Immune-Part01.mp3"
     );
     assert.equal(immune.ebook.driveId, "ie");
+  });
+
+  it("reports nested walk errors instead of only counting them", async () => {
+    const fetchImpl = async (url) => {
+      const u = new URL(url, "https://www.googleapis.com");
+      const q = u.searchParams.get("q") || "";
+      if (q.includes("'broken' in parents")) {
+        return {
+          ok: false,
+          status: 404,
+          statusText: "Not Found",
+          text: async () => JSON.stringify({ error: { message: "Folder not reachable" } }),
+        };
+      }
+      const files = q.includes("'lib' in parents")
+        ? [folder("broken", "what-if-2", ["lib"]), audio("p1", "Immune-Part01.mp3", ["lib"])]
+        : [];
+      const body = { files };
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify(body),
+        json: async () => body,
+      };
+    };
+    const result = await walkDriveFolder("lib", "tok", { prefix: ["Library"], fetchImpl });
+    assert.ok(result.skipped >= 1);
+    assert.equal(result.walkErrors.length, 1);
+    assert.equal(result.walkErrors[0].path, "Library/what-if-2");
+    assert.match(result.walkErrors[0].message, /Folder not reachable/);
+    const status = formatDriveWalkErrors(result.walkErrors);
+    assert.match(status, /Could not open 1 nested folder/);
+    assert.match(status, /Library\/what-if-2: Folder not reachable/);
+    assert.notEqual(status, String(result.skipped));
+    assert.ok(result.entries.some((entry) => entry.file.name === "Immune-Part01.mp3"));
   });
 
   it("finds a shared-with-me Library and walks it via loadDriveEntries", async () => {
@@ -439,32 +496,49 @@ describe("Drive walker feeds the existing library pairing", () => {
     assert.equal(pickerCalls, 1);
     assert.equal(result.folder.id, "picked");
   });
+
+  it("loads the non-empty Library when a saved folder id is empty", async () => {
+    const tree = [
+      folder("empty-owned", "Library", undefined, { ownedByMe: true }),
+      folder("shared-books", "Library", undefined, {
+        ownedByMe: false,
+        shared: true,
+        sharedWithMe: true,
+      }),
+      audio("chap", "01.mp3", ["shared-books"]),
+    ];
+    const ranked = await findLibraryFolders("tok", mockDriveFetch(tree));
+    assert.equal(ranked[0].id, "shared-books");
+    assert.equal(libraryFolderIsEmpty(ranked.find((folder) => folder.id === "empty-owned")), true);
+
+    const result = await loadDriveEntries({
+      token: "tok",
+      folderId: "empty-owned",
+      folderName: "Library",
+      fetchImpl: mockDriveFetch(tree),
+    });
+    assert.equal(result.folder.id, "shared-books");
+    assert.ok(result.entries.some((entry) => entry.file?.name === "01.mp3"));
+  });
 });
 
 describe("source dialog actions", () => {
-  it("shows Sign in plus a local-folder link when signed out", () => {
+  it("shows Sign in when signed out", () => {
     assert.deepEqual(sourceDialogActions({ signedIn: false }), {
       google: true,
       reload: false,
       signout: false,
-      localLink: true,
-      local: false,
-      files: true,
       picker: false,
-      advanced: true,
     });
   });
 
-  it("shows Reload and Sign out only when signed in, with local picks under Advanced", () => {
-    const actions = sourceDialogActions({ signedIn: true });
-    assert.equal(actions.google, false);
-    assert.equal(actions.reload, true);
-    assert.equal(actions.signout, true);
-    assert.equal(actions.localLink, false);
-    assert.equal(actions.local, true);
-    assert.equal(actions.files, true);
-    assert.equal(actions.picker, false);
-    assert.equal(actions.advanced, true);
+  it("shows Reload and Sign out when signed in", () => {
+    assert.deepEqual(sourceDialogActions({ signedIn: true }), {
+      google: false,
+      reload: true,
+      signout: true,
+      picker: false,
+    });
   });
 });
 
@@ -644,7 +718,8 @@ describe("Drive user-visible errors", () => {
 
     const denied = classifyDriveError({ error: "access_denied" });
     assert.equal(denied.kind, DRIVE_ERROR_KIND.accessDenied);
-    assert.match(denied.message, /Choose Library folder/);
+    assert.match(denied.message, /Sign in with an account Jeff shared/);
+    assert.doesNotMatch(denied.message, /local fallback|Choose Library folder/);
 
     const missing = classifyDriveError({ name: "DriveLibraryMissing" });
     assert.equal(missing.kind, DRIVE_ERROR_KIND.noLibrary);
@@ -760,6 +835,19 @@ describe("Drive audio proxy and EPUB reader", () => {
     assert.equal(proxied.headers["Content-Range"], "bytes 200-399/9000");
     assert.equal(proxied.notifyUnauthorized, false);
 
+    for (const name of ["chapter.m4a", "What If 2.m4b", "track.aac"]) {
+      const typed = driveMediaProxyOutHeaders(
+        { get: (header) => (header === "content-type" ? "video/mp4" : null) },
+        name
+      );
+      assert.equal(typed["Content-Type"], "audio/mp4", name);
+      assert.equal(rewriteDriveAudioContentType(name, "video/mp4"), "audio/mp4", name);
+      assert.equal(makeDriveFile({ id: "m4", name, size: 12, mimeType: "video/mp4" }).type, "audio/mp4", name);
+    }
+    assert.equal(rewriteDriveAudioContentType("", "video/mp4"), "audio/mp4");
+    assert.equal(rewriteDriveAudioContentType("part.mp3", "audio/mpeg"), "audio/mpeg");
+    assert.equal(makeDriveFile({ id: "mp3", name: "part.mp3", size: 12, mimeType: "audio/mpeg" }).type, "audio/mpeg");
+
     const expired = await proxyDriveMediaRequest(
       { fileId: "p1", range: "bytes=0-1", token: "tok" },
       async () => ({ ok: false, status: 401, headers: { get: () => null }, arrayBuffer: async () => new ArrayBuffer(0) })
@@ -776,6 +864,10 @@ describe("Drive audio proxy and EPUB reader", () => {
     assert.match(sw, /res\.status === 401/);
     assert.match(sw, /alt=media/);
     assert.match(sw, /library-listen-shell-v\d+/);
+    assert.match(sw, /function rewriteDriveAudioContentType/);
+    assert.match(sw, /ext === "m4a" \|\| ext === "m4b" \|\| ext === "aac"/);
+    assert.match(sw, /return "audio\/mp4"/);
+    assert.match(sw, /base === "video\/mp4"/);
   });
 
   it("opens a Drive EPUB buffer with the existing reader", async () => {
@@ -800,19 +892,19 @@ describe("Drive audio proxy and EPUB reader", () => {
     assert.match(new TextDecoder().decode(pub.read("OEBPS/ch1.xhtml")), /Drive EPUB/);
   });
 
-  it("keeps local folder pick on the homepage", () => {
+  it("keeps Google sign-in as the only library source on the homepage", () => {
     const html = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../docs/index.html"), "utf8");
+    const app = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../docs/app.js"), "utf8");
     assert.match(html, /id="btn-google"/);
-    assert.match(html, /id="btn-pick-main"/);
-    assert.match(html, /Use a local folder instead/);
-    assert.match(html, /Choose Library folder/);
-    assert.match(html, /id="btn-pick-files"/);
+    assert.match(html, /Sign in with Google/);
+    assert.doesNotMatch(html, /id="btn-pick-main"|id="btn-pick-files"|webkitdirectory|Use a local folder/);
+    assert.doesNotMatch(html, /Choose Library folder|library-read|read-this-book/);
+    assert.doesNotMatch(app, /showDirectoryPicker|webkitdirectory|library-read|libraryReadUrl/);
     assert.match(html, /id="drive-status"/);
     assert.match(html, /id="btn-sheet-reload"/);
     assert.match(html, /Reload library/);
-    assert.match(html, /id="source-sheet-advanced"/);
-    assert.match(html, />Advanced</);
     assert.match(html, /id="btn-sheet-signout"/);
     assert.match(html, /Sign out/);
+    assert.match(html, /id="btn-offline"/);
   });
 });

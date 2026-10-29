@@ -12,7 +12,7 @@
       content="Library Listen — rice-paper bookshelf. Sign in with Google to play from the shared Library folder."
     />
     <meta property="og:title" content="Shelf · Library Listen" />
-    <meta property="og:description" content="Rice-paper cover wall. Sign in with Google to play the shared Library folder, or use local files." />
+    <meta property="og:description" content="Rice-paper cover wall. Sign in with Google to play the shared Library folder." />
     <meta property="og:image" content="https://bigdaddy109.github.io/library-listen/og-image.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -23,10 +23,10 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Shelf" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" href="./icon.svg?v=54" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=54" />
-    <link rel="stylesheet" href="./styles.css?v=54" />
-    <link rel="stylesheet" href="./shelf/shelf.css?v=54" />
+    <link rel="icon" href="./icon.svg?v=55" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=55" />
+    <link rel="stylesheet" href="./styles.css?v=55" />
+    <link rel="stylesheet" href="./shelf/shelf.css?v=55" />
     <title>Shelf · Library Listen</title>
   </head>
   <body class="shell-shelf" data-shell="shelf">
@@ -43,18 +43,12 @@
           </div>
         </div>
         <p class="lede">
-          Rice-paper shelf. Sign in with Google to play the shared <code>Library</code> folder, or use local files.
+          Rice-paper shelf. Sign in with Google to play the shared <code>Library</code> folder.
         </p>
         <section id="onboarding" class="onboarding">
           <div class="load-row cta-stack">
             <button type="button" id="btn-google" class="primary large" title="Sign in with Google">
               Sign in with Google
-            </button>
-            <button type="button" id="btn-pick-main" class="text-link">
-              Use a local folder instead
-            </button>
-            <button type="button" id="btn-pick-files" class="ghost hidden" hidden>
-              Choose audio files
             </button>
           </div>
           <p class="hint" id="capability-hint"></p>
@@ -67,7 +61,7 @@
           ></p>
         </section>
         <p class="hint" id="drive-status" role="status" aria-live="polite"></p>
-        <p id="load-hint" class="hint">Demo books show until you pick a library. Sign in or choose a folder to listen.</p>
+        <p id="load-hint" class="hint">Demo books show until you sign in. Sign in with Google to listen.</p>
       </header>
 
       <div class="toolbar">
@@ -108,7 +102,6 @@
           <h2 id="book-title"></h2>
           <p class="author" id="book-author"></p>
           <p class="subtitle" id="book-subtitle"></p>
-          <a id="read-this-book" class="read-this-book hidden" hidden>讀這本</a>
         </div>
       </div>
       <div class="offline-row">
@@ -129,7 +122,6 @@
       <div class="player-text">
         <div class="player-title-row">
           <div id="player-title" class="player-title">—</div>
-          <a id="player-read-this-book" class="read-this-book hidden" hidden>讀這本</a>
         </div>
         <div class="player-sub">
           <div id="player-chapter" class="player-chapter">—</div>
@@ -194,21 +186,6 @@
       <div id="book-stage" class="book-stage"></div>
     </div>
 
-    <input
-      id="file-input-dir"
-      type="file"
-      webkitdirectory
-      directory
-      multiple
-      hidden
-    />
-    <input
-      id="file-input-files"
-      type="file"
-      accept="audio/*,image/jpeg,image/png,image/webp,.mp3,.m4a,.m4b,.aac,.epub,.jpg,.jpeg,.png,.webp"
-      multiple
-      hidden
-    />
     <audio id="audio" preload="metadata" playsinline></audio>
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
     <div id="source-sheet" class="sheet hidden" hidden role="dialog" aria-modal="true" aria-labelledby="source-sheet-title">
@@ -225,23 +202,9 @@
           <button type="button" id="btn-sheet-google" class="primary hidden">
             Sign in with Google
           </button>
-          <button type="button" id="btn-sheet-local-link" class="text-link hidden">
-            Use a local folder instead
-          </button>
           <button type="button" id="btn-sheet-signout" class="ghost hidden">
             Sign out
           </button>
-          <details id="source-sheet-advanced" class="source-advanced hidden" hidden>
-            <summary>Advanced</summary>
-            <div class="cta-row cta-stack">
-              <button type="button" id="btn-sheet-local" class="ghost hidden">
-                Choose Library folder
-              </button>
-              <button type="button" id="btn-sheet-files" class="ghost hidden">
-                Choose audio files
-              </button>
-            </div>
-          </details>
           <button type="button" id="btn-sheet-picker" class="ghost hidden" hidden>
             Browse Google Drive
           </button>
@@ -250,6 +213,6 @@
       </div>
     </div>
     <button type="button" id="btn-sort" class="hidden" hidden title="Sort shelf">Sort</button>
-    <script type="module" src="./app.js?v=54"></script>
+    <script type="module" src="./app.js?v=55"></script>
   </body>
 </html>

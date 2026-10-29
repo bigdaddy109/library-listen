@@ -30,12 +30,13 @@ describe("homepage is the rice-paper shelf", () => {
   it("keeps Drive sign-in, source sheet, player, and Immune Concepts (no Read/ebook UI)", () => {
     assert.match(home, /id="btn-google"/);
     assert.match(home, /Sign in with Google/);
-    assert.match(home, /id="btn-pick-main"/);
-    assert.match(home, /Use a local folder instead/);
+    assert.doesNotMatch(home, /id="btn-pick-main"/);
+    assert.doesNotMatch(home, /Use a local folder instead/);
+    assert.doesNotMatch(home, /webkitdirectory/);
     assert.match(home, /id="source-sheet"/);
     assert.match(home, /id="btn-sheet-reload"/);
     assert.match(home, /Reload library/);
-    assert.match(home, /id="source-sheet-advanced"/);
+    assert.doesNotMatch(home, /id="source-sheet-advanced"/);
     assert.match(home, /id="btn-sheet-signout"/);
     assert.match(home, /id="player-bar"/);
     assert.doesNotMatch(home, /id="tab-read"/);
@@ -44,10 +45,12 @@ describe("homepage is the rice-paper shelf", () => {
     assert.match(home, /id="tab-concepts"/);
     assert.match(home, /id="concept-list"/);
     assert.match(home, /id="btn-offline"/);
-    assert.match(home, /id="read-this-book"/);
-    assert.match(home, /id="player-read-this-book"/);
-    assert.match(classic, /id="read-this-book"/);
-    assert.match(classic, /id="player-read-this-book"/);
+    assert.doesNotMatch(home, /id="read-this-book"/);
+    assert.doesNotMatch(home, /id="player-read-this-book"/);
+    assert.doesNotMatch(home, /library-read/);
+    assert.doesNotMatch(classic, /id="read-this-book"/);
+    assert.doesNotMatch(classic, /id="player-read-this-book"/);
+    assert.doesNotMatch(classic, /library-read|webkitdirectory|Use a local folder/);
     assert.doesNotMatch(home, /application\/pdf|\.pdf/i);
   });
 

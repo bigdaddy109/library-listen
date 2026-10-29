@@ -2,7 +2,6 @@
 
 import {
   bookHasAudio,
-  bookHasEbook,
   latestProgressKind,
   loadProgress,
   shelfBadge,
@@ -447,7 +446,6 @@ export function volumeNumber(book, booksInSeries) {
 export function mediaFlags(book) {
   return {
     audio: bookHasAudio(book),
-    read: bookHasEbook(book),
     badge: shelfBadge(book),
   };
 }
@@ -476,7 +474,7 @@ export function parseOpenIntent(search) {
   const params = new URLSearchParams(typeof search === "string" ? search : "");
   const bookId = params.get("open");
   if (!bookId) return null;
-  return { bookId, pane: params.get("pane") === "read" ? "read" : "audio" };
+  return { bookId, pane: "audio" };
 }
 
 export function stripOpenIntent(search) {
@@ -490,7 +488,7 @@ export function stripOpenIntent(search) {
 export function playerOpenUrl(bookId, pane) {
   const params = new URLSearchParams();
   params.set("open", bookId);
-  if (pane === "read" || pane === "audio") params.set("pane", pane);
+  if (pane === "audio") params.set("pane", pane);
   return `../index.html?${params.toString()}`;
 }
 

@@ -37,6 +37,7 @@ import {
   buildLibrary,
   saveProgress,
   saveTextProgress,
+  listenShelfBooks,
   shelfBadge,
 } from "../docs/library.js";
 
@@ -66,7 +67,9 @@ describe("demo catalog", () => {
     const books = demoCatalog();
     const listen = books.filter((b) => (b.chapters || []).length);
     assert.ok(listen.every((b) => shelfBadge(b) === "Audio"));
-    assert.equal(mediaFlags(books.find((b) => b.title === "Vacation")).badge, "Read");
+    const vacation = books.find((b) => b.title === "Vacation");
+    assert.equal(mediaFlags(vacation).badge, "");
+    assert.equal(listenShelfBooks(books).some((b) => b.id === vacation.id), false);
   });
 });
 
@@ -131,8 +134,13 @@ describe("filterShelf", () => {
 
 describe("open intent", () => {
   it("builds a player URL and parses it back", () => {
-    assert.equal(playerOpenUrl("immune/immune", "read"), "../index.html?open=immune%2Fimmune&pane=read");
+    assert.equal(playerOpenUrl("immune/immune", "audio"), "../index.html?open=immune%2Fimmune&pane=audio");
+    assert.equal(playerOpenUrl("immune/immune", "read"), "../index.html?open=immune%2Fimmune");
     assert.deepEqual(parseOpenIntent("?open=munroe/how-to&pane=audio"), {
+      bookId: "munroe/how-to",
+      pane: "audio",
+    });
+    assert.deepEqual(parseOpenIntent("?open=munroe/how-to&pane=read"), {
       bookId: "munroe/how-to",
       pane: "audio",
     });

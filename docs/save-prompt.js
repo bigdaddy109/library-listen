@@ -1,17 +1,15 @@
 /**
  * Mid-listen save confirm() gate.
  *
- * The prompt is useful on iPhone Safari, where a folder permission does not
- * survive a restart. It is noisy on desktop, where the directory handle
- * already persists. Only offer it when there is no directory handle and the
- * book is not already saved on this device.
+ * Copies chapter bytes into IndexedDB so a phone can play after a restart.
+ * It is not a library source. Desktop stays quiet; the Save button is enough there.
  */
 
 export function shouldOfferSaveWhileListening({
   book,
   isPlayable = false,
   isOffline = false,
-  hasDirectoryHandle = false,
+  phone = false,
 } = {}) {
-  return Boolean(book) && Boolean(isPlayable) && !isOffline && !hasDirectoryHandle;
+  return Boolean(book) && Boolean(isPlayable) && !isOffline && Boolean(phone);
 }

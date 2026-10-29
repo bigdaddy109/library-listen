@@ -1,6 +1,6 @@
 # Library Listen
 
-Offline audiobook player for a shared **Library** folder. Open it from **Google Drive** (sign in, read-only) or pick a local / iCloud copy. No TTS. No upload of your books. No paid APIs.
+Offline audiobook player for a shared **Library** folder on **Google Drive** (sign in, read-only). No local folder picker. No link to Library Read. No TTS. No upload of your books. No paid APIs.
 
 ## Web player (any device with a link)
 
@@ -9,20 +9,13 @@ Offline audiobook player for a shared **Library** folder. Open it from **Google 
 Share that URL. Each listener (Jeff, Kerry, Daryl):
 
 1. Accepts Jeff’s **Google Drive** share of the folder named `Library` (same `listen/` + `ebooks/` layout).
-2. Opens the link → **用 Google 登入** with *their own* Google account → the player finds `Library` in Drive / Shared with me (or they pick it).
-3. Plays from the shelf. Audio streams from Drive. An EPUB downloads when they open **Read**.
+2. Opens the link → **Sign in with Google** with *their own* Google account → the player finds `Library` in Drive / Shared with me.
+3. Plays from the shelf. Audio streams from Drive.
 
-Local fallback if Drive is not set up yet, or files are already on the device:
-
-1. Accept the **iCloud** share of `Library` (or `門羅-WhatIf` / `Immune`).
-2. In **Files**, tap **Download Now** on `listen/`.
-3. **Choose Library folder** (desktop Chrome) or **Choose audio files** (iPhone Safari).
-
-Progress and the shelf are stored in that browser. After the page or home-screen app restarts:
+Progress and the shelf are stored in that browser (`librarylisten.*` keys only). After the page or home-screen app restarts:
 
 - **Google Drive:** sign-in can reconnect without re-downloading the folder. The OAuth token is kept in memory (and the service worker) only — not in `localStorage`.
-- **Desktop Chrome/Edge** can also remember a local folder and reconnect on its own (or after one permission tap).
-- **iPhone/iPad** cannot keep local folder access. If no book was saved on the device and Drive is not signed in, the next open goes back to the start screen (progress is kept). **Save to this device** still copies a book for offline play.
+- If Drive is not signed in, the next open goes back to the start screen (progress is kept). **Save to this device** still copies a book’s chapter bytes for offline play. It is not a second library.
 - Shelf shows **Continue listening** for the last chapter with progress.
 - Player **Sleep** cycles 15 / 30 / 45 / 60 minutes, then pauses.
 - Chapter changes briefly show a **Next:** toast.
@@ -84,13 +77,7 @@ On the Mac (example Hub path):
 
 ## How to share audio
 
-**Google Drive (default):** share the Drive folder named `Library` with the listener’s Google account (Viewer). They open the player and tap **用 Google 登入**.
-
-**iCloud (local fallback):**
-
-1. On Mac: share `Library` (or a single collection) via iCloud to the listener’s Apple ID.
-2. Listener: **Files → Shared** → open folder → **Download Now** on `listen/`.
-3. Open the web player link and **Choose Library folder** / those files.
+Share the Drive folder named `Library` with the listener’s Google account (Viewer). They open the player and tap **Sign in with Google**.
 
 ## Native iOS app (optional)
 

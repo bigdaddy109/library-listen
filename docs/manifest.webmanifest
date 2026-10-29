@@ -1,7 +1,7 @@
 {
   "name": "Library Listen",
   "short_name": "Listen",
-  "description": "Offline audiobook player for your shared iCloud Library folder.",
+  "description": "Offline audiobook player for a shared Google Drive Library folder.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

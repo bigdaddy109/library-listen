@@ -35,6 +35,10 @@ export const KNOWN_BOOKS = {
 };
 
 export const PROGRESS_KEY = "librarylisten.progress.v1";
+/** Last shelf scan. A shell bump clears this when the stamp below does not match. */
+export const LIBRARY_SNAPSHOT_KEY = "librarylisten.library.v1";
+/** Shell `?v=` that wrote LIBRARY_SNAPSHOT_KEY. Missing means the snapshot is stale. */
+export const LIBRARY_SHELL_KEY = "librarylisten.library.shell";
 /** IndexedDB offline row key for the paired EPUB blob (same store as chapters). */
 export const EBOOK_OFFLINE_KEY = "__ebook__";
 
@@ -209,6 +213,52 @@ export function booksFromLibrarySnapshot(snapshot) {
   return (Array.isArray(snapshot) ? snapshot : []).filter(snapshotShouldListBook);
 }
 
+/**
+ * A shell bump must not keep the previous scan. Phones that saved a shelf
+ * before this stamp existed (or under an older `?v=`) drop it. A saved Drive
+ * session then has to rescan instead of playing that snapshot.
+ */
+export function planShelfRestore({ savedShell, currentShell, hasDriveSession } = {}) {
+  const current = String(currentShell ?? "");
+  const saved = savedShell == null ? "" : String(savedShell);
+  const versionChanged = current !== "" && saved !== current;
+  return {
+    invalidateSnapshot: versionChanged,
+    forceDriveRescan: versionChanged && !!hasDriveSession,
+    useSnapshot: !versionChanged,
+  };
+}
+
+export function readLibraryShell(store) {
+  try {
+    return store?.getItem?.(LIBRARY_SHELL_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+export function stampLibraryShell(store, version) {
+  if (!store?.setItem) return;
+  const value = String(version || "");
+  if (!value) return;
+  try {
+    store.setItem(LIBRARY_SHELL_KEY, value);
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+/** Drop the saved shelf. The shell stamp is written only after a fresh scan. */
+export function applyShelfRestorePlan(store, plan) {
+  if (!plan?.invalidateSnapshot || !store?.removeItem) return false;
+  try {
+    store.removeItem(LIBRARY_SNAPSHOT_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function bookHasDriveMedia(book) {
   if (!book) return false;
   if (book.source === "drive") return true;
@@ -362,76 +412,17 @@ export function bookHasEbook(book) {
   return !!(book?.ebook?.file || book?.ebook?.name || book?.ebook?.id);
 }
 
-/** Drive series folder, not the shelf title. Known ids cover snapshots saved before the folder was stored. */
-export function seriesFolderName(book, known = KNOWN_COLLECTIONS) {
-  const stored = String(book?.collectionFolder || "").trim();
-  if (stored) return stored;
-  const id = book?.collectionId;
-  if (!id) return "";
-  for (const [folder, meta] of Object.entries(known || {})) {
-    if (meta?.id === id) return folder;
-  }
-  return "";
-}
-
-/** EPUB file name without the extension. PDF and other names return empty. */
-export function epubStem(name) {
-  const base = String(name || "").split(/[/\\]/).pop() || "";
-  if (!/\.epub$/i.test(base)) return "";
-  return base.slice(0, -".epub".length);
-}
-
 /**
- * Library Read deep link. `chapterIndex` is 0-based; the `ch` query is 1-based and omitted when unknown.
- * Empty string when the book has no EPUB or no series folder — callers hide the entry.
- * @param {object} book
- * @param {number|null} [chapterIndex]
- */
-export function libraryReadUrl(book, chapterIndex = null) {
-  if (!bookHasEbook(book)) return "";
-  const series = seriesFolderName(book);
-  const stem = epubStem(book?.ebook?.name || book?.ebook?.file?.name || book?.ebook?.id || "");
-  if (!series || !stem) return "";
-  const params = [
-    `series=${encodeURIComponent(series)}`,
-    `book=${encodeURIComponent(stem)}`,
-  ];
-  if (Number.isInteger(chapterIndex) && chapterIndex >= 0) {
-    params.push(`ch=${encodeURIComponent(String(chapterIndex + 1))}`);
-  }
-  return `https://bigdaddy109.github.io/library-read/?${params.join("&")}`;
-}
-
-/** Shelf wording for an EPUB that has no audio. Same phrase as the player link. */
-export const READ_THIS_BOOK_LABEL = "讀這本";
-
-/**
- * Listen shelf rows. Audio stays. An EPUB with no audio becomes a Library Read
- * link instead of a cover that cannot play. No audio and no EPUB is omitted.
+ * Listen shelf rows. Audio stays. An EPUB with no audio is not a second
+ * library and is not a link to Library Read, so it is omitted.
  */
 export function listenShelfBooks(books) {
-  const out = [];
-  for (const book of books || []) {
-    if (bookHasAudio(book)) {
-      out.push(book);
-      continue;
-    }
-    const readUrl = libraryReadUrl(book);
-    if (!readUrl) continue;
-    out.push({
-      ...book,
-      readUrl,
-      readLabel: READ_THIS_BOOK_LABEL,
-    });
-  }
-  return out;
+  return (books || []).filter((book) => bookHasAudio(book));
 }
 
-/** Shelf badge. Listen-only player: audio books are Audio; leftover ebook-only rows stay Read. */
+/** Shelf badge. Listen shows audio books only. */
 export function shelfBadge(book) {
-  if (bookHasAudio(book)) return "Audio";
-  if (bookHasEbook(book)) return "Read";
-  return "Audio";
+  return bookHasAudio(book) ? "Audio" : "";
 }
 
 export function isImmuneBook(book) {
