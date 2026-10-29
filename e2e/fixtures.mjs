@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test as base, expect } from "@playwright/test";
-import { buildLibrary } from "../docs/library.js";
+import { LIBRARY_SHELL_KEY, LIBRARY_SNAPSHOT_KEY, buildLibrary } from "../docs/library.js";
 import { jeffDriveLibrarySnapshot } from "../test/acceptance-fixture.mjs";
 
 export { expect };
@@ -78,12 +78,37 @@ export async function routeDriveMedia(page) {
   });
 }
 
+/** Keep a seeded shelf across reload. The page drops a snapshot whose stamp is missing or older. */
+export async function writeShelfSnapshot(page, rows, shell = SHELL_VERSION) {
+  await page.evaluate(
+    ({ rows, shell, snapshotKey, shellKey }) => {
+      localStorage.setItem(snapshotKey, JSON.stringify(rows));
+      localStorage.setItem(shellKey, String(shell));
+    },
+    {
+      rows,
+      shell: String(shell),
+      snapshotKey: LIBRARY_SNAPSHOT_KEY,
+      shellKey: LIBRARY_SHELL_KEY,
+    }
+  );
+}
+
 /** Jeff's multi-series Drive shelf; audio via Drive stream (or offline blobs). */
 export async function openFixtureShelf(page) {
   await routeDriveMedia(page);
-  await page.addInitScript((rows) => {
-    localStorage.setItem("librarylisten.library.v1", JSON.stringify(rows));
-  }, SNAPSHOT);
+  await page.addInitScript(
+    ({ rows, shell, snapshotKey, shellKey }) => {
+      localStorage.setItem(snapshotKey, JSON.stringify(rows));
+      localStorage.setItem(shellKey, String(shell));
+    },
+    {
+      rows: SNAPSHOT,
+      shell: String(SHELL_VERSION),
+      snapshotKey: LIBRARY_SNAPSHOT_KEY,
+      shellKey: LIBRARY_SHELL_KEY,
+    }
+  );
   await page.goto(`${ORIGIN}/`);
   await seedOfflineAudioAll(page);
   await page.reload();

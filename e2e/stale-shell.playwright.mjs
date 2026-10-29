@@ -1,3 +1,4 @@
+import { LIBRARY_SHELL_KEY, LIBRARY_SNAPSHOT_KEY } from "../docs/library.js";
 import {
   MP3,
   ORIGIN,
@@ -13,6 +14,7 @@ import {
   waitShellSettled,
   shellState,
   test,
+  writeShelfSnapshot,
 } from "./fixtures.mjs";
 
 const OLD = SHELL_VERSION - 1;
@@ -26,13 +28,19 @@ test("an installed previous shell (old SW + cache + 2-book snapshot) upgrades to
 }) => {
   await setShell("old");
   await context.addInitScript(
-    ({ rows }) => {
+    ({ rows, shell, snapshotKey, shellKey }) => {
       if (localStorage.getItem("__staleSeeded")) return;
       localStorage.setItem("__staleSeeded", "1");
-      localStorage.setItem("librarylisten.library.v1", JSON.stringify(rows));
+      localStorage.setItem(snapshotKey, JSON.stringify(rows));
+      localStorage.setItem(shellKey, String(shell));
       localStorage.setItem("librarylisten.shelfView", "spines");
     },
-    { rows: STALE_SNAPSHOT }
+    {
+      rows: STALE_SNAPSHOT,
+      shell: String(OLD),
+      snapshotKey: LIBRARY_SNAPSHOT_KEY,
+      shellKey: LIBRARY_SHELL_KEY,
+    }
   );
 
   await page.goto(`${ORIGIN}/`);
@@ -61,8 +69,11 @@ test("an installed previous shell (old SW + cache + 2-book snapshot) upgrades to
   expect(after.caches).toEqual([`library-listen-shell-v${SHELL_VERSION}`]);
   expect(after.controller).toMatch(/\/sw\.js$/);
   expect(after.view).toBe("covers");
+  await expect
+    .poll(() => page.evaluate((key) => localStorage.getItem(key), LIBRARY_SNAPSHOT_KEY))
+    .toBeNull();
 
-  await page.evaluate((rows) => localStorage.setItem("librarylisten.library.v1", JSON.stringify(rows)), SNAPSHOT);
+  await writeShelfSnapshot(page, SNAPSHOT, SHELL_VERSION);
   await page.reload();
   await expect.poll(() => page.locator(".cover-card[data-id]").count()).toBe(SNAPSHOT.length);
 
@@ -87,9 +98,18 @@ test("a page left open on the old shell upgrades when it returns to the foregrou
   test.skip(testInfo.project.name === "chromium-iphone-ua-390", "covered by the WebKit 390 and desktop runs");
   test.setTimeout(180_000);
   await setShell("old");
-  await context.addInitScript((rows) => {
-    localStorage.setItem("librarylisten.library.v1", JSON.stringify(rows));
-  }, SNAPSHOT);
+  await context.addInitScript(
+    ({ rows, shell, snapshotKey, shellKey }) => {
+      localStorage.setItem(snapshotKey, JSON.stringify(rows));
+      localStorage.setItem(shellKey, String(shell));
+    },
+    {
+      rows: SNAPSHOT,
+      shell: String(OLD),
+      snapshotKey: LIBRARY_SNAPSHOT_KEY,
+      shellKey: LIBRARY_SHELL_KEY,
+    }
+  );
   await page.goto(`${ORIGIN}/`);
   await page.evaluate(() => navigator.serviceWorker.ready);
   await seedOfflineAudio(page, "munroe/what-if-1");
