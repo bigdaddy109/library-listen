@@ -669,13 +669,18 @@ function ebookRecord(entry) {
 function makeBook({ collectionFolder, bookFolder, audioFiles, coverFile, ebook }) {
   const collection = collectionMeta(collectionFolder);
   const meta = bookMeta(bookFolder, collection.author);
-  const chapters = audioFiles.map((f, index) => ({
-    id: f.file.name,
-    index,
-    title: titleFromFilename(f.file.name),
-    file: f.file,
-    url: null,
-  }));
+  const chapters = audioFiles.map((f, index) => {
+    const durationMillis = Number(f.file?.durationMillis);
+    const chapter = {
+      id: f.file.name,
+      index,
+      title: titleFromFilename(f.file.name),
+      file: f.file,
+      url: null,
+    };
+    if (Number.isFinite(durationMillis) && durationMillis > 0) chapter.durationMillis = durationMillis;
+    return chapter;
+  });
   return {
     id: `${collection.id}/${slug(bookFolder)}`,
     collectionId: collection.id,
