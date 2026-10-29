@@ -1,9 +1,10 @@
 /* Shell-only cache. Audiobook files are never cached here. */
-const CACHE = "library-listen-shell-v55";
+const CACHE = "library-listen-shell-v56";
 const CACHE_CONCEPTS_MESSAGE = "librarylisten.cache-concepts";
 const DRIVE_MEDIA_PREFIX = "/drive-media/";
 const DRIVE_TOKEN_MESSAGE = "librarylisten.drive-token";
 const DRIVE_UNAUTHORIZED_MESSAGE = "librarylisten.drive-unauthorized";
+const DRIVE_MEDIA_ERROR_MESSAGE = "librarylisten.drive-media-error";
 /** In-memory only. The page posts the GIS access token; never cached. */
 let driveToken = "";
 
@@ -32,26 +33,26 @@ self.addEventListener("message", (event) => {
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=55",
-  "./app.js?v=55",
-  "./library.js?v=55",
-  "./drive.js?v=55",
-  "./search.js?v=55",
-  "./markers.js?v=55",
-  "./save-prompt.js?v=55",
-  "./media-session.js?v=55",
-  "./sleep.js?v=55",
-  "./immune-cards.js?v=55",
+  "./styles.css?v=56",
+  "./app.js?v=56",
+  "./library.js?v=56",
+  "./drive.js?v=56",
+  "./search.js?v=56",
+  "./markers.js?v=56",
+  "./save-prompt.js?v=56",
+  "./media-session.js?v=56",
+  "./sleep.js?v=56",
+  "./immune-cards.js?v=56",
   "./manifest.webmanifest",
-  "./icon.svg?v=55",
-  "./apple-touch-icon.png?v=55",
+  "./icon.svg?v=56",
+  "./apple-touch-icon.png?v=56",
   "./og-image.png",
   "./classic/index.html",
   "./shelf/index.html",
-  "./shelf/shelf.css?v=55",
-  "./shelf/shelf.js?v=55",
-  "./shelf/catalog.js?v=55",
-  "./shelf/covers.js?v=55",
+  "./shelf/shelf.css?v=56",
+  "./shelf/shelf.js?v=56",
+  "./shelf/catalog.js?v=56",
+  "./shelf/covers.js?v=56",
 ];
 
 self.addEventListener("install", (event) => {
@@ -96,16 +97,44 @@ function driveMediaNameFromPath(pathname) {
   }
 }
 
+function driveMediaNameFromUrl(url) {
+  const fromQuery = url.searchParams.get("name");
+  if (fromQuery) return fromQuery;
+  return driveMediaNameFromPath(url.pathname);
+}
+
 /** Keep in lockstep with rewriteDriveAudioContentType in docs/drive.js. */
 function rewriteDriveAudioContentType(name, contentType) {
-  const baseName = String(name || "");
+  const baseName = String(name || "").split("?")[0].split("/").pop();
   const dot = baseName.lastIndexOf(".");
   const ext = dot >= 0 ? baseName.slice(dot + 1).toLowerCase() : "";
+  const raw = String(contentType || "");
+  const base = raw.split(";")[0].trim().toLowerCase();
+  if (ext === "mp3") {
+    if (base === "audio/mpeg" || base === "audio/mp3") return raw || "audio/mpeg";
+    return "audio/mpeg";
+  }
   if (ext === "m4a" || ext === "m4b" || ext === "aac") return "audio/mp4";
-  if (ext) return contentType || "";
-  const base = String(contentType || "").split(";")[0].trim().toLowerCase();
-  if (base === "video/mp4") return "audio/mp4";
-  return contentType || "";
+  if (ext) return raw;
+  if (base === "video/mp4" || base === "application/mp4") return "audio/mp4";
+  return raw;
+}
+
+/** 206 without Content-Range is not playable. Do not read the body. */
+function contentRangeForPartial(range, contentLength) {
+  const match = /^bytes=(\d+)-(\d*)$/i.exec(String(range || "").trim());
+  if (!match) return "";
+  const start = Number(match[1]);
+  if (!Number.isFinite(start)) return "";
+  const explicitEnd = match[2] === "" ? NaN : Number(match[2]);
+  let end = explicitEnd;
+  if (!Number.isFinite(end)) {
+    const len = Number(contentLength);
+    if (!Number.isFinite(len) || len < 1) return "";
+    end = start + len - 1;
+  }
+  if (end < start) return "";
+  return `bytes ${start}-${end}/*`;
 }
 
 async function proxyDriveMedia(request, url) {
@@ -118,15 +147,33 @@ async function proxyDriveMedia(request, url) {
   /* Keep Range / Authorization / Cache-Control: no-store in lockstep with
      planDriveMediaProxy + driveMediaProxyOutHeaders in docs/drive.js. */
   const dest = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media&supportsAllDrives=true`;
-  const res = await fetch(dest, { headers });
+  const res = await fetch(dest, {
+    headers,
+    mode: "cors",
+    credentials: "omit",
+    cache: "no-store",
+    redirect: "follow",
+  });
+  if (res.type === "opaque" || res.status === 0) {
+    return new Response("Drive media response was opaque", {
+      status: 502,
+      headers: { "Cache-Control": "no-store", "Content-Type": "text/plain" },
+    });
+  }
   if (res.status === 401) {
     const clients = await self.clients.matchAll({ includeUncontrolled: true });
     for (const client of clients) {
       client.postMessage({ type: DRIVE_UNAUTHORIZED_MESSAGE });
     }
   }
+  if (res.status !== 200 && res.status !== 206) {
+    const clients = await self.clients.matchAll({ includeUncontrolled: true });
+    for (const client of clients) {
+      client.postMessage({ type: DRIVE_MEDIA_ERROR_MESSAGE, status: res.status, fileId });
+    }
+  }
   const out = new Headers();
-  const mediaName = driveMediaNameFromPath(url.pathname);
+  const mediaName = driveMediaNameFromUrl(url);
   for (const name of ["content-type", "content-length", "content-range", "accept-ranges"]) {
     const value = res.headers.get(name);
     if (!value) continue;
@@ -136,7 +183,12 @@ async function proxyDriveMedia(request, url) {
       out.set(name, value);
     }
   }
+  if (res.status === 206 && !out.has("content-range")) {
+    const synthesized = contentRangeForPartial(range, out.get("content-length"));
+    if (synthesized) out.set("content-range", synthesized);
+  }
   out.set("Cache-Control", "no-store");
+  /* Stream res.body. Never buffer the audiobook. */
   return new Response(res.body, {
     status: res.status,
     statusText: res.statusText,

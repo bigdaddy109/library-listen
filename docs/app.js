@@ -1,5 +1,5 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=55";
-import { SLEEP_CHAPTER, nearestSleepMinute, nextSleepChoice } from "./sleep.js?v=55";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=56";
+import { SLEEP_CHAPTER, nearestSleepMinute, nextSleepChoice } from "./sleep.js?v=56";
 import {
   bookHasAudio,
   bookScreenTabs,
@@ -22,8 +22,9 @@ import {
   chapterProgress,
   saveProgress,
   shelfBadge,
-} from "./library.js?v=55";
+} from "./library.js?v=56";
 import {
+  DRIVE_MEDIA_ERROR_MESSAGE,
   DRIVE_UNAUTHORIZED_MESSAGE,
   attachDriveMedia,
   classifyDriveError,
@@ -44,6 +45,7 @@ import {
   loadDriveSession,
   openGooglePicker,
   planDrivePlaybackAuthRetry,
+  playbackFailureLine,
   publishDriveToken,
   refreshGoogleToken,
   restoreDriveFile,
@@ -52,7 +54,7 @@ import {
   signOutGoogle,
   sourceDialogActions,
   tokenForChapterFetch,
-} from "./drive.js?v=55";
+} from "./drive.js?v=56";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -60,7 +62,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=55";
+} from "./search.js?v=56";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -75,17 +77,17 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=55";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=55";
-import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=55";
-import { coverSvg } from "./shelf/covers.js?v=55";
-import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=55";
+} from "./markers.js?v=56";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=56";
+import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=56";
+import { coverSvg } from "./shelf/covers.js?v=56";
+import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=56";
 import {
   closeRiceBook,
   initRiceShelf,
   isRiceShelfPage,
   setRiceShelfLibrary,
-} from "./shelf/shelf.js?v=55";
+} from "./shelf/shelf.js?v=56";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -163,6 +165,8 @@ let swReloading = false;
 let driveFilePosition = 0;
 /** @type {{ key: string, attempts: number, pending: boolean, position: number } | null} */
 let driveAuthRetryState = null;
+/** Last non-OK status from the Drive media proxy, for the status line. */
+let lastDriveMediaHttp = 0;
 /** @type {Promise<void> | null} */
 let driveAuthRecovering = null;
 /** @type {Promise<unknown> | null} */
@@ -583,6 +587,22 @@ function clearDriveError() {
   const hadPlayer = !!els.playerBar?.classList.contains("has-drive-error");
   clearPlayerDriveError();
   if (hadStatus || hadPlayer) updateDriveStatus();
+}
+
+function showPlaybackFailure(line) {
+  const text = String(line || "").trim();
+  if (!text) return;
+  const el = els.driveStatus;
+  if (el) {
+    el.textContent = text;
+    el.classList.add("drive-error");
+    el.hidden = false;
+  }
+  const playerEl = document.getElementById("player-drive-error");
+  if (playerEl) {
+    playerEl.textContent = text;
+    els.playerBar?.classList.add("has-drive-error");
+  }
 }
 
 function showDriveError(err) {
@@ -1509,6 +1529,7 @@ async function playChapter(
   if (!authRetry) {
     driveAuthRetryState = null;
     driveFilePosition = 0;
+    lastDriveMediaHttp = 0;
   }
   // Fresh token, or none yet: no await before audio.play() — iOS drops the gesture.
   // A stored token inside the skew window is refreshed with prompt "" first.
@@ -2102,8 +2123,18 @@ function bind() {
   });
   audio.addEventListener("durationchange", updatePlayerBar);
   audio.addEventListener("error", () => {
-    if (!isDriveMediaPath(audio.currentSrc || audio.src || "")) return;
-    recoverDrivePlaybackAuth();
+    const src = audio.currentSrc || audio.src || "";
+    if (!isDriveMediaPath(src)) return;
+    const book = playback ? findBook(playback.bookId) : null;
+    const http = lastDriveMediaHttp >= 400 ? lastDriveMediaHttp : 0;
+    showPlaybackFailure(
+      playbackFailureLine({
+        title: book?.title,
+        status: http,
+        mediaError: http ? null : audio.error,
+      })
+    );
+    if (http === 401) recoverDrivePlaybackAuth();
   });
   audio.addEventListener("ended", () => {
     persistCurrent();
@@ -2177,7 +2208,20 @@ function registerSW() {
     reloadWhenIdle();
   });
   navigator.serviceWorker.addEventListener("message", (event) => {
+    if (event.data?.type === DRIVE_MEDIA_ERROR_MESSAGE) {
+      lastDriveMediaHttp = Number(event.data.status) || 0;
+      const book = playback ? findBook(playback.bookId) : null;
+      showPlaybackFailure(
+        playbackFailureLine({
+          title: book?.title,
+          status: lastDriveMediaHttp,
+        })
+      );
+      if (lastDriveMediaHttp === 401) recoverDrivePlaybackAuth();
+      return;
+    }
     if (event.data?.type !== DRIVE_UNAUTHORIZED_MESSAGE) return;
+    lastDriveMediaHttp = 401;
     recoverDrivePlaybackAuth();
   });
 }
