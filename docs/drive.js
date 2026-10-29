@@ -27,6 +27,8 @@ export const GAPI_SRC = "https://apis.google.com/js/api.js";
 export const DRIVE_MEDIA_PREFIX = "/drive-media/";
 export const DRIVE_TOKEN_MESSAGE = "librarylisten.drive-token";
 export const DRIVE_UNAUTHORIZED_MESSAGE = "librarylisten.drive-unauthorized";
+/** SW → page when alt=media is not 200/206. Status line, not alert(). */
+export const DRIVE_MEDIA_ERROR_MESSAGE = "librarylisten.drive-media-error";
 export const DRIVE_SESSION_KEY = "librarylisten.drive.v1";
 /** Drive files.list default. Tests pass a smaller pageSize to force nextPageToken. */
 export const DRIVE_LIST_PAGE_SIZE = 1000;
@@ -155,7 +157,10 @@ export function driveFileIdFromPath(pathname) {
 export function driveMediaPath(fileId, name) {
   const id = `.${DRIVE_MEDIA_PREFIX}${encodeURIComponent(fileId)}`;
   if (!name) return id;
-  return `${id}/${encodeURIComponent(name)}`;
+  /* v54 played Immune from an id-only path. v55 appended /<filename>, so
+     <audio> treated the URL as a strict .mp3/.m4b resource and refused
+     Drive's Content-Type. Keep the name in the query for the proxy only. */
+  return `${id}?name=${encodeURIComponent(name)}`;
 }
 
 export function driveMediaNameFromPath(pathname) {
@@ -180,16 +185,72 @@ export function driveMediaUrl(fileId, base = globalThis.location?.href, name) {
 
 /**
  * Drive labels some .m4b audiobooks as video/mp4. `<audio>` will not play that.
- * m4a / m4b / aac are always audio/mp4. A nameless response that is video/mp4
- * is the same mislabel (this proxy only streams listen audio).
+ * m4a / m4b / aac are always audio/mp4. mp3 stays audio (audio/mpeg), even when
+ * Drive says video/mp4 or application/octet-stream. A nameless video/mp4
+ * response is the same mislabel — this proxy only streams listen audio.
  */
 export function rewriteDriveAudioContentType(name, contentType) {
-  const ext = extOf(name || "");
+  const leaf = String(name || "").split("?")[0].split("/").pop();
+  const ext = extOf(leaf || "");
+  const raw = String(contentType || "");
+  const base = raw.split(";")[0].trim().toLowerCase();
+  if (ext === "mp3") {
+    if (base === "audio/mpeg" || base === "audio/mp3") return raw || "audio/mpeg";
+    return "audio/mpeg";
+  }
   if (ext === "m4a" || ext === "m4b" || ext === "aac") return "audio/mp4";
-  if (ext) return contentType || "";
-  const base = String(contentType || "").split(";")[0].trim().toLowerCase();
-  if (base === "video/mp4") return "audio/mp4";
-  return contentType || "";
+  if (ext) return raw;
+  if (base === "video/mp4" || base === "application/mp4") return "audio/mp4";
+  return raw;
+}
+
+/** Name from `?name=` (v56) or the v55 path suffix, for Content-Type only. */
+export function driveMediaNameFromUrl(url) {
+  if (url && typeof url === "object" && url.searchParams?.get) {
+    const fromQuery = url.searchParams.get("name");
+    if (fromQuery) return fromQuery;
+    return driveMediaNameFromPath(url.pathname || "");
+  }
+  const text = String(url || "");
+  try {
+    const parsed = new URL(text, "https://library-listen.local");
+    return driveMediaNameFromUrl(parsed);
+  } catch {
+    return driveMediaNameFromPath(text);
+  }
+}
+
+/**
+ * A 206 with no Content-Range (CORS hid it) is not playable. Build one from
+ * the request Range and the partial Content-Length. Do not read the body.
+ */
+export function contentRangeForPartial(range, contentLength) {
+  const match = /^bytes=(\d+)-(\d*)$/i.exec(String(range || "").trim());
+  if (!match) return "";
+  const start = Number(match[1]);
+  if (!Number.isFinite(start)) return "";
+  const explicitEnd = match[2] === "" ? NaN : Number(match[2]);
+  let end = explicitEnd;
+  if (!Number.isFinite(end)) {
+    const len = Number(contentLength);
+    if (!Number.isFinite(len) || len < 1) return "";
+    end = start + len - 1;
+  }
+  if (end < start) return "";
+  return `bytes ${start}-${end}/*`;
+}
+
+/** Status line when a chapter will not play. No alert(). */
+export function playbackFailureLine({ title, status, mediaError } = {}) {
+  const book = String(title || "This book").trim() || "This book";
+  const http = Number(status);
+  if (Number.isFinite(http) && http >= 400) return `Could not play “${book}” (HTTP ${http}).`;
+  const code = Number(mediaError?.code ?? mediaError);
+  const names = { 1: "aborted", 2: "network", 3: "decode", 4: "unsupported" };
+  if (names[code]) return `Could not play “${book}” (${names[code]} error).`;
+  const message = String(mediaError?.message || "").trim();
+  if (message) return `Could not play “${book}” (${message}).`;
+  return `Could not play “${book}”.`;
 }
 
 export function driveAltMediaUrl(fileId) {
@@ -379,7 +440,7 @@ export function planDriveMediaProxy({ fileId, range, token } = {}) {
   };
 }
 
-export function driveMediaProxyOutHeaders(upstreamHeaders, fileName) {
+export function driveMediaProxyOutHeaders(upstreamHeaders, fileName, { status, range } = {}) {
   const out = { "Cache-Control": "no-store" };
   for (const name of DRIVE_MEDIA_PASSTHROUGH_HEADERS) {
     const value =
@@ -391,6 +452,10 @@ export function driveMediaProxyOutHeaders(upstreamHeaders, fileName) {
       out[pretty] =
         name === "content-type" ? rewriteDriveAudioContentType(fileName, value) || value : value;
     }
+  }
+  if (Number(status) === 206 && !out["Content-Range"]) {
+    const synthesized = contentRangeForPartial(range, out["Content-Length"]);
+    if (synthesized) out["Content-Range"] = synthesized;
   }
   return out;
 }
@@ -447,12 +512,29 @@ export async function proxyDriveMediaRequest({ fileId, range, token, name } = {}
       notifyUnauthorized: shouldNotifyDriveUnauthorized(plan.status),
     };
   }
-  const res = await fetchImpl(plan.dest, { headers: plan.headers });
+  const res = await fetchImpl(plan.dest, {
+    headers: plan.headers,
+    mode: "cors",
+    credentials: "omit",
+    cache: "no-store",
+    redirect: "follow",
+  });
+  /* Opaque (status 0) cannot be re-wrapped; new Response throws and <audio> dies. */
+  if (res?.type === "opaque" || !res?.status) {
+    return {
+      status: 502,
+      statusText: "Bad Gateway",
+      headers: { "Cache-Control": "no-store", "Content-Type": "text/plain" },
+      body: "Drive media response was opaque",
+      notifyUnauthorized: false,
+    };
+  }
+  const body = res.body != null ? res.body : typeof res.arrayBuffer === "function" ? await res.arrayBuffer() : null;
   return {
     status: res.status,
     statusText: res.statusText || "",
-    headers: driveMediaProxyOutHeaders(res.headers || {}, name),
-    body: res.body != null ? res.body : await res.arrayBuffer(),
+    headers: driveMediaProxyOutHeaders(res.headers || {}, name, { status: res.status, range }),
+    body,
     notifyUnauthorized: shouldNotifyDriveUnauthorized(res.status),
   };
 }

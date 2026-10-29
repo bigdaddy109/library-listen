@@ -27,6 +27,10 @@ import {
   driveListUrl,
   driveMediaPath,
   driveMediaNameFromPath,
+  driveMediaNameFromUrl,
+  driveMediaUrl,
+  contentRangeForPartial,
+  playbackFailureLine,
   driveMediaProxyOutHeaders,
   formatDriveWalkErrors,
   libraryFolderIsEmpty,
@@ -238,9 +242,14 @@ describe("Drive queries and media URLs", () => {
     assert.equal(isDriveMediaPath("/styles.css"), false);
     assert.equal(driveFileIdFromPath("/library-listen/drive-media/file%2F1"), "file/1");
     assert.equal(driveMediaPath("abc"), "./drive-media/abc");
-    assert.equal(driveMediaPath("abc", "What If 2.m4b"), "./drive-media/abc/What%20If%202.m4b");
+    /* v55 put the filename on the path. v54's id-only path is what played Immune. */
+    assert.equal(driveMediaPath("abc", "What If 2.m4b"), "./drive-media/abc?name=What%20If%202.m4b");
     assert.equal(
       driveMediaNameFromPath("/library-listen/drive-media/abc/What%20If%202.m4b"),
+      "What If 2.m4b"
+    );
+    assert.equal(
+      driveMediaNameFromUrl("https://bigdaddy109.github.io/library-listen/drive-media/abc?name=What%20If%202.m4b"),
       "What If 2.m4b"
     );
     assert.match(driveAltMediaUrl("abc"), /files\/abc\?alt=media/);
@@ -381,10 +390,10 @@ describe("Drive walker feeds the existing library pairing", () => {
     });
     const immune = books.find((b) => b.id === "immune/immune");
     assert.equal(immune.source, "drive");
-    assert.equal(
-      immune.chapters[0].url,
-      "https://bigdaddy109.github.io/library-listen/drive-media/p1/Immune-Part01.mp3"
-    );
+    const immuneUrl = new URL(immune.chapters[0].url);
+    assert.equal(immuneUrl.origin + immuneUrl.pathname, "https://bigdaddy109.github.io/library-listen/drive-media/p1");
+    assert.equal(immuneUrl.searchParams.get("name"), "Immune-Part01.mp3");
+    assert.equal(immuneUrl.pathname.endsWith(".mp3"), false);
     assert.equal(immune.ebook.driveId, "ie");
   });
 
@@ -846,6 +855,9 @@ describe("Drive audio proxy and EPUB reader", () => {
     }
     assert.equal(rewriteDriveAudioContentType("", "video/mp4"), "audio/mp4");
     assert.equal(rewriteDriveAudioContentType("part.mp3", "audio/mpeg"), "audio/mpeg");
+    /* v55 returned Drive's type unchanged for any named file that was not m4a/m4b/aac. */
+    assert.equal(rewriteDriveAudioContentType("Immune-Part01.mp3", "video/mp4"), "audio/mpeg");
+    assert.equal(rewriteDriveAudioContentType("Immune-Part01.mp3", "application/octet-stream"), "audio/mpeg");
     assert.equal(makeDriveFile({ id: "mp3", name: "part.mp3", size: 12, mimeType: "audio/mpeg" }).type, "audio/mpeg");
 
     const expired = await proxyDriveMediaRequest(
@@ -865,9 +877,122 @@ describe("Drive audio proxy and EPUB reader", () => {
     assert.match(sw, /alt=media/);
     assert.match(sw, /library-listen-shell-v\d+/);
     assert.match(sw, /function rewriteDriveAudioContentType/);
+    assert.match(sw, /ext === "mp3"/);
+    assert.match(sw, /return "audio\/mpeg"/);
     assert.match(sw, /ext === "m4a" \|\| ext === "m4b" \|\| ext === "aac"/);
     assert.match(sw, /return "audio\/mp4"/);
     assert.match(sw, /base === "video\/mp4"/);
+    assert.match(sw, /mode: "cors"/);
+    assert.match(sw, /res\.type === "opaque"/);
+    assert.match(sw, /res\.body/);
+    assert.doesNotMatch(sw, /arrayBuffer\(\)/);
+    assert.match(sw, /searchParams\.get\("name"\)/);
+    assert.match(sw, /skipWaiting/);
+    assert.match(sw, /clients\.claim/);
+  });
+
+  it("v54 id-only Immune URL played; v55 filename path must not be the audio src", () => {
+    const v54 = new URL("./drive-media/p1", "https://bigdaddy109.github.io/library-listen/");
+    const played = new URL(driveMediaUrl("p1", "https://bigdaddy109.github.io/library-listen/", "Immune-Part01.mp3"));
+    assert.equal(played.pathname, v54.pathname);
+    assert.equal(played.pathname.endsWith("/p1"), true);
+    assert.equal(played.pathname.includes("Immune-Part01.mp3"), false);
+    assert.equal(played.searchParams.get("name"), "Immune-Part01.mp3");
+    const m4b = new URL(driveMediaUrl("w2", "https://bigdaddy109.github.io/library-listen/", "What If 2.m4b"));
+    assert.equal(m4b.pathname.endsWith(".m4b"), false);
+    assert.equal(m4b.searchParams.get("name"), "What If 2.m4b");
+  });
+
+  it("streams a ranged 206, keeps the token, and does not buffer the file", async () => {
+    let buffered = false;
+    const stream = new Uint8Array([1, 2, 3]);
+    const proxied = await proxyDriveMediaRequest(
+      { fileId: "p1", range: "bytes=0-2", token: "tok", name: "Immune-Part01.mp3" },
+      async (_url, init) => {
+        assert.equal(init.headers.Authorization, "Bearer tok");
+        assert.equal(init.headers.Range, "bytes=0-2");
+        assert.equal(init.mode, "cors");
+        assert.equal(init.credentials, "omit");
+        return {
+          status: 206,
+          type: "cors",
+          headers: {
+            get: (name) =>
+              ({
+                "content-type": "application/octet-stream",
+                "content-length": "3",
+                "accept-ranges": "bytes",
+              })[name] || null,
+          },
+          body: stream,
+          arrayBuffer: async () => {
+            buffered = true;
+            return new ArrayBuffer(0);
+          },
+        };
+      }
+    );
+    assert.equal(buffered, false);
+    assert.equal(proxied.body, stream);
+    assert.equal(proxied.status, 206);
+    assert.equal(proxied.headers["Content-Type"], "audio/mpeg");
+    assert.equal(proxied.headers["Content-Range"], "bytes 0-2/*");
+    assert.equal(proxied.headers["Cache-Control"], "no-store");
+
+    const m4b = await proxyDriveMediaRequest(
+      { fileId: "w2", range: "bytes=0-7", token: "tok", name: "What If 2.m4b" },
+      async (_url, init) => {
+        assert.equal(init.headers.Range, "bytes=0-7");
+        return {
+          status: 206,
+          type: "cors",
+          headers: {
+            get: (name) => (name === "content-type" ? "video/mp4" : name === "content-range" ? "bytes 0-7/90" : null),
+          },
+          body: new Uint8Array(8),
+        };
+      }
+    );
+    assert.equal(m4b.headers["Content-Type"], "audio/mp4");
+    assert.equal(m4b.headers["Content-Range"], "bytes 0-7/90");
+    assert.equal(contentRangeForPartial("bytes=0-2", "3"), "bytes 0-2/*");
+  });
+
+  it("turns an opaque Drive response into HTTP 502 instead of a thrown status 0", async () => {
+    const opaque = await proxyDriveMediaRequest(
+      { fileId: "p1", range: "bytes=0-1", token: "tok", name: "Immune-Part01.mp3" },
+      async () => ({ status: 0, type: "opaque", headers: { get: () => null }, body: null })
+    );
+    assert.equal(opaque.status, 502);
+    assert.match(String(opaque.body), /opaque/);
+    assert.equal(opaque.headers["Cache-Control"], "no-store");
+  });
+
+  it("puts the book and the HTTP or media error on the status line", () => {
+    assert.equal(
+      playbackFailureLine({ title: "Immune", status: 403 }),
+      "Could not play “Immune” (HTTP 403)."
+    );
+    assert.equal(
+      playbackFailureLine({ title: "What If? 2", mediaError: { code: 4 } }),
+      "Could not play “What If? 2” (unsupported error)."
+    );
+    assert.equal(playbackFailureLine({ title: "Immune", mediaError: { code: 2 } }), "Could not play “Immune” (network error).");
+    const app = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../docs/app.js"), "utf8");
+    const html = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../docs/index.html"), "utf8");
+    const sw = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../docs/sw.js"), "utf8");
+    const errorListener = app.slice(app.indexOf('audio.addEventListener("error"'));
+    const handler = errorListener.slice(0, errorListener.indexOf('audio.addEventListener("ended"'));
+    assert.match(handler, /playbackFailureLine/);
+    assert.match(handler, /showPlaybackFailure/);
+    assert.doesNotMatch(handler, /alert\(/);
+    assert.match(html, /id="drive-status"/);
+    assert.match(html, /id="app-version"/);
+    assert.doesNotMatch(html, /id="app-version"[^>]*>\s*v\d+/);
+    assert.match(app, /searchParams\.get\("v"\)/);
+    const version = sw.match(/library-listen-shell-v(\d+)/)[1];
+    assert.match(html, new RegExp(`app\\.js\\?v=${version}`));
+    assert.match(app, new RegExp(`drive\\.js\\?v=${version}`));
   });
 
   it("opens a Drive EPUB buffer with the existing reader", async () => {
