@@ -3,14 +3,17 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
+import { buildLibrary } from "../docs/library.js";
 import {
   clearAccessToken,
+  makeDriveFile,
   finishDrivePlaybackAuthRetry,
   freshAccessToken,
   planDrivePlaybackAuthRetry,
   setAccessToken,
+  refreshGoogleToken,
   setDriveTokenAppliedListener,
-  setPopupOpenGraceMs,
+  setSilentPopupGraceMs,
   signInWithGoogle,
   tokenForChapterFetch,
   tokenForRead,
@@ -71,7 +74,7 @@ describe("Drive token expiry during listen", { concurrency: false }, () => {
 
   afterEach(() => {
     clearAccessToken();
-    setPopupOpenGraceMs(180_000);
+    setSilentPopupGraceMs(1000);
     delete globalThis.google;
   });
 
@@ -215,22 +218,20 @@ describe("Drive token expiry during listen", { concurrency: false }, () => {
     }
   });
 
-  it("does not fail a click whose prompt stays open past one second", async () => {
+  it("token callback after an account is chosen loads the books", async () => {
     clearAccessToken();
-    setPopupOpenGraceMs(5_000);
     globalThis.google = {
       accounts: {
         oauth2: {
           initTokenClient(opts) {
             return {
-              requestAccessToken() {
+              requestAccessToken(arg) {
+                assert.equal(arg.prompt, "consent");
                 opts.error_callback?.({
                   type: "popup_failed_to_open",
                   message: "Failed to open popup window",
                 });
-                setTimeout(() => {
-                  opts.callback?.({ access_token: "after-prompt", expires_in: 3600 });
-                }, 1100);
+                opts.callback?.({ access_token: "account-chosen", expires_in: 3600 });
               },
             };
           },
@@ -238,71 +239,151 @@ describe("Drive token expiry during listen", { concurrency: false }, () => {
       },
     };
     const token = await signInWithGoogle();
-    assert.equal(token, "after-prompt");
-    assert.equal(freshAccessToken(), "after-prompt");
+    assert.equal(token, "account-chosen");
+    assert.equal(freshAccessToken(), "account-chosen");
+    const file = makeDriveFile({
+      id: "part01",
+      name: "Immune-Part01.mp3",
+      mimeType: "audio/mpeg",
+      size: 1200,
+      videoMediaMetadata: { durationMillis: "3600000" },
+    });
+    const books = buildLibrary([
+      { path: "Library/Immune/listen/Immune-Part01.mp3", file },
+    ]);
+    assert.equal(books.length, 1);
+    assert.equal(books[0].chapters.length, 1);
+    assert.equal(books[0].chapters[0].durationMillis, 3_600_000);
   });
 
-  it("abandons a popup attempt without the popup error when no token follows", async () => {
+  it("a second click after a stuck attempt still opens sign-in", async () => {
     clearAccessToken();
-    setPopupOpenGraceMs(30);
+    /** @type {string[]} */
+    const prompts = [];
+    let clients = 0;
     globalThis.google = {
       accounts: {
         oauth2: {
           initTokenClient(opts) {
             return {
-              requestAccessToken() {
-                opts.error_callback?.({
-                  type: "popup_failed_to_open",
-                  message: "Failed to open popup window",
-                });
+              requestAccessToken(arg) {
+                clients += 1;
+                const prompt =
+                  arg && Object.prototype.hasOwnProperty.call(arg, "prompt") ? arg.prompt : "(missing)";
+                prompts.push(prompt);
+                if (clients === 1) {
+                  opts.error_callback?.({
+                    type: "popup_failed_to_open",
+                    message: "Failed to open popup window",
+                  });
+                  return;
+                }
+                opts.callback?.({ access_token: "second-click", expires_in: 3600 });
               },
             };
           },
         },
       },
     };
-    await assert.rejects(signInWithGoogle(), (err) => {
-      assert.equal(err?.silent, true);
-      assert.equal(err?.name, "AbortError");
-      assert.doesNotMatch(String(err?.message || ""), /Failed to open popup window/);
-      return true;
+    const first = signInWithGoogle();
+    const firstDone = first.then(
+      () => "token",
+      (err) => err
+    );
+    const token = await signInWithGoogle();
+    assert.equal(token, "second-click");
+    assert.deepEqual(prompts, ["consent", "consent"]);
+    assert.equal(clients, 2);
+    assert.equal(freshAccessToken(), "second-click");
+    const firstErr = await firstDone;
+    assert.equal(firstErr?.name, "AbortError");
+    assert.equal(firstErr?.silent, true);
+    const file = makeDriveFile({
+      id: "ms",
+      name: "01.mp3",
+      mimeType: "audio/mpeg",
+      size: 800,
     });
+    const books = buildLibrary([
+      { path: "Library/上學不容易/listen/Middle School 01 First Day/01.mp3", file },
+    ]);
+    assert.equal(books.length, 1);
   });
 
-  it("keeps a late token after the popup attempt was abandoned", async () => {
+  it("a silent refresh does not open a consent popup or lock the next click", async () => {
     clearAccessToken();
-    setPopupOpenGraceMs(20);
-    let applied = 0;
-    setDriveTokenAppliedListener(() => {
-      applied += 1;
-    });
+    setSilentPopupGraceMs(30);
+    /** @type {string[]} */
+    const prompts = [];
+    let clients = 0;
     globalThis.google = {
       accounts: {
         oauth2: {
           initTokenClient(opts) {
             return {
-              requestAccessToken() {
+              requestAccessToken(arg) {
+                clients += 1;
+                const prompt =
+                  arg && Object.prototype.hasOwnProperty.call(arg, "prompt") ? arg.prompt : "(missing)";
+                prompts.push(prompt);
+                if (prompt === "") {
+                  opts.error_callback?.({
+                    type: "popup_failed_to_open",
+                    message: "Failed to open popup window",
+                  });
+                  return;
+                }
+                opts.callback?.({ access_token: "from-click", expires_in: 3600 });
+              },
+            };
+          },
+        },
+      },
+    };
+    const silent = refreshGoogleToken();
+    const silentDone = silent.then(
+      () => null,
+      (err) => err
+    );
+    const clicked = await signInWithGoogle();
+    assert.equal(clicked, "from-click");
+    assert.deepEqual(prompts, ["", "consent"]);
+    assert.equal(clients, 2);
+    const err = await silentDone;
+    assert.equal(err?.name, "AbortError");
+    assert.equal(err?.silent, true);
+    assert.doesNotMatch(String(err?.message || ""), /Failed to open popup window/);
+  });
+
+  it("a silent token after popup_failed_to_open still resolves the refresh", async () => {
+    clearAccessToken();
+    setSilentPopupGraceMs(500);
+    /** @type {string[]} */
+    const prompts = [];
+    globalThis.google = {
+      accounts: {
+        oauth2: {
+          initTokenClient(opts) {
+            return {
+              requestAccessToken(arg) {
+                prompts.push(arg.prompt);
                 opts.error_callback?.({
                   type: "popup_failed_to_open",
                   message: "Failed to open popup window",
                 });
                 setTimeout(() => {
-                  opts.callback?.({ access_token: "late", expires_in: 3600 });
-                }, 60);
+                  opts.callback?.({ access_token: "silent-token", expires_in: 3600 });
+                }, 20);
               },
             };
           },
         },
       },
     };
-    try {
-      await assert.rejects(signInWithGoogle());
-      await new Promise((resolve) => setTimeout(resolve, 80));
-      assert.equal(freshAccessToken(), "late");
-      assert.equal(applied, 1);
-    } finally {
-      setDriveTokenAppliedListener(null);
-    }
+    const token = await refreshGoogleToken();
+    assert.equal(token, "silent-token");
+    assert.deepEqual(prompts, [""]);
+    assert.equal(freshAccessToken(), "silent-token");
   });
 
   it("shows Drive failures inline and replays a 401 at the saved position", () => {

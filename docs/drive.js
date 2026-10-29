@@ -75,6 +75,12 @@ let accessToken = null;
 let tokenExpiresAt = 0;
 /** @type {Promise<string> | null} */
 let gisInflight = null;
+/**
+ * The latest GIS attempt, including one that already dropped the lock.
+ * A click can abandon a stuck attempt so the button is not dead.
+ * @type {null | { promise: Promise<string>, silent: boolean, stuck: boolean, settled: boolean, abandon: () => void }}
+ */
+let gisAttempt = null;
 /** @type {((token: string) => void) | null} */
 let rangeFetchImpl = null;
 
@@ -485,17 +491,17 @@ export function driveChromeAfterSignIn(chrome, { signedIn = false } = {}) {
 }
 
 /**
- * How long a click that opened the Google prompt may wait for the token.
- * One second is shorter than signing in, and rejecting then paints
- * "Failed to open popup window" while the prompt is still open.
+ * A page-load `prompt: ''` refresh may hear `popup_failed_to_open` and then
+ * still receive a token. Wait this long for that token, without holding the
+ * sign-in lock. A click uses its own prompt and is not on this timer.
  */
-const POPUP_OPEN_GRACE_MS = 180_000;
-let popupOpenGraceMs = POPUP_OPEN_GRACE_MS;
+const SILENT_POPUP_GRACE_MS = 1000;
+let silentPopupGraceMs = SILENT_POPUP_GRACE_MS;
 
-export function setPopupOpenGraceMs(ms) {
+export function setSilentPopupGraceMs(ms) {
   const n = Number(ms);
-  popupOpenGraceMs = Number.isFinite(n) && n >= 0 ? n : POPUP_OPEN_GRACE_MS;
-  return popupOpenGraceMs;
+  silentPopupGraceMs = Number.isFinite(n) && n >= 0 ? n : SILENT_POPUP_GRACE_MS;
+  return silentPopupGraceMs;
 }
 
 export function planDriveMediaProxy({ fileId, range, token } = {}) {
@@ -1261,8 +1267,9 @@ function gisOauth() {
 }
 
 /**
- * Call GIS. `prompt` "" is a silent refresh; "consent" is the sign-in button.
- * When the script is already loaded this invokes requestAccessToken immediately.
+ * Call GIS. `prompt` "" is a silent refresh and must not open a popup.
+ * "consent" is the sign-in button only. A stuck attempt does not swallow
+ * the next click: that click calls requestAccessToken again.
  */
 function requestGisToken(prompt) {
   requireClientId();
@@ -1272,59 +1279,92 @@ function requestGisToken(prompt) {
     err.name = "DriveConfigError";
     throw err;
   }
-  if (gisInflight) return gisInflight;
   const promptValue = prompt == null ? "consent" : String(prompt);
-  gisInflight = new Promise((resolve, reject) => {
-    let settled = false;
-    let attemptGotToken = false;
-    let popupTimer = null;
-    const finish = (fn, value) => {
-      if (settled) return;
-      settled = true;
-      if (popupTimer) clearTimeout(popupTimer);
-      popupTimer = null;
-      fn(value);
-    };
-    const client = gis.initTokenClient(
-      tokenClientOptions(
-        (resp) => {
-          if (resp?.error || !resp?.access_token) {
-            finish(reject, gisAuthFailure(resp) || driveErrorFrom(resp));
-            return;
-          }
-          attemptGotToken = true;
-          // Apply even if this attempt already gave up, so a slow prompt still
-          // stores the token and the page can clear a leftover popup line.
-          const token = applyGisToken(resp);
-          finish(resolve, token);
-        },
-        (err) => {
-          // COOP can make GIS log window.closed; ignore that and keep waiting
-          // for the token callback so we do not break the popup flow.
-          const failure = gisAuthFailure(err);
-          if (!failure) return;
-          // popup_failed_to_open also fires when the prompt did open. Do not
-          // fail the click or surface that message. Wait for the token.
-          if (isPopupWindowFailure(err)) {
+  const userClick = promptValue !== "";
+  if (gisAttempt && !gisAttempt.settled && userClick && (gisAttempt.silent || gisAttempt.stuck)) {
+    gisAttempt.abandon();
+  } else if (gisInflight) {
+    return gisInflight;
+  }
+
+  let settled = false;
+  let popupTimer = null;
+  /** @type {(value: string) => void} */
+  let resolveAttempt = () => {};
+  /** @type {(err: Error) => void} */
+  let rejectAttempt = () => {};
+  const promise = new Promise((resolve, reject) => {
+    resolveAttempt = resolve;
+    rejectAttempt = reject;
+  });
+
+  const attempt = {
+    promise,
+    silent: !userClick,
+    stuck: false,
+    settled: false,
+    abandon() {
+      const quiet = driveErrorFrom({ name: "AbortError", type: "popup_closed" });
+      quiet.silent = true;
+      finish(rejectAttempt, quiet);
+    },
+  };
+
+  const finish = (fn, value) => {
+    if (settled) return;
+    settled = true;
+    attempt.settled = true;
+    if (popupTimer) clearTimeout(popupTimer);
+    popupTimer = null;
+    if (gisInflight === promise) gisInflight = null;
+    if (gisAttempt === attempt) gisAttempt = null;
+    fn(value);
+  };
+
+  gisInflight = promise;
+  gisAttempt = attempt;
+
+  const client = gis.initTokenClient(
+    tokenClientOptions(
+      (resp) => {
+        if (resp?.error || !resp?.access_token) {
+          finish(rejectAttempt, gisAuthFailure(resp) || driveErrorFrom(resp));
+          return;
+        }
+        // Store the token even if this attempt was already abandoned, then
+        // resolve so the Drive scan waiting on this promise can load books.
+        const token = applyGisToken(resp);
+        finish(resolveAttempt, token);
+      },
+      (err) => {
+        // COOP can make GIS log window.closed; ignore that and keep waiting
+        // for the token callback so we do not break the popup flow.
+        const failure = gisAuthFailure(err);
+        if (!failure) return;
+        if (isPopupWindowFailure(err)) {
+          // Drop the lock now. A page-load refresh must not freeze Sign in,
+          // and a second click must be able to open a new prompt.
+          attempt.stuck = true;
+          if (gisInflight === promise) gisInflight = null;
+          if (!userClick) {
             if (popupTimer) clearTimeout(popupTimer);
             popupTimer = setTimeout(() => {
               popupTimer = null;
-              if (attemptGotToken || settled) return;
+              if (settled) return;
               const quiet = driveErrorFrom({ name: "AbortError", type: "popup_closed" });
               quiet.silent = true;
-              finish(reject, quiet);
-            }, popupOpenGraceMs);
-            return;
+              finish(rejectAttempt, quiet);
+            }, silentPopupGraceMs);
           }
-          finish(reject, failure);
+          return;
         }
-      )
-    );
-    client.requestAccessToken({ prompt: promptValue });
-  }).finally(() => {
-    gisInflight = null;
-  });
-  return gisInflight;
+        finish(rejectAttempt, failure);
+      }
+    )
+  );
+  // Silent refresh stays `prompt: ""`. Only a click passes consent.
+  client.requestAccessToken({ prompt: userClick ? promptValue : "" });
+  return promise;
 }
 
 export async function signInWithGoogle({ prompt = "consent" } = {}) {
