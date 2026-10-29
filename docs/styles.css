@@ -346,15 +346,6 @@ button.text-link {
   text-underline-offset: 0.16em;
 }
 
-#btn-pick-main {
-  min-height: 44px;
-  padding-top: 0.7rem;
-  padding-bottom: 0.7rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
 button.text-link:hover,
 button.text-link:focus-visible {
   color: var(--amber);
@@ -393,9 +384,7 @@ body.is-scanning {
 body.is-scanning .primary,
 body.is-scanning .text-link,
 body.is-scanning #btn-change,
-body.is-scanning #btn-google,
-body.is-scanning #btn-pick-main,
-body.is-scanning #btn-pick-files {
+body.is-scanning #btn-google {
   opacity: 0.65;
   pointer-events: none;
 }
@@ -904,32 +893,6 @@ body:has(.player-bar.has-drive-error) {
 .player-sub .player-chapter {
   flex: 1;
   min-width: 0;
-}
-
-a.read-this-book {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 1.85rem;
-  padding: 0 0.55rem;
-  border: 1px solid rgba(232, 173, 71, 0.55);
-  border-radius: 999px;
-  background: rgba(232, 173, 71, 0.12);
-  color: var(--amber);
-  font-size: 0.75rem;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: 0.02em;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.book-meta a.read-this-book {
-  margin-top: 0.7rem;
-  height: 2.15rem;
-  padding: 0 0.9rem;
-  font-size: 0.95rem;
 }
 
 .player-chapter {

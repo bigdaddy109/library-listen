@@ -5,25 +5,25 @@ import { shouldOfferSaveWhileListening } from "../docs/save-prompt.js";
 const book = { id: "immune", title: "Immune" };
 
 describe("shouldOfferSaveWhileListening", () => {
-  it("offers on iPhone-style playback: playable, not offline, no directory handle", () => {
+  it("offers on a phone when the book can play and is not saved yet", () => {
     assert.equal(
       shouldOfferSaveWhileListening({
         book,
         isPlayable: true,
         isOffline: false,
-        hasDirectoryHandle: false,
+        phone: true,
       }),
       true
     );
   });
 
-  it("stays quiet on desktop when the directory handle already persists", () => {
+  it("stays quiet on desktop", () => {
     assert.equal(
       shouldOfferSaveWhileListening({
         book,
         isPlayable: true,
         isOffline: false,
-        hasDirectoryHandle: true,
+        phone: false,
       }),
       false
     );
@@ -35,19 +35,7 @@ describe("shouldOfferSaveWhileListening", () => {
         book,
         isPlayable: true,
         isOffline: true,
-        hasDirectoryHandle: false,
-      }),
-      false
-    );
-  });
-
-  it("stays quiet when both a handle and an offline copy exist", () => {
-    assert.equal(
-      shouldOfferSaveWhileListening({
-        book,
-        isPlayable: true,
-        isOffline: true,
-        hasDirectoryHandle: true,
+        phone: true,
       }),
       false
     );
@@ -59,7 +47,7 @@ describe("shouldOfferSaveWhileListening", () => {
         book,
         isPlayable: false,
         isOffline: false,
-        hasDirectoryHandle: false,
+        phone: true,
       }),
       false
     );
@@ -71,7 +59,7 @@ describe("shouldOfferSaveWhileListening", () => {
         book: null,
         isPlayable: true,
         isOffline: false,
-        hasDirectoryHandle: false,
+        phone: true,
       }),
       false
     );

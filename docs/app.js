@@ -1,14 +1,9 @@
 import { IMMUNE_CARDS } from "./immune-cards.js?v=55";
 import { SLEEP_CHAPTER, nearestSleepMinute, nextSleepChoice } from "./sleep.js?v=55";
 import {
-  AUDIO_EXT,
-  EPUB_EXT,
-  SKIP_FOLDERS,
   bookHasAudio,
   bookScreenTabs,
-  libraryReadUrl,
   listenShelfBooks,
-  READ_THIS_BOOK_LABEL,
   extOf,
   bookHasDriveMedia,
   booksFromLibrarySnapshot,
@@ -118,8 +113,6 @@ const els = {
   playerBar: document.getElementById("player-bar"),
   capabilityHint: document.getElementById("capability-hint"),
   driveStatus: document.getElementById("drive-status"),
-  fileInputDir: document.getElementById("file-input-dir"),
-  fileInputFiles: document.getElementById("file-input-files"),
   sourceSheet: document.getElementById("source-sheet"),
   sourceSheetTitle: document.getElementById("source-sheet-title"),
   sourceSheetCopy: document.getElementById("source-sheet-copy"),
@@ -127,12 +120,8 @@ const els = {
   btnSheetPicker: document.getElementById("btn-sheet-picker"),
   btnSheetGoogle: document.getElementById("btn-sheet-google"),
   btnSheetReload: document.getElementById("btn-sheet-reload"),
-  btnSheetLocal: document.getElementById("btn-sheet-local"),
-  btnSheetLocalLink: document.getElementById("btn-sheet-local-link"),
-  btnSheetFiles: document.getElementById("btn-sheet-files"),
   btnSheetSignout: document.getElementById("btn-sheet-signout"),
   btnSheetCancel: document.getElementById("btn-sheet-cancel"),
-  sourceSheetAdvanced: document.getElementById("source-sheet-advanced"),
   shelfTools: document.getElementById("shelf-tools"),
   shelfQuery: document.getElementById("shelf-query"),
   clearSearch: document.getElementById("btn-clear-search"),
@@ -158,15 +147,13 @@ const offlineIndex = new Map();
 let folderSheetResolve = null;
 /** @type {HTMLElement | null} */
 let sheetReturnFocus = null;
-/** @type {FileSystemDirectoryHandle | null} */
-let savedDirHandle = null;
 let savingBookId = null;
 /** @type {number | null} epoch ms when sleep timer should pause playback */
 let sleepUntil = null;
 let sleepTick = null;
 /** Stop at the end of the current chapter instead of a clock time. */
 let sleepAtChapterEnd = false;
-/** Offer Save-to-device banner after a fresh folder pick */
+/** Offer Save-to-device banner after a Drive library load */
 let offerSaveBanner = false;
 /** bookIds already asked to save this session */
 const savePrompted = new Set();
@@ -190,8 +177,9 @@ function openDb() {
     dbPromise = new Promise((resolve, reject) => {
       const req = indexedDB.open(DB_NAME, 1);
       req.onupgradeneeded = () => {
-        req.result.createObjectStore("handles");
-        req.result.createObjectStore("offline");
+        if (!req.result.objectStoreNames.contains("offline")) {
+          req.result.createObjectStore("offline");
+        }
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -432,7 +420,7 @@ async function saveBookOffline(book) {
     alert(
       err?.name === "QuotaExceededError"
         ? "Not enough storage on this device to save the whole book."
-        : "Could not save this book on the device.\n\nIf this is iCloud: Download Now on listen/ first, then try again. Private Browsing cannot save books."
+        : "Could not save this book on the device. Private Browsing cannot save books."
     );
   } finally {
     savingBookId = null;
@@ -461,9 +449,9 @@ function updateOfflineButton(book, busyLabel) {
     btn.textContent = "Save to this device";
   }
   if (offline) {
-    status.textContent = "Saved on this device — plays without picking the folder again.";
+    status.textContent = "Saved on this device — plays without a connection.";
   } else if (!isBookOpenable(book)) {
-    status.textContent = "Reconnect the Library folder to play this book.";
+    status.textContent = "Sign in with Google again to play this book.";
   } else {
     const bytes = blobsToSave(book).reduce((n, [, file]) => n + (file?.size || 0), 0);
     status.textContent = `Save a copy (${formatBytes(bytes)}) so it opens after the app restarts.`;
@@ -473,20 +461,6 @@ function updateOfflineButton(book, busyLabel) {
 function formatBytes(bytes) {
   if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
   return `${Math.max(1, Math.round(bytes / 1e6))} MB`;
-}
-
-async function rememberDirectory(handle) {
-  savedDirHandle = handle;
-  await idb("handles", "readwrite", (s) => s.put(handle, "library")).catch(() => {});
-}
-
-async function loadSavedDirectory() {
-  if (typeof window.showDirectoryPicker !== "function") return null;
-  try {
-    return (await idb("handles", "readonly", (s) => s.get("library"))) || null;
-  } catch {
-    return null;
-  }
 }
 
 function loadRate() {
@@ -561,125 +535,10 @@ function fileUrl(file) {
   return url;
 }
 
-/**
- * Walk a directory handle (File System Access API).
- * Skip unreadable / not-downloaded iCloud files instead of failing the whole scan.
- * @param {FileSystemDirectoryHandle} dir
- * @param {string[]} prefix
- */
-async function walkDirectory(dir, prefix = []) {
-  /** @type {{ path: string, file: File }[]} */
-  const out = [];
-  let skipped = 0;
-  for await (const [name, handle] of dir.entries()) {
-    if (name.startsWith(".")) continue;
-    const next = [...prefix, name];
-    if (handle.kind === "directory") {
-      if (SKIP_FOLDERS.has(name.toLowerCase()) || name.startsWith("_")) continue;
-      try {
-        const nested = await walkDirectory(handle, next);
-        out.push(...nested.entries);
-        skipped += nested.skipped;
-      } catch {
-        skipped += 1;
-      }
-    } else if (handle.kind === "file") {
-      try {
-        const file = await handle.getFile();
-        // Cloud-only placeholders often come through as empty.
-        const ext = extOf(file.name);
-        if (!file || ((AUDIO_EXT.has(ext) || EPUB_EXT.has(ext)) && file.size === 0)) {
-          skipped += 1;
-          continue;
-        }
-        out.push({ path: next.join("/"), file });
-      } catch {
-        skipped += 1;
-      }
-    }
-  }
-  return { entries: out, skipped };
-}
-
 async function booksFromEntries(entries) {
   const books = buildLibrary(entries);
   await applyAudiobookMarkers(books);
   return books;
-}
-
-async function scanDirectoryHandle(handle) {
-  const { entries, skipped } = await walkDirectory(handle);
-  return { books: await booksFromEntries(entries), entries, skipped, handle };
-}
-
-async function pickWithDirectoryPicker() {
-  const handle = await window.showDirectoryPicker({ mode: "read", id: "library" });
-  return scanDirectoryHandle(handle);
-}
-
-/** Re-open the remembered folder; must run inside a user gesture unless already granted. */
-async function reopenSavedDirectory({ prompt }) {
-  const handle = savedDirHandle;
-  if (!handle?.queryPermission) return null;
-  let permission = await handle.queryPermission({ mode: "read" });
-  if (permission !== "granted" && prompt) {
-    permission = await handle.requestPermission({ mode: "read" });
-  }
-  if (permission !== "granted") return null;
-  return scanDirectoryHandle(handle);
-}
-
-function pickWithInput(input) {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const finish = (fn, value) => {
-      if (settled) return;
-      settled = true;
-      window.removeEventListener("focus", onWindowFocus);
-      input.onchange = null;
-      fn(value);
-    };
-
-    input.onchange = () => {
-      const files = [...(input.files || [])];
-      if (!files.length) {
-        finish(reject, Object.assign(new Error("No files selected"), { name: "AbortError" }));
-        return;
-      }
-      const entries = files.map((file) => ({
-        path: file.webkitRelativePath || file.name,
-        file,
-      }));
-      booksFromEntries(entries)
-        .then((books) =>
-          finish(resolve, {
-            books,
-            entries,
-            skipped: entries.filter((e) => {
-              const ext = extOf(e.file.name);
-              return (AUDIO_EXT.has(ext) || EPUB_EXT.has(ext)) && e.file.size === 0;
-            }).length,
-          })
-        )
-        .catch((err) => finish(reject, err));
-    };
-
-    // User cancelled the sheet — focus returns without a change event.
-    const onWindowFocus = () => {
-      window.setTimeout(() => {
-        if (!settled && (!input.files || input.files.length === 0)) {
-          finish(reject, Object.assign(new Error("Cancelled"), { name: "AbortError" }));
-        }
-      }, 700);
-    };
-    window.addEventListener("focus", onWindowFocus);
-    try {
-      input.value = "";
-    } catch {
-      /* iOS may ignore */
-    }
-    input.click();
-  });
 }
 
 function setScanning(active) {
@@ -688,7 +547,7 @@ function setScanning(active) {
   if (!hint) return;
   if (active) {
     hint.dataset.prev = hint.textContent || "";
-    hint.textContent = "Scanning Library… if this is iCloud, wait for Download Now to finish.";
+    hint.textContent = "Scanning the Drive Library…";
   } else if (hint.dataset.prev != null) {
     hint.textContent = hint.dataset.prev;
     delete hint.dataset.prev;
@@ -796,29 +655,11 @@ function closeSourceSheet(folder = null, { restoreFocus = true } = {}) {
   resolve?.(folder);
 }
 
-function setSheetActions({
-  google,
-  local,
-  files,
-  picker,
-  signout,
-  reload,
-  localLink,
-  advanced,
-} = {}) {
+function setSheetActions({ google, picker, signout, reload } = {}) {
   els.btnSheetGoogle?.classList.toggle("hidden", !google);
   els.btnSheetReload?.classList.toggle("hidden", !reload);
-  els.btnSheetLocal?.classList.toggle("hidden", !local);
-  els.btnSheetLocalLink?.classList.toggle("hidden", !localLink);
-  els.btnSheetFiles?.classList.toggle("hidden", !files);
   els.btnSheetPicker?.classList.toggle("hidden", !picker);
   els.btnSheetSignout?.classList.toggle("hidden", !signout);
-  const showAdvanced = !!advanced && (!!local || !!files);
-  if (els.sourceSheetAdvanced) {
-    els.sourceSheetAdvanced.classList.toggle("hidden", !showAdvanced);
-    els.sourceSheetAdvanced.hidden = !showAdvanced;
-    els.sourceSheetAdvanced.open = false;
-  }
 }
 
 function openSourceSheet({ title, copy, folders = [], actions = {} } = {}) {
@@ -859,7 +700,7 @@ async function loadFromDrive({ silent } = {}) {
   if (!isGoogleClientConfigured()) {
     const err = Object.assign(
       new Error(
-        "Google sign-in is not configured yet.\n\nPaste a Web application Client ID into GOOGLE_OAUTH_CLIENT_ID in docs/drive.js. Setup steps are in the README.\n\nChoose Library folder still works as a local fallback."
+        "Google sign-in is not configured yet.\n\nPaste a Web application Client ID into GOOGLE_OAUTH_CLIENT_ID in docs/drive.js. Setup steps are in the README."
       ),
       { name: "DriveConfigError" }
     );
@@ -914,37 +755,16 @@ async function loadFromDrive({ silent } = {}) {
 }
 
 /**
- * @param {"directory" | "files" | "reconnect" | "auto" | "drive" | "drive-auto"} mode
- *   reconnect: remembered folder (with permission prompt), else the picker.
- *   auto: remembered folder only if permission is already granted; silent otherwise.
- *   drive / drive-auto: GIS + Drive API (shared Library folder).
+ * @param {"drive" | "drive-auto"} mode
+ *   drive-auto: silent GIS refresh of the shared Library folder.
  */
 async function loadLibrary(mode) {
-  const silent = mode === "auto" || mode === "drive-auto";
+  const silent = mode === "drive-auto";
   if (!silent) hideLibraryStatus();
   setScanning(true);
   try {
-    let result = null;
-    if (mode === "drive" || mode === "drive-auto") {
-      result = await loadFromDrive({ silent: mode === "drive-auto" });
-      if (!result) return;
-    } else {
-      if (!savedDirHandle && silent) return;
-      // No await before the file input on iOS, or Safari drops the tap gesture.
-      if (savedDirHandle && (mode === "reconnect" || mode === "auto")) {
-        result = await reopenSavedDirectory({ prompt: mode === "reconnect" }).catch(() => null);
-        if (!result && silent) return;
-      }
-      if (!result) {
-        if (mode === "files") {
-          result = await pickWithInput(els.fileInputFiles);
-        } else if (typeof window.showDirectoryPicker === "function") {
-          result = await pickWithDirectoryPicker();
-        } else {
-          result = await pickWithInput(els.fileInputDir);
-        }
-      }
-    }
+    const result = await loadFromDrive({ silent });
+    if (!result) return;
 
     const scanned = result.books || [];
     const entries = result.entries || [];
@@ -958,7 +778,6 @@ async function loadLibrary(mode) {
       return;
     }
     clearDriveError();
-    if (result.handle) await rememberDirectory(result.handle);
 
     // Keep offline copies and the last Drive scan when this pass is a
     // partial page / recently-played reconnect, not a smaller library.
@@ -1007,14 +826,7 @@ async function loadLibrary(mode) {
       return;
     }
     console.error(err);
-    if (mode === "drive" || mode === "drive-auto") {
-      showDriveError(err);
-      return;
-    }
-    showLibraryStatus(
-      (err?.message || "Could not open the library.") +
-        "\n\nIf this is iCloud: Download Now on the Library/listen folders, then try again."
-    );
+    showDriveError(err);
   } finally {
     setScanning(false);
   }
@@ -1293,17 +1105,15 @@ function renderShelf() {
 }
 
 function bookCard(book) {
-  const href = bookHasAudio(book) ? "" : book.readUrl || libraryReadUrl(book) || "";
-  const btn = document.createElement(href ? "a" : "button");
-  if (href) btn.href = href;
-  else btn.type = "button";
+  const btn = document.createElement("button");
+  btn.type = "button";
   btn.className = "book-card";
   const cover = document.createElement("div");
   cover.className = "cover";
   setCover(cover, book);
   const body = document.createElement("div");
   const { line, fraction } = progressLine(book);
-  const badge = href ? book.readLabel || READ_THIS_BOOK_LABEL : shelfBadge(book);
+  const badge = shelfBadge(book);
   body.innerHTML = `
     <p class="title-row"><span class="title"></span><span class="shelf-badge"></span></p>
     <p class="meta"></p>
@@ -1321,7 +1131,7 @@ function bookCard(book) {
   if (isBookOffline(book)) meta += " · on device";
   else if (hasAudio && !isBookPlayable(book)) meta += " · reconnect to play";
   body.querySelector(".meta").textContent = meta;
-  btn.classList.toggle("unavailable", !href && !isBookOpenable(book));
+  btn.classList.toggle("unavailable", !isBookOpenable(book));
   body.querySelector(".progress").textContent = line;
   const bar = body.querySelector(".progress-track > span");
   if (fraction == null) {
@@ -1336,13 +1146,12 @@ function bookCard(book) {
     hitsEl.classList.remove("hidden");
   }
   btn.append(cover, body);
-  if (!href) btn.addEventListener("click", () => openBook(book.id));
+  btn.addEventListener("click", () => openBook(book.id));
   return btn;
 }
 
 function resolvedBookPane(book, pane = state.bookPane) {
   const tabs = bookScreenTabs(book);
-  if (pane === "read") pane = "audio";
   if (tabs.includes(pane)) return pane;
   return tabs[0] || "audio";
 }
@@ -1449,10 +1258,6 @@ function renderBook() {
   els.chapterList.classList.toggle("hidden", showConcepts || !book.chapters.length);
   els.conceptList.classList.toggle("hidden", !showConcepts);
   if (showConcepts) renderConceptCards();
-  setReadThisBookLink(
-    document.getElementById("read-this-book"),
-    libraryReadUrl(book, playingChapterIndex(book))
-  );
 }
 
 function render() {
@@ -1816,7 +1621,7 @@ function maybeOfferSaveWhileListening(book) {
       book,
       isPlayable: !!book && isBookPlayable(book),
       isOffline: !!book && isBookOffline(book),
-      hasDirectoryHandle: !!savedDirHandle,
+      phone: isIOSDevice(navigator),
     })
   ) {
     return;
@@ -1830,7 +1635,7 @@ function maybeOfferSaveWhileListening(book) {
         book,
         isPlayable: isBookPlayable(book),
         isOffline: isBookOffline(book),
-        hasDirectoryHandle: !!savedDirHandle,
+        phone: isIOSDevice(navigator),
       })
     ) {
       return;
@@ -2002,28 +1807,9 @@ function writeSeekBar(pos, dur) {
   ignoreSeekInput -= 1;
 }
 
-function playingChapterIndex(book) {
-  if (!book || playback?.bookId !== book.id) return null;
-  return Number.isInteger(playback.chapterIndex) ? playback.chapterIndex : null;
-}
-
-function setReadThisBookLink(el, href) {
-  if (!el) return;
-  if (!href) {
-    el.hidden = true;
-    el.classList.add("hidden");
-    el.removeAttribute("href");
-    return;
-  }
-  el.href = href;
-  el.hidden = false;
-  el.classList.remove("hidden");
-}
-
 function updatePlayerBar() {
   if (!playback) {
     els.playerBar.classList.add("hidden");
-    setReadThisBookLink(document.getElementById("player-read-this-book"), "");
     return;
   }
   const book = findBook(playback.bookId);
@@ -2031,11 +1817,6 @@ function updatePlayerBar() {
   if (!book || !chapter) return;
 
   els.playerBar.classList.remove("hidden");
-  const readHref = libraryReadUrl(book, playback.chapterIndex);
-  setReadThisBookLink(document.getElementById("player-read-this-book"), readHref);
-  if (state.activeBookId === book.id) {
-    setReadThisBookLink(document.getElementById("read-this-book"), readHref);
-  }
   setCover(document.getElementById("player-cover"), book);
   document.getElementById("player-title").textContent = book.title;
   document.getElementById("player-chapter").textContent = chapter.title;
@@ -2067,22 +1848,10 @@ function cycleSort() {
 }
 
 function setupCapabilityHint() {
-  const pickMain = document.getElementById("btn-pick-main");
-  const pickFilesBtn = document.getElementById("btn-pick-files");
-  pickMain?.classList.remove("hidden");
-  pickMain?.classList.add("text-link");
-  pickFilesBtn?.classList.add("hidden");
-  if (pickFilesBtn) pickFilesBtn.hidden = true;
-
-  if (isGoogleClientConfigured()) {
-    els.capabilityHint.textContent =
-      "Sign in with Google loads the shared Drive Library. Use a local folder instead if you already have a copy.";
-  } else if (typeof window.showDirectoryPicker === "function") {
-    els.capabilityHint.textContent =
-      "Choose Library folder, then pick Library or a collection (Munroe / Immune). On iPhone/iPad, pick the folder in Files after Download Now.";
-  } else {
-    els.capabilityHint.textContent =
-      "Choose Library folder to select a folder (works in Files on iPhone/iPad and desktop). Or use Choose audio files to pick files one by one.";
+  if (els.capabilityHint) {
+    els.capabilityHint.textContent = isGoogleClientConfigured()
+      ? "Sign in with Google to load the shared Drive Library."
+      : "Google sign-in is not configured yet. Paste a Client ID into docs/drive.js.";
   }
   updateDriveStatus();
 }
@@ -2094,25 +1863,15 @@ function libraryNeedsReconnect() {
   );
 }
 
-function libraryUsesDrive() {
-  return state.books.some((b) => b.source === "drive") || !!loadDriveSession();
-}
-
 function updateChangeButtonLabel() {
   const btn = document.getElementById("btn-change");
   if (!btn) return;
-  if (libraryNeedsReconnect() && libraryUsesDrive()) {
+  if (libraryNeedsReconnect()) {
     btn.textContent = "Reconnect Drive";
     btn.title = "Sign in with Google again to stream from the shared Library";
-  } else if (libraryNeedsReconnect()) {
-    btn.textContent = "Reconnect Library";
-    btn.title = "Pick the Library folder again to play every book";
-  } else if (libraryUsesDrive()) {
-    btn.textContent = "Change source";
-    btn.title = "Switch between Google Drive and a local folder";
   } else {
-    btn.textContent = "Change folder";
-    btn.title = "Pick a different Library folder";
+    btn.textContent = "Library";
+    btn.title = "Reload the Drive library or sign out";
   }
 }
 
@@ -2125,7 +1884,7 @@ function showChangeSourceSheet() {
       ? `Signed in as ${session.email}. Reload the Drive library or sign out.`
       : signedIn
         ? "Signed in to Google. Reload the Drive library or sign out."
-        : "Sign in with Google to load the shared Library folder, or use a local folder.",
+        : "Sign in with Google to load the shared Library folder.",
     actions: sourceDialogActions({ signedIn }),
   }).then((folder) => {
     if (!folder?.id) return;
@@ -2168,9 +1927,6 @@ function bindMediaSession() {
 }
 
 function bind() {
-  const pickDirectory = () => loadLibrary("directory");
-  const pickFiles = () => loadLibrary("files");
-
   document.getElementById("btn-google")?.addEventListener("click", () => {
     closeSourceSheet(null);
     loadLibrary("drive");
@@ -2184,7 +1940,6 @@ function bind() {
     event.preventDefault();
     closeSourceSheet(null);
   });
-  document.getElementById("btn-pick-main")?.addEventListener("click", pickDirectory);
   els.btnSheetGoogle?.addEventListener("click", () => {
     closeSourceSheet(null);
     loadLibrary("drive");
@@ -2192,18 +1947,6 @@ function bind() {
   els.btnSheetReload?.addEventListener("click", () => {
     closeSourceSheet(null);
     loadLibrary("drive");
-  });
-  els.btnSheetLocalLink?.addEventListener("click", () => {
-    closeSourceSheet(null);
-    loadLibrary("directory");
-  });
-  els.btnSheetLocal?.addEventListener("click", () => {
-    closeSourceSheet(null);
-    loadLibrary("directory");
-  });
-  els.btnSheetFiles?.addEventListener("click", () => {
-    closeSourceSheet(null);
-    loadLibrary("files");
   });
   els.btnSheetPicker?.addEventListener("click", () => {
     Promise.resolve()
@@ -2254,7 +1997,6 @@ function bind() {
     }
     await saveBookOffline(book);
   });
-  document.getElementById("btn-pick-files").addEventListener("click", pickFiles);
   document.getElementById("btn-back").addEventListener("click", () => {
     state.activeBookId = null;
     render();
@@ -2539,11 +2281,6 @@ async function restoreSession() {
     hasDriveSession,
   });
   if (plan.invalidateSnapshot) applyShelfRestorePlan(store, plan);
-  savedDirHandle = await loadSavedDirectory();
-  if (savedDirHandle) {
-    await loadLibrary("auto");
-    if (state.books.length) return;
-  }
   if (hasDriveSession) {
     await loadLibrary("drive-auto");
     if (state.books.length || plan.forceDriveRescan) return;
@@ -2552,9 +2289,8 @@ async function restoreSession() {
   const restored = restoreLibrarySnapshot();
   if (showRestoredBooks(restored)) return;
   if (restored.length && els.capabilityHint) {
-    els.capabilityHint.textContent = libraryUsesDrive()
-      ? "Sign in with Google again to keep listening. Your progress is still here."
-      : "Pick the Library folder again to keep listening. Your progress is still here.";
+    els.capabilityHint.textContent =
+      "Sign in with Google again to keep listening. Your progress is still here.";
   }
 }
 

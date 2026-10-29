@@ -182,7 +182,6 @@ export async function seedOfflineAudio(page, bookId) {
         req.onupgradeneeded = () => {
           const db = req.result;
           if (!db.objectStoreNames.contains("offline")) db.createObjectStore("offline");
-          if (!db.objectStoreNames.contains("handles")) db.createObjectStore("handles");
         };
         req.onerror = () => reject(req.error);
         req.onsuccess = () => {

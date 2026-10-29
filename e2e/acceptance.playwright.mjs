@@ -28,6 +28,9 @@ test.describe("Jeff Drive fixture: every series listens (listen-only)", () => {
     await expect(page.locator('[data-view="topics"]')).toHaveCount(0);
     await expect(page.locator("#tab-read")).toHaveCount(0);
     await expect(page.locator("#reader")).toHaveCount(0);
+    await expect(page.locator("#btn-pick-main, #btn-pick-files, #file-input-dir")).toHaveCount(0);
+    await expect(page.locator("#read-this-book, #player-read-this-book")).toHaveCount(0);
+    await expect(page.locator('a[href*="library-read"]')).toHaveCount(0);
     const toggle = await page.locator(".view-toggle button").allTextContents();
     expect(toggle).toEqual(["Cover wall", "Bookshelf"]);
   });
@@ -167,6 +170,7 @@ test.describe("Jeff Drive fixture: every series listens (listen-only)", () => {
     await expect(page.locator('body[data-shell="classic"]')).toBeAttached();
     await expect(page.locator("#tab-read")).toHaveCount(0);
     await expect(page.locator("#reader")).toHaveCount(0);
+    await expect(page.locator("#btn-pick-main, #file-input-dir, #read-this-book")).toHaveCount(0);
   });
 });
 

@@ -34,8 +34,7 @@ import {
   saveTextProgress,
   shelfBadge,
   bookScreenTabs,
-  libraryReadUrl,
-  seriesFolderName,
+  listenShelfBooks,
   isImmuneBook,
   shouldSkipPath,
   textProgress,
@@ -307,11 +306,7 @@ describe("buildLibrary scan", () => {
     assert.equal(shelfBadge(whatIf2), "Audio");
     assert.equal(whatIf.collectionFolder, "門羅-WhatIf");
     assert.equal(immune.collectionFolder, "Immune");
-    assert.equal(
-      libraryReadUrl(whatIf, 1),
-      "https://bigdaddy109.github.io/library-read/?series=%E9%96%80%E7%BE%85-WhatIf&book=what-if-1&ch=2"
-    );
-    assert.equal(libraryReadUrl(whatIf2, 0), "");
+    assert.equal(listenShelfBooks(books).some((b) => b.id === whatIf.id), true);
   });
 
   it("adds a searchable ebook-only row and ignores PDF", () => {
@@ -322,7 +317,7 @@ describe("buildLibrary scan", () => {
     ]);
     assert.deepEqual(
       books.map((b) => [b.id, shelfBadge(b), b.chapters.length, b.ebook?.name]),
-      [["library/solo-title", "Read", 0, "solo-title.epub"]]
+      [["library/solo-title", "", 0, "solo-title.epub"]]
     );
     assert.equal(books[0].title, "Solo Title");
   });
@@ -422,41 +417,26 @@ describe("locateEbookPath + pairingKey", () => {
   });
 });
 
-describe("libraryReadUrl", () => {
-  it("uses the series folder and EPUB stem, with a 1-based chapter", () => {
-    const school = {
-      collectionId: "school",
-      ebook: { name: "Middle School 02 Get Me.epub" },
+describe("listen shelf stays off Library Read", () => {
+  it("keeps audio books and drops an EPUB that has no audio", () => {
+    const audio = { id: "immune/immune", chapters: [{ id: "a" }], ebook: { name: "Immune.epub" } };
+    const ebookOnly = {
+      id: "library/solo-title",
+      chapters: [],
+      ebook: { name: "solo-title.epub" },
     };
-    assert.equal(seriesFolderName(school), "上學不容易");
-    assert.equal(
-      libraryReadUrl(school, 0),
-      "https://bigdaddy109.github.io/library-read/?series=%E4%B8%8A%E5%AD%B8%E4%B8%8D%E5%AE%B9%E6%98%93&book=Middle%20School%2002%20Get%20Me&ch=1"
-    );
-  });
-
-  it("omits ch when nothing is playing and hides books without an EPUB", () => {
-    assert.equal(
-      libraryReadUrl({ collectionId: "immune", ebook: { id: "Immune.epub", name: "Immune.epub" } }, null),
-      "https://bigdaddy109.github.io/library-read/?series=Immune&book=Immune"
-    );
-    assert.equal(libraryReadUrl({ collectionFolder: "Immune", ebook: null }, 3), "");
-    assert.equal(libraryReadUrl({ collectionFolder: "Immune", ebook: { name: "notes.pdf" } }, 0), "");
-    assert.equal(libraryReadUrl({ collectionId: "thing-explainer", ebook: { name: "Thing Explainer.epub" } }), "");
-    assert.equal(
-      libraryReadUrl(
-        { collectionId: "thing-explainer", collectionFolder: "Thing Explainer", ebook: { name: "Thing Explainer.epub" } },
-        4
-      ),
-      "https://bigdaddy109.github.io/library-read/?series=Thing%20Explainer&book=Thing%20Explainer&ch=5"
-    );
+    assert.deepEqual(listenShelfBooks([audio, ebookOnly]).map((b) => b.id), ["immune/immune"]);
+    assert.equal(listenShelfBooks([ebookOnly]).length, 0);
+    const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../docs/library.js"), "utf8");
+    assert.doesNotMatch(src, /library-read/);
+    assert.doesNotMatch(src, /libraryReadUrl/);
   });
 });
 
 describe("shelfBadge", () => {
-  it("returns Audio for listen books; Read only for ebook-only leftovers", () => {
+  it("returns Audio for listen books and no Read badge for an EPUB without audio", () => {
     assert.equal(shelfBadge({ chapters: [{ id: "a" }], ebook: null }), "Audio");
-    assert.equal(shelfBadge({ chapters: [], ebook: { name: "solo.epub" } }), "Read");
+    assert.equal(shelfBadge({ chapters: [], ebook: { name: "solo.epub" } }), "");
     assert.equal(
       shelfBadge({ chapters: [{ id: "a" }], ebook: { id: "book.epub" } }),
       "Audio"

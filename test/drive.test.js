@@ -523,29 +523,22 @@ describe("Drive walker feeds the existing library pairing", () => {
 });
 
 describe("source dialog actions", () => {
-  it("shows Sign in plus a local-folder link when signed out", () => {
+  it("shows Sign in when signed out", () => {
     assert.deepEqual(sourceDialogActions({ signedIn: false }), {
       google: true,
       reload: false,
       signout: false,
-      localLink: true,
-      local: false,
-      files: true,
       picker: false,
-      advanced: true,
     });
   });
 
-  it("shows Reload and Sign out only when signed in, with local picks under Advanced", () => {
-    const actions = sourceDialogActions({ signedIn: true });
-    assert.equal(actions.google, false);
-    assert.equal(actions.reload, true);
-    assert.equal(actions.signout, true);
-    assert.equal(actions.localLink, false);
-    assert.equal(actions.local, true);
-    assert.equal(actions.files, true);
-    assert.equal(actions.picker, false);
-    assert.equal(actions.advanced, true);
+  it("shows Reload and Sign out when signed in", () => {
+    assert.deepEqual(sourceDialogActions({ signedIn: true }), {
+      google: false,
+      reload: true,
+      signout: true,
+      picker: false,
+    });
   });
 });
 
@@ -725,7 +718,8 @@ describe("Drive user-visible errors", () => {
 
     const denied = classifyDriveError({ error: "access_denied" });
     assert.equal(denied.kind, DRIVE_ERROR_KIND.accessDenied);
-    assert.match(denied.message, /Choose Library folder/);
+    assert.match(denied.message, /Sign in with an account Jeff shared/);
+    assert.doesNotMatch(denied.message, /local fallback|Choose Library folder/);
 
     const missing = classifyDriveError({ name: "DriveLibraryMissing" });
     assert.equal(missing.kind, DRIVE_ERROR_KIND.noLibrary);
@@ -898,19 +892,19 @@ describe("Drive audio proxy and EPUB reader", () => {
     assert.match(new TextDecoder().decode(pub.read("OEBPS/ch1.xhtml")), /Drive EPUB/);
   });
 
-  it("keeps local folder pick on the homepage", () => {
+  it("keeps Google sign-in as the only library source on the homepage", () => {
     const html = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../docs/index.html"), "utf8");
+    const app = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../docs/app.js"), "utf8");
     assert.match(html, /id="btn-google"/);
-    assert.match(html, /id="btn-pick-main"/);
-    assert.match(html, /Use a local folder instead/);
-    assert.match(html, /Choose Library folder/);
-    assert.match(html, /id="btn-pick-files"/);
+    assert.match(html, /Sign in with Google/);
+    assert.doesNotMatch(html, /id="btn-pick-main"|id="btn-pick-files"|webkitdirectory|Use a local folder/);
+    assert.doesNotMatch(html, /Choose Library folder|library-read|read-this-book/);
+    assert.doesNotMatch(app, /showDirectoryPicker|webkitdirectory|library-read|libraryReadUrl/);
     assert.match(html, /id="drive-status"/);
     assert.match(html, /id="btn-sheet-reload"/);
     assert.match(html, /Reload library/);
-    assert.match(html, /id="source-sheet-advanced"/);
-    assert.match(html, />Advanced</);
     assert.match(html, /id="btn-sheet-signout"/);
     assert.match(html, /Sign out/);
+    assert.match(html, /id="btn-offline"/);
   });
 });

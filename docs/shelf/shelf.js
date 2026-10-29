@@ -1,13 +1,6 @@
 import {
-  AUDIO_EXT,
-  EPUB_EXT,
-  SKIP_FOLDERS,
-  READ_THIS_BOOK_LABEL,
   bookHasAudio,
-  buildLibrary,
-  extOf,
   isBookPlayable,
-  libraryReadUrl,
   listenShelfBooks,
   shelfBadge,
 } from "../library.js?v=55";
@@ -67,8 +60,6 @@ const els = {
   layer: document.getElementById("book-layer"),
   bookStage: document.getElementById("book-stage"),
   toast: document.getElementById("toast"),
-  fileDir: document.getElementById("file-input-dir"),
-  fileFiles: document.getElementById("file-input-files"),
 };
 
 let toastTimer = null;
@@ -89,12 +80,6 @@ function shelfBooks() {
 
 function visibleBooks() {
   return filterShelf(shelfBooks(), { query: state.query, seriesId: state.seriesId });
-}
-
-/** EPUB with no audio opens Library Read. Audio books stay on the player. */
-function readHrefFor(book) {
-  if (bookHasAudio(book)) return "";
-  return book?.readUrl || libraryReadUrl(book) || "";
 }
 
 function findBook(id) {
@@ -135,7 +120,7 @@ function updateHint() {
   els.hint.textContent =
     state.source === "library"
       ? `Loaded ${state.books.length} books. Tap a cover to listen.`
-      : "Demo books show until you pick a library. Sign in or choose a folder to listen.";
+      : "Demo books show until you sign in. Sign in with Google to listen.";
 }
 
 function setLibrary(books, source = "library") {
@@ -187,8 +172,6 @@ function renderViews() {
 }
 
 function tipText(book) {
-  const href = readHrefFor(book);
-  if (href) return book.readLabel || READ_THIS_BOOK_LABEL;
   const hits = chapterHitLine(matchingChapterTitles(book, state.query));
   const badge = shelfBadge(book);
   return hits ? `${badge} · ${hits}` : badge;
@@ -204,17 +187,15 @@ function liftSpine(id) {
 function spineButton(book) {
   const series = seriesMeta(book);
   const metrics = spineMetrics(book);
-  const href = readHrefFor(book);
-  const btn = document.createElement(href ? "a" : "button");
-  if (href) btn.href = href;
-  else btn.type = "button";
+  const btn = document.createElement("button");
+  btn.type = "button";
   btn.className = "spine";
   btn.dataset.id = book.id;
   btn.style.setProperty("--w", `${metrics.thickness}px`);
   btn.style.setProperty("--h", `${metrics.height}px`);
   btn.style.setProperty("--cloth", series.cloth);
   btn.style.setProperty("--lean", `${metrics.lean}deg`);
-  btn.setAttribute("aria-label", `${book.title} · ${href ? book.readLabel || READ_THIS_BOOK_LABEL : shelfBadge(book)}`);
+  btn.setAttribute("aria-label", `${book.title} · ${shelfBadge(book)}`);
   btn.innerHTML = `
     <span class="spine-box">
       <span class="spine-cloth">
@@ -233,15 +214,13 @@ function spineButton(book) {
   btn.querySelector(".spine-tip span").textContent = tipText(book);
   btn.addEventListener("pointerenter", () => liftSpine(book.id));
   btn.addEventListener("focus", () => liftSpine(book.id));
-  if (!href) {
-    btn.addEventListener("click", () => {
-      if (coarsePointer && state.liftedId !== book.id) {
-        liftSpine(book.id);
-        return;
-      }
-      openFromShelf(book);
-    });
-  }
+  btn.addEventListener("click", () => {
+    if (coarsePointer && state.liftedId !== book.id) {
+      liftSpine(book.id);
+      return;
+    }
+    openFromShelf(book);
+  });
   if (state.liftedId === book.id) btn.classList.add("is-lifted");
   return btn;
 }
@@ -270,19 +249,17 @@ function renderCovers(books) {
   const grid = document.createElement("div");
   grid.className = "covers";
   for (const book of books) {
-    const href = readHrefFor(book);
-    const card = document.createElement(href ? "a" : "button");
-    if (href) card.href = href;
-    else card.type = "button";
+    const card = document.createElement("button");
+    card.type = "button";
     card.className = "cover-card";
     card.dataset.id = book.id;
-    const face = href ? book.readLabel || READ_THIS_BOOK_LABEL : shelfBadge(book);
+    const face = shelfBadge(book);
     card.setAttribute("aria-label", `${book.title} · ${face}`);
     card.innerHTML = `<span class="cover-art"></span><h3></h3><p></p>`;
     card.querySelector(".cover-art").innerHTML = coverSvg(book);
     card.querySelector("h3").textContent = book.title;
     card.querySelector("p").textContent = `${book.author} · ${face}`;
-    if (!href) card.addEventListener("click", () => openFromShelf(book));
+    card.addEventListener("click", () => openFromShelf(book));
     grid.appendChild(card);
   }
   els.stage.appendChild(grid);
@@ -486,13 +463,8 @@ async function openCoverBook(book) {
   beginListening(book);
 }
 
-/** After the cover opens, go straight into audio — no listen/read chooser. */
+/** After the cover opens, go straight into audio. */
 function beginListening(book) {
-  const href = readHrefFor(book);
-  if (href) {
-    window.location.assign(href);
-    return;
-  }
   if (!bookHasAudio(book)) {
     showToast("This book has no audio to play.");
     return;
@@ -669,7 +641,7 @@ function renderSpread(book, phase = "open", { cover = false, opened = true } = {
 
 function goToPlayer(book, pane, ready) {
   if (state.source === "demo" || !ready) {
-    showToast("Sign in with Google or choose a Library folder to listen.");
+    showToast("Sign in with Google to listen.");
     if (typeof shelfOptions.onNeedLibrary === "function") {
       shelfOptions.onNeedLibrary(book, pane);
     }
@@ -677,7 +649,7 @@ function goToPlayer(book, pane, ready) {
   }
   if (typeof shelfOptions.onOpenBook === "function") {
     closeBook();
-    shelfOptions.onOpenBook(book, pane === "read" ? "audio" : pane);
+    shelfOptions.onOpenBook(book, pane === "concepts" ? "concepts" : "audio");
     return;
   }
   try {
@@ -686,82 +658,6 @@ function goToPlayer(book, pane, ready) {
     /* private mode */
   }
   window.location.href = playerOpenUrl(book.id, "audio");
-}
-
-async function walkDirectory(dir, prefix = []) {
-  const out = [];
-  let skipped = 0;
-  for await (const [name, handle] of dir.entries()) {
-    if (name.startsWith(".")) continue;
-    const next = [...prefix, name];
-    if (handle.kind === "directory") {
-      if (SKIP_FOLDERS.has(name.toLowerCase()) || name.startsWith("_")) continue;
-      try {
-        const nested = await walkDirectory(handle, next);
-        out.push(...nested.entries);
-        skipped += nested.skipped;
-      } catch {
-        skipped += 1;
-      }
-    } else if (handle.kind === "file") {
-      try {
-        const file = await handle.getFile();
-        const ext = extOf(file.name);
-        if (!file || ((AUDIO_EXT.has(ext) || EPUB_EXT.has(ext)) && file.size === 0)) {
-          skipped += 1;
-          continue;
-        }
-        out.push({ path: next.join("/"), file });
-      } catch {
-        skipped += 1;
-      }
-    }
-  }
-  return { entries: out, skipped };
-}
-
-function pickWithInput(input) {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const finish = (fn, value) => {
-      if (settled) return;
-      settled = true;
-      input.onchange = null;
-      fn(value);
-    };
-    input.onchange = () => {
-      const files = [...(input.files || [])];
-      if (!files.length) {
-        finish(reject, Object.assign(new Error("No files selected"), { name: "AbortError" }));
-        return;
-      }
-      finish(
-        resolve,
-        files.map((file) => ({ path: file.webkitRelativePath || file.name, file }))
-      );
-    };
-    try {
-      input.value = "";
-    } catch {
-      /* iOS may ignore */
-    }
-    input.click();
-  });
-}
-
-async function loadFromFolder() {
-  if (typeof window.showDirectoryPicker === "function") {
-    const handle = await window.showDirectoryPicker({ mode: "read", id: "library-shelf" });
-    const { entries } = await walkDirectory(handle);
-    return buildLibrary(entries);
-  }
-  const entries = await pickWithInput(els.fileDir);
-  return buildLibrary(entries);
-}
-
-async function loadFromFiles() {
-  const entries = await pickWithInput(els.fileFiles);
-  return buildLibrary(entries);
 }
 
 function applyLoaded(books) {
@@ -817,25 +713,7 @@ function bind() {
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") dismissBook();
   });
-  if (!document.body?.classList.contains("shell-shelf")) {
-    document.getElementById("btn-pick-folder")?.addEventListener("click", async () => {
-      try {
-        applyLoaded(await loadFromFolder());
-      } catch (err) {
-        if (err?.name === "AbortError") return;
-        showToast("Could not open the folder.");
-      }
-    });
-    document.getElementById("btn-pick-files")?.addEventListener("click", async () => {
-      try {
-        applyLoaded(await loadFromFiles());
-      } catch (err) {
-        if (err?.name === "AbortError") return;
-        showToast("Could not open the files.");
-      }
-    });
-    bindDriveHook();
-  }
+  if (!document.body?.classList.contains("shell-shelf")) bindDriveHook();
 }
 
 function applyPreviewParams() {
@@ -886,8 +764,6 @@ export function initRiceShelf(options = {}) {
     els.layer = document.getElementById("book-layer");
     els.bookStage = document.getElementById("book-stage");
     els.toast = document.getElementById("toast");
-    els.fileDir = document.getElementById("file-input-dir");
-    els.fileFiles = document.getElementById("file-input-files");
   }
   applyNoBook3dClass();
   restoreChrome();

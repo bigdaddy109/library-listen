@@ -53,9 +53,9 @@ export const DRIVE_ERROR_MESSAGES = {
     "This Google account is not a test user for Library Listen. While the OAuth consent screen is in Testing mode, only approved testers can sign in. Ask Jeff to add this account as a test user.",
   expired: "Sign-in expired. Tap Sign in with Google again to keep playing from Drive.",
   noLibrary:
-    "This Google account cannot see a folder named Library. Ask Jeff to share Library (Viewer) with this account, or Choose Library folder as a local fallback.",
+    "This Google account cannot see a folder named Library. Ask Jeff to share Library (Viewer) with this account.",
   accessDenied:
-    "Google did not grant Drive access. Sign in with an account Jeff shared Library with, or Choose Library folder as a local fallback.",
+    "Google did not grant Drive access. Sign in with an account Jeff shared Library with.",
   cancelled: "Google sign-in was cancelled.",
   coop: "Chrome may log Cross-Origin-Opener-Policy window.closed while the GIS popup is open. That console warning is harmless and does not fail sign-in.",
 };
@@ -1261,8 +1261,8 @@ export async function openGooglePicker(token = getAccessToken()) {
 }
 
 /**
- * Signed-in source sheet: Reload + Sign out, with local picks under Advanced.
- * Signed-out: Sign in + a local-folder text link. Picker is never a sheet action.
+ * Drive is the only library source.
+ * Signed-in: Reload + Sign out. Signed-out: Sign in. Picker is never a sheet action.
  */
 export function sourceDialogActions({ signedIn } = {}) {
   if (signedIn) {
@@ -1270,22 +1270,14 @@ export function sourceDialogActions({ signedIn } = {}) {
       google: false,
       reload: true,
       signout: true,
-      localLink: false,
-      local: true,
-      files: true,
       picker: false,
-      advanced: true,
     };
   }
   return {
     google: true,
     reload: false,
     signout: false,
-    localLink: true,
-    local: false,
-    files: true,
     picker: false,
-    advanced: true,
   };
 }
 

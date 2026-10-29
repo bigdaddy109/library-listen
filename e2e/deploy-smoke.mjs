@@ -30,7 +30,7 @@ test("live homepage version matches, and a demo book opens without Google sign-i
   await page.goto(`${LIVE}?cb=${Date.now()}`);
   await expect(page.locator("#app-version")).toHaveText(`v${version}`);
   await expect(page.locator("#btn-google")).toHaveText(googleLabel);
-  await expect(page.locator("#btn-pick-main")).toHaveText("Use a local folder instead");
+  await expect(page.locator("#btn-pick-main, #read-this-book, #player-read-this-book")).toHaveCount(0);
   await expect(page.locator("#btn-sleep")).toHaveText("Sleep");
   const card = page.locator('.cover-card[data-id="munroe/what-if-1"]');
   await expect(card.locator("h3")).toHaveText("What If?");
