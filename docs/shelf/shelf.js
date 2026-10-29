@@ -2,13 +2,16 @@ import {
   AUDIO_EXT,
   EPUB_EXT,
   SKIP_FOLDERS,
+  READ_THIS_BOOK_LABEL,
   bookHasAudio,
   buildLibrary,
   extOf,
   isBookPlayable,
+  libraryReadUrl,
+  listenShelfBooks,
   shelfBadge,
-} from "../library.js?v=53";
-import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=53";
+} from "../library.js?v=54";
+import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=54";
 import {
   COVER_MORPH,
   bookFlipFrames,
@@ -34,8 +37,8 @@ import {
   seriesMeta,
   shelfStatusLabel,
   volumeNumber,
-} from "./catalog.js?v=53";
-import { coverSvg, spineMetrics } from "./covers.js?v=53";
+} from "./catalog.js?v=54";
+import { coverSvg, spineMetrics } from "./covers.js?v=54";
 
 /* v2: the cover wall became the default; the old key mostly held the old default. */
 const VIEW_KEY = "librarylisten.shelfView.v2";
@@ -80,8 +83,18 @@ function showToast(message) {
   toastTimer = window.setTimeout(() => els.toast.classList.add("hidden"), 2400);
 }
 
+function shelfBooks() {
+  return listenShelfBooks(state.books);
+}
+
 function visibleBooks() {
-  return filterShelf(state.books, { query: state.query, seriesId: state.seriesId });
+  return filterShelf(shelfBooks(), { query: state.query, seriesId: state.seriesId });
+}
+
+/** EPUB with no audio opens Library Read. Audio books stay on the player. */
+function readHrefFor(book) {
+  if (bookHasAudio(book)) return "";
+  return book?.readUrl || libraryReadUrl(book) || "";
 }
 
 function findBook(id) {
@@ -144,7 +157,7 @@ function filteredMessage(books) {
 }
 
 function renderChips() {
-  const chips = seriesChips(state.books);
+  const chips = seriesChips(shelfBooks());
   els.chips.innerHTML = "";
   for (const chip of chips) {
     const btn = document.createElement("button");
@@ -174,6 +187,8 @@ function renderViews() {
 }
 
 function tipText(book) {
+  const href = readHrefFor(book);
+  if (href) return book.readLabel || READ_THIS_BOOK_LABEL;
   const hits = chapterHitLine(matchingChapterTitles(book, state.query));
   const badge = shelfBadge(book);
   return hits ? `${badge} · ${hits}` : badge;
@@ -189,15 +204,17 @@ function liftSpine(id) {
 function spineButton(book) {
   const series = seriesMeta(book);
   const metrics = spineMetrics(book);
-  const btn = document.createElement("button");
-  btn.type = "button";
+  const href = readHrefFor(book);
+  const btn = document.createElement(href ? "a" : "button");
+  if (href) btn.href = href;
+  else btn.type = "button";
   btn.className = "spine";
   btn.dataset.id = book.id;
   btn.style.setProperty("--w", `${metrics.thickness}px`);
   btn.style.setProperty("--h", `${metrics.height}px`);
   btn.style.setProperty("--cloth", series.cloth);
   btn.style.setProperty("--lean", `${metrics.lean}deg`);
-  btn.setAttribute("aria-label", `${book.title} · ${shelfBadge(book)}`);
+  btn.setAttribute("aria-label", `${book.title} · ${href ? book.readLabel || READ_THIS_BOOK_LABEL : shelfBadge(book)}`);
   btn.innerHTML = `
     <span class="spine-box">
       <span class="spine-cloth">
@@ -216,13 +233,15 @@ function spineButton(book) {
   btn.querySelector(".spine-tip span").textContent = tipText(book);
   btn.addEventListener("pointerenter", () => liftSpine(book.id));
   btn.addEventListener("focus", () => liftSpine(book.id));
-  btn.addEventListener("click", () => {
-    if (coarsePointer && state.liftedId !== book.id) {
-      liftSpine(book.id);
-      return;
-    }
-    openFromShelf(book);
-  });
+  if (!href) {
+    btn.addEventListener("click", () => {
+      if (coarsePointer && state.liftedId !== book.id) {
+        liftSpine(book.id);
+        return;
+      }
+      openFromShelf(book);
+    });
+  }
   if (state.liftedId === book.id) btn.classList.add("is-lifted");
   return btn;
 }
@@ -251,16 +270,19 @@ function renderCovers(books) {
   const grid = document.createElement("div");
   grid.className = "covers";
   for (const book of books) {
-    const card = document.createElement("button");
-    card.type = "button";
+    const href = readHrefFor(book);
+    const card = document.createElement(href ? "a" : "button");
+    if (href) card.href = href;
+    else card.type = "button";
     card.className = "cover-card";
     card.dataset.id = book.id;
-    card.setAttribute("aria-label", `${book.title} · ${shelfBadge(book)}`);
+    const face = href ? book.readLabel || READ_THIS_BOOK_LABEL : shelfBadge(book);
+    card.setAttribute("aria-label", `${book.title} · ${face}`);
     card.innerHTML = `<span class="cover-art"></span><h3></h3><p></p>`;
     card.querySelector(".cover-art").innerHTML = coverSvg(book);
     card.querySelector("h3").textContent = book.title;
-    card.querySelector("p").textContent = `${book.author} · ${shelfBadge(book)}`;
-    card.addEventListener("click", () => openFromShelf(book));
+    card.querySelector("p").textContent = `${book.author} · ${face}`;
+    if (!href) card.addEventListener("click", () => openFromShelf(book));
     grid.appendChild(card);
   }
   els.stage.appendChild(grid);
@@ -466,6 +488,11 @@ async function openCoverBook(book) {
 
 /** After the cover opens, go straight into audio — no listen/read chooser. */
 function beginListening(book) {
+  const href = readHrefFor(book);
+  if (href) {
+    window.location.assign(href);
+    return;
+  }
   if (!bookHasAudio(book)) {
     showToast("This book has no audio to play.");
     return;

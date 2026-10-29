@@ -476,6 +476,7 @@ body.is-scanning .hint {
 
 .book-card {
   display: grid;
+  text-decoration: none;
   grid-template-columns: 4.5rem 1fr;
   gap: 0.9rem;
   align-items: center;

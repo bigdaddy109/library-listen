@@ -90,14 +90,39 @@ export function emptyLibraryMessage(entries, skipped, known = KNOWN_COLLECTIONS)
   return msg;
 }
 
-export function collectionMeta(folder) {
-  return (
-    KNOWN_COLLECTIONS[folder] || {
-      id: slug(folder),
-      title: humanize(folder),
-      author: "Unknown",
+function normalizedFolderName(value) {
+  return String(value || "").normalize("NFC").trim();
+}
+
+/**
+ * KNOWN_COLLECTIONS keys are the short series names. A Drive folder may add a
+ * suffix after "-" / "_" / space, as in 上學不容易-Middle-School. Longest key wins.
+ * The returned `folder` is the known key; callers keep the real Drive name on the book.
+ */
+export function matchKnownCollection(folder, known = KNOWN_COLLECTIONS) {
+  const name = normalizedFolderName(folder);
+  if (!name || !known) return null;
+  const keys = Object.keys(known).sort((a, b) => normalizedFolderName(b).length - normalizedFolderName(a).length);
+  for (const key of keys) {
+    const canon = normalizedFolderName(key);
+    if (!canon) continue;
+    if (name === canon) return { folder: key, meta: known[key] };
+    const next = name.charAt(canon.length);
+    if (name.startsWith(canon) && next && /[-_\s]/.test(next)) {
+      return { folder: key, meta: known[key] };
     }
-  );
+  }
+  return null;
+}
+
+export function collectionMeta(folder) {
+  const known = matchKnownCollection(folder);
+  if (known?.meta) return known.meta;
+  return {
+    id: slug(String(folder || "")),
+    title: humanize(String(folder || "")),
+    author: "Unknown",
+  };
 }
 
 export function bookMeta(folder, collectionAuthor) {
@@ -375,6 +400,31 @@ export function libraryReadUrl(book, chapterIndex = null) {
     params.push(`ch=${encodeURIComponent(String(chapterIndex + 1))}`);
   }
   return `https://bigdaddy109.github.io/library-read/?${params.join("&")}`;
+}
+
+/** Shelf wording for an EPUB that has no audio. Same phrase as the player link. */
+export const READ_THIS_BOOK_LABEL = "讀這本";
+
+/**
+ * Listen shelf rows. Audio stays. An EPUB with no audio becomes a Library Read
+ * link instead of a cover that cannot play. No audio and no EPUB is omitted.
+ */
+export function listenShelfBooks(books) {
+  const out = [];
+  for (const book of books || []) {
+    if (bookHasAudio(book)) {
+      out.push(book);
+      continue;
+    }
+    const readUrl = libraryReadUrl(book);
+    if (!readUrl) continue;
+    out.push({
+      ...book,
+      readUrl,
+      readLabel: READ_THIS_BOOK_LABEL,
+    });
+  }
+  return out;
 }
 
 /** Shelf badge. Listen-only player: audio books are Audio; leftover ebook-only rows stay Read. */
