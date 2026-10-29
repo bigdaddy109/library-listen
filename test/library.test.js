@@ -1,11 +1,20 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   PROGRESS_KEY,
   KNOWN_COLLECTIONS,
   bookHasDriveMedia,
   booksFromLibrarySnapshot,
   buildLibrary,
+  LIBRARY_SNAPSHOT_KEY,
+  LIBRARY_SHELL_KEY,
+  applyShelfRestorePlan,
+  planShelfRestore,
+  readLibraryShell,
+  stampLibraryShell,
   chapterIsPlayable,
   emptyLibraryMessage,
   isBookPlayable,
@@ -630,6 +639,71 @@ describe("progress", () => {
     assert.equal(isEbookSavedOffline(new Map([[EBOOK_OFFLINE_KEY, { size: 12 }]])), true);
     assert.equal(isEbookSavedOffline(new Map()), false);
     assert.equal(isEbookSavedOffline(null), false);
+  });
+});
+
+describe("shelf snapshot follows the shell version", () => {
+  function memoryStore(initial = {}) {
+    const data = { ...initial };
+    return {
+      getItem(key) {
+        return Object.prototype.hasOwnProperty.call(data, key) ? data[key] : null;
+      },
+      setItem(key, value) {
+        data[key] = String(value);
+      },
+      removeItem(key) {
+        delete data[key];
+      },
+    };
+  }
+
+  it("invalidates the snapshot on a shell change and forces a Drive rescan when a session exists", () => {
+    const store = memoryStore({
+      [LIBRARY_SNAPSHOT_KEY]: JSON.stringify([
+        { id: "immune/immune", title: "Immune", chapters: [{ id: "Immune-Part01.mp3", driveId: "p1" }] },
+      ]),
+    });
+    assert.equal(readLibraryShell(store), "");
+
+    const same = planShelfRestore({ savedShell: "55", currentShell: "55", hasDriveSession: true });
+    assert.equal(same.invalidateSnapshot, false);
+    assert.equal(same.forceDriveRescan, false);
+    assert.equal(same.useSnapshot, true);
+
+    const bumped = planShelfRestore({
+      savedShell: readLibraryShell(store),
+      currentShell: "55",
+      hasDriveSession: true,
+    });
+    assert.equal(bumped.invalidateSnapshot, true);
+    assert.equal(bumped.forceDriveRescan, true);
+    assert.equal(bumped.useSnapshot, false);
+    assert.equal(applyShelfRestorePlan(store, bumped), true);
+    assert.equal(store.getItem(LIBRARY_SNAPSHOT_KEY), null);
+
+    const noSession = planShelfRestore({ savedShell: "54", currentShell: "55", hasDriveSession: false });
+    assert.equal(noSession.invalidateSnapshot, true);
+    assert.equal(noSession.forceDriveRescan, false);
+    assert.equal(noSession.useSnapshot, false);
+
+    stampLibraryShell(store, "55");
+    assert.equal(readLibraryShell(store), "55");
+    const stamped = planShelfRestore({
+      savedShell: readLibraryShell(store),
+      currentShell: "55",
+      hasDriveSession: true,
+    });
+    assert.equal(stamped.invalidateSnapshot, false);
+    assert.equal(stamped.forceDriveRescan, false);
+    assert.equal(stamped.useSnapshot, true);
+
+    const app = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../docs/app.js"), "utf8");
+    assert.match(app, /planShelfRestore\(/);
+    assert.match(app, /applyShelfRestorePlan\(/);
+    assert.match(app, /plan\.forceDriveRescan/);
+    assert.match(app, /formatDriveWalkErrors\(result\.walkErrors\)/);
+    assert.match(app, /showLibraryStatus\(walkNote\)/);
   });
 });
 

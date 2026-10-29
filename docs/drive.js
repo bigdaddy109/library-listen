@@ -152,13 +152,44 @@ export function driveFileIdFromPath(pathname) {
   }
 }
 
-export function driveMediaPath(fileId) {
-  return `.${DRIVE_MEDIA_PREFIX}${encodeURIComponent(fileId)}`;
+export function driveMediaPath(fileId, name) {
+  const id = `.${DRIVE_MEDIA_PREFIX}${encodeURIComponent(fileId)}`;
+  if (!name) return id;
+  return `${id}/${encodeURIComponent(name)}`;
 }
 
-export function driveMediaUrl(fileId, base = globalThis.location?.href) {
-  if (!base) return driveMediaPath(fileId);
-  return new URL(driveMediaPath(fileId), base).href;
+export function driveMediaNameFromPath(pathname) {
+  const path = String(pathname || "");
+  const at = path.lastIndexOf(DRIVE_MEDIA_PREFIX);
+  if (at < 0) return "";
+  const parts = path.slice(at + DRIVE_MEDIA_PREFIX.length).split("/").filter(Boolean);
+  if (parts.length < 2) return "";
+  const raw = parts.slice(1).join("/");
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+export function driveMediaUrl(fileId, base = globalThis.location?.href, name) {
+  const path = driveMediaPath(fileId, name);
+  if (!base) return path;
+  return new URL(path, base).href;
+}
+
+/**
+ * Drive labels some .m4b audiobooks as video/mp4. `<audio>` will not play that.
+ * m4a / m4b / aac are always audio/mp4. A nameless response that is video/mp4
+ * is the same mislabel (this proxy only streams listen audio).
+ */
+export function rewriteDriveAudioContentType(name, contentType) {
+  const ext = extOf(name || "");
+  if (ext === "m4a" || ext === "m4b" || ext === "aac") return "audio/mp4";
+  if (ext) return contentType || "";
+  const base = String(contentType || "").split(";")[0].trim().toLowerCase();
+  if (base === "video/mp4") return "audio/mp4";
+  return contentType || "";
 }
 
 export function driveAltMediaUrl(fileId) {
@@ -348,7 +379,7 @@ export function planDriveMediaProxy({ fileId, range, token } = {}) {
   };
 }
 
-export function driveMediaProxyOutHeaders(upstreamHeaders) {
+export function driveMediaProxyOutHeaders(upstreamHeaders, fileName) {
   const out = { "Cache-Control": "no-store" };
   for (const name of DRIVE_MEDIA_PASSTHROUGH_HEADERS) {
     const value =
@@ -357,7 +388,8 @@ export function driveMediaProxyOutHeaders(upstreamHeaders) {
       upstreamHeaders?.[name];
     if (value) {
       const pretty = name.replace(/(^|-)([a-z])/g, (_, sep, ch) => sep + ch.toUpperCase());
-      out[pretty] = value;
+      out[pretty] =
+        name === "content-type" ? rewriteDriveAudioContentType(fileName, value) || value : value;
     }
   }
   return out;
@@ -405,7 +437,7 @@ export function finishDrivePlaybackAuthRetry(state, { ok = false } = {}) {
   return { ...state, pending: false };
 }
 
-export async function proxyDriveMediaRequest({ fileId, range, token } = {}, fetchImpl = fetch) {
+export async function proxyDriveMediaRequest({ fileId, range, token, name } = {}, fetchImpl = fetch) {
   const plan = planDriveMediaProxy({ fileId, range, token });
   if (!plan.ok) {
     return {
@@ -419,7 +451,7 @@ export async function proxyDriveMediaRequest({ fileId, range, token } = {}, fetc
   return {
     status: res.status,
     statusText: res.statusText || "",
-    headers: driveMediaProxyOutHeaders(res.headers || {}),
+    headers: driveMediaProxyOutHeaders(res.headers || {}, name),
     body: res.body != null ? res.body : await res.arrayBuffer(),
     notifyUnauthorized: shouldNotifyDriveUnauthorized(res.status),
   };
@@ -474,8 +506,20 @@ export function uniqueDriveFolders(folders) {
   return out;
 }
 
+/** An empty Library folder loses to one that has visible children. Unknown stays eligible. */
+export function libraryFolderIsEmpty(folder) {
+  if (!folder) return false;
+  if (folder.empty === true) return true;
+  if (folder.hasChildren === false) return true;
+  if (folder.childCount === 0) return true;
+  return false;
+}
+
 export function rankLibraryFolders(folders) {
   return uniqueDriveFolders(folders).sort((a, b) => {
+    const ae = libraryFolderIsEmpty(a) ? 1 : 0;
+    const be = libraryFolderIsEmpty(b) ? 1 : 0;
+    if (ae !== be) return ae - be;
     const ao = a.ownedByMe === true ? 0 : 1;
     const bo = b.ownedByMe === true ? 0 : 1;
     if (ao !== bo) return ao - bo;
@@ -483,9 +527,14 @@ export function rankLibraryFolders(folders) {
   });
 }
 
-/** One hit → use it. Zero or many → caller shows Picker / a list. */
+/**
+ * One filled Library → use it, even if another empty Library folder is also listed.
+ * Several filled folders → caller shows a list. A single empty folder is still usable.
+ */
 export function chooseSoleLibraryFolder(folders) {
   const ranked = rankLibraryFolders(folders);
+  const filled = ranked.filter((folder) => !libraryFolderIsEmpty(folder));
+  if (filled.length === 1) return filled[0];
   return ranked.length === 1 ? ranked[0] : null;
 }
 
@@ -616,9 +665,13 @@ export function makeDriveFile(item) {
   const id = item?.id || item?.driveId;
   const name = item?.name || "file";
   const size = Number(item?.size) || 0;
-  const type = item?.mimeType && !String(item.mimeType).startsWith("application/vnd.google-apps.")
-    ? item.mimeType
-    : mimeForDriveName(name);
+  const ext = extOf(name);
+  const forcedAudio = ext === "m4a" || ext === "m4b" || ext === "aac" ? "audio/mp4" : "";
+  const type =
+    forcedAudio ||
+    (item?.mimeType && !String(item.mimeType).startsWith("application/vnd.google-apps.")
+      ? item.mimeType
+      : mimeForDriveName(name));
 
   const file = {
     name,
@@ -798,12 +851,50 @@ export async function driveListAll(token, q, fetchImpl = fetch, { pageSize, corp
   return files.map(resolveDriveItem).filter(Boolean);
 }
 
+async function libraryFolderHasVisibleChild(folderId, token, fetchImpl) {
+  let pageToken = "";
+  do {
+    const body = await driveGetJson(
+      driveListUrl({
+        q: childrenQuery(folderId),
+        pageToken,
+        pageSize: 50,
+        corpora: "allDrives",
+      }),
+      token,
+      fetchImpl
+    );
+    const files = (body.files || []).map(resolveDriveItem).filter(Boolean);
+    if (files.some((item) => item?.name && !shouldSkipDriveName(item.name))) return true;
+    pageToken = body.nextPageToken || body.next_page_token || "";
+  } while (pageToken);
+  return false;
+}
+
+async function withLibraryFolderContents(folders, token, fetchImpl) {
+  const out = [];
+  for (const folder of folders) {
+    if (folder.hasChildren === true || folder.hasChildren === false) {
+      out.push(folder);
+      continue;
+    }
+    try {
+      const hasChildren = await libraryFolderHasVisibleChild(folder.id, token, fetchImpl);
+      out.push({ ...folder, hasChildren });
+    } catch {
+      out.push({ ...folder, hasChildren: null });
+    }
+  }
+  return out;
+}
+
 export async function findLibraryFolders(token, fetchImpl = fetch) {
   const [mine, shared] = await Promise.all([
     driveListAll(token, libraryFolderQuery(), fetchImpl),
     driveListAll(token, libraryFolderQuery({ sharedWithMe: true }), fetchImpl),
   ]);
-  return rankLibraryFolders([...mine, ...shared]);
+  const marked = await withLibraryFolderContents(uniqueDriveFolders([...mine, ...shared]), token, fetchImpl);
+  return rankLibraryFolders(marked);
 }
 
 export async function walkDriveFolder(
@@ -815,6 +906,8 @@ export async function walkDriveFolder(
   /** @type {{ path: string, file: ReturnType<typeof makeDriveFile> }[]} */
   const entries = [];
   let skipped = 0;
+  /** @type {{ path: string, message: string }[]} */
+  const walkErrors = [];
 
   const walk = async (id, parts) => {
     const children = await driveListAll(token, childrenQuery(id), fetchImpl, {
@@ -831,8 +924,13 @@ export async function walkDriveFolder(
       if (shouldWalkDriveItem(item)) {
         try {
           await walk(item.id, next);
-        } catch {
+        } catch (err) {
           skipped += 1;
+          const message = String(err?.message || "Could not list this folder").trim() || "Could not list this folder";
+          walkErrors.push({
+            path: next.join("/"),
+            message: message.length > 180 ? `${message.slice(0, 177)}…` : message,
+          });
         }
         continue;
       }
@@ -848,7 +946,21 @@ export async function walkDriveFolder(
   };
 
   await walk(folderId, rootPrefix);
-  return { entries, skipped };
+  return { entries, skipped, walkErrors };
+}
+
+/** Status-line copy for nested Drive folders that could not be listed. */
+export function formatDriveWalkErrors(errors) {
+  const list = (Array.isArray(errors) ? errors : []).filter((item) => item && (item.path || item.message));
+  if (!list.length) return "";
+  const lines = list.slice(0, 4).map((item) => {
+    const where = item.path || "a folder";
+    const message = item.message || "Could not list this folder";
+    return `${where}: ${message}`;
+  });
+  const extra = list.length > 4 ? `\n…and ${list.length - 4} more` : "";
+  const noun = list.length === 1 ? "folder" : "folders";
+  return `Could not open ${list.length} nested ${noun}.\n${lines.join("\n")}${extra}`;
 }
 
 export async function downloadDriveBuffer(fileId, token = getAccessToken(), fetchImpl = fetch) {
@@ -885,7 +997,7 @@ export function attachDriveMedia(books, { base } = {}) {
   for (const book of books || []) {
     for (const ch of book.chapters || []) {
       if (isDriveFile(ch.file)) {
-        ch.url = driveMediaUrl(ch.file.driveId, base);
+        ch.url = driveMediaUrl(ch.file.driveId, base, ch.file.name);
         ch.driveId = ch.file.driveId;
       }
     }
@@ -1193,8 +1305,9 @@ export async function loadDriveEntries({
 } = {}) {
   if (!token) throw new Error("Sign in with Google first.");
   let folder = folderId ? { id: folderId, name: folderName || LIBRARY_FOLDER_NAME } : null;
+  let found = [];
   if (!folder) {
-    const found = await findLibraryFolders(token, fetchImpl);
+    found = await findLibraryFolders(token, fetchImpl);
     folder = chooseSoleLibraryFolder(found);
     if (!folder && found.length && typeof chooseFolder === "function") {
       folder = await chooseFolder(found);
@@ -1219,9 +1332,20 @@ export async function loadDriveEntries({
       throw err;
     }
   }
-  const walked = await walkDriveFolder(folder.id, token, {
+  let walked = await walkDriveFolder(folder.id, token, {
     prefix: walkPrefixForFolder(folder),
     fetchImpl,
   });
+  if (!walked.entries.length) {
+    if (!found.length) found = await findLibraryFolders(token, fetchImpl);
+    const better = found.find((candidate) => candidate.id !== folder.id && candidate.hasChildren === true);
+    if (better) {
+      folder = better;
+      walked = await walkDriveFolder(folder.id, token, {
+        prefix: walkPrefixForFolder(folder),
+        fetchImpl,
+      });
+    }
+  }
   return { ...walked, folder };
 }

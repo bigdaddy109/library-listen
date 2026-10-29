@@ -139,8 +139,8 @@ function assertRealLayout({ entries, books, shelf }) {
   assert.ok(immune);
   assert.equal(immune.chapters.length, 2);
   assert.equal(isBookPlayable(immune), true);
-  assert.match(immune.chapters[0].url, /\/drive-media\/p1$/);
-  assert.match(immune.chapters[1].url, /\/drive-media\/p2$/);
+  assert.match(immune.chapters[0].url, /\/drive-media\/p1(?:\/|$)/);
+  assert.match(immune.chapters[1].url, /\/drive-media\/p2(?:\/|$)/);
 
   const matched = matchKnownCollection("上學不容易-Middle-School");
   assert.equal(matched?.folder, "上學不容易");
@@ -167,10 +167,10 @@ function assertRealLayout({ entries, books, shelf }) {
   const whatIf = books.find((b) => b.id === "munroe/what-if-1");
   assert.equal(howTo?.title, "How To");
   assert.equal(isBookPlayable(howTo), true);
-  assert.match(howTo.chapters[0].url, /\/drive-media\/hta$/);
+  assert.match(howTo.chapters[0].url, /\/drive-media\/hta(?:\/|$)/);
   assert.equal(whatIf?.title, "What If?");
   assert.equal(isBookPlayable(whatIf), true);
-  assert.match(whatIf.chapters[0].url, /\/drive-media\/wia$/);
+  assert.match(whatIf.chapters[0].url, /\/drive-media\/wia(?:\/|$)/);
 
   const read = shelf.find((b) => b.collectionFolder === "Thing Explainer");
   assert.ok(read);

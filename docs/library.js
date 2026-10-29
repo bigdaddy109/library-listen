@@ -35,6 +35,10 @@ export const KNOWN_BOOKS = {
 };
 
 export const PROGRESS_KEY = "librarylisten.progress.v1";
+/** Last shelf scan. A shell bump clears this when the stamp below does not match. */
+export const LIBRARY_SNAPSHOT_KEY = "librarylisten.library.v1";
+/** Shell `?v=` that wrote LIBRARY_SNAPSHOT_KEY. Missing means the snapshot is stale. */
+export const LIBRARY_SHELL_KEY = "librarylisten.library.shell";
 /** IndexedDB offline row key for the paired EPUB blob (same store as chapters). */
 export const EBOOK_OFFLINE_KEY = "__ebook__";
 
@@ -207,6 +211,52 @@ export function snapshotShouldListBook(book) {
 
 export function booksFromLibrarySnapshot(snapshot) {
   return (Array.isArray(snapshot) ? snapshot : []).filter(snapshotShouldListBook);
+}
+
+/**
+ * A shell bump must not keep the previous scan. Phones that saved a shelf
+ * before this stamp existed (or under an older `?v=`) drop it. A saved Drive
+ * session then has to rescan instead of playing that snapshot.
+ */
+export function planShelfRestore({ savedShell, currentShell, hasDriveSession } = {}) {
+  const current = String(currentShell ?? "");
+  const saved = savedShell == null ? "" : String(savedShell);
+  const versionChanged = current !== "" && saved !== current;
+  return {
+    invalidateSnapshot: versionChanged,
+    forceDriveRescan: versionChanged && !!hasDriveSession,
+    useSnapshot: !versionChanged,
+  };
+}
+
+export function readLibraryShell(store) {
+  try {
+    return store?.getItem?.(LIBRARY_SHELL_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+export function stampLibraryShell(store, version) {
+  if (!store?.setItem) return;
+  const value = String(version || "");
+  if (!value) return;
+  try {
+    store.setItem(LIBRARY_SHELL_KEY, value);
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+/** Drop the saved shelf. The shell stamp is written only after a fresh scan. */
+export function applyShelfRestorePlan(store, plan) {
+  if (!plan?.invalidateSnapshot || !store?.removeItem) return false;
+  try {
+    store.removeItem(LIBRARY_SNAPSHOT_KEY);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function bookHasDriveMedia(book) {

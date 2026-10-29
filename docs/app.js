@@ -1,5 +1,5 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=54";
-import { SLEEP_CHAPTER, nearestSleepMinute, nextSleepChoice } from "./sleep.js?v=54";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=55";
+import { SLEEP_CHAPTER, nearestSleepMinute, nextSleepChoice } from "./sleep.js?v=55";
 import {
   AUDIO_EXT,
   EPUB_EXT,
@@ -14,6 +14,11 @@ import {
   booksFromLibrarySnapshot,
   buildLibrary,
   emptyLibraryMessage,
+  applyShelfRestorePlan,
+  planShelfRestore,
+  readLibraryShell,
+  stampLibraryShell,
+  LIBRARY_SNAPSHOT_KEY,
   isBookPlayable,
   isImmuneBook,
   mergeLibraryScans,
@@ -22,7 +27,7 @@ import {
   chapterProgress,
   saveProgress,
   shelfBadge,
-} from "./library.js?v=54";
+} from "./library.js?v=55";
 import {
   DRIVE_UNAUTHORIZED_MESSAGE,
   attachDriveMedia,
@@ -31,6 +36,7 @@ import {
   downloadDriveFile,
   driveMediaUrl,
   fetchDriveUser,
+  formatDriveWalkErrors,
   finishDrivePlaybackAuthRetry,
   freshAccessToken,
   getAccessToken,
@@ -51,7 +57,7 @@ import {
   signOutGoogle,
   sourceDialogActions,
   tokenForChapterFetch,
-} from "./drive.js?v=54";
+} from "./drive.js?v=55";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -59,7 +65,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=54";
+} from "./search.js?v=55";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -74,23 +80,23 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=54";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=54";
-import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=54";
-import { coverSvg } from "./shelf/covers.js?v=54";
-import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=54";
+} from "./markers.js?v=55";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=55";
+import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=55";
+import { coverSvg } from "./shelf/covers.js?v=55";
+import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=55";
 import {
   closeRiceBook,
   initRiceShelf,
   isRiceShelfPage,
   setRiceShelfLibrary,
-} from "./shelf/shelf.js?v=54";
+} from "./shelf/shelf.js?v=55";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
 const OPEN_INTENT_KEY = "librarylisten.open.v1";
 const RATES = [1, 1.25, 1.5];
-const LIBRARY_KEY = "librarylisten.library.v1";
+const LIBRARY_KEY = LIBRARY_SNAPSHOT_KEY;
 const DB_NAME = "library-listen";
 const COVER_KEY = "__cover__";
 /** @type {{ books: any[], activeBookId: string|null, sort: string, query: string }} */
@@ -245,7 +251,11 @@ function ensureChapterPlayableUrl(chapter) {
     });
   }
   chapter.driveId = driveId;
-  chapter.url = driveMediaUrl(driveId);
+  chapter.url = driveMediaUrl(
+    driveId,
+    undefined,
+    chapter.file?.name || String(chapter.id || "").split("#")[0]
+  );
   return chapter.url;
 }
 
@@ -280,8 +290,17 @@ function saveLibrarySnapshot() {
   }));
   try {
     localStorage.setItem(LIBRARY_KEY, JSON.stringify(snapshot));
+    stampLibraryShell(libraryStore(), APP_VERSION);
   } catch {
     /* quota / private mode */
+  }
+}
+
+function libraryStore() {
+  try {
+    return localStorage;
+  } catch {
+    return null;
   }
 }
 
@@ -889,6 +908,7 @@ async function loadFromDrive({ silent } = {}) {
     books,
     entries: walked.entries,
     skipped: walked.skipped,
+    walkErrors: walked.walkErrors,
     driveFolder: walked.folder,
   };
 }
@@ -929,9 +949,12 @@ async function loadLibrary(mode) {
     const scanned = result.books || [];
     const entries = result.entries || [];
     const skipped = result.skipped || 0;
+    const walkNote = formatDriveWalkErrors(result.walkErrors);
 
     if (!scanned.length) {
-      if (!silent) showLibraryStatus(emptyLibraryMessage(entries, skipped));
+      const emptyNote = silent ? "" : emptyLibraryMessage(entries, skipped);
+      const message = [emptyNote, walkNote].filter(Boolean).join("\n\n");
+      if (message) showLibraryStatus(message);
       return;
     }
     clearDriveError();
@@ -971,8 +994,9 @@ async function loadLibrary(mode) {
     if (!silent) {
       state.activeBookId = null;
       offerSaveBanner = books.some((b) => isBookOpenable(b) && !isBookOffline(b));
-      hideLibraryStatus();
     }
+    if (walkNote) showLibraryStatus(walkNote);
+    else if (!silent) hideLibraryStatus();
     saveLibrarySnapshot();
     render();
   } catch (err) {
@@ -2507,15 +2531,24 @@ async function restoreSession() {
   } catch {
     /* IndexedDB unavailable (private mode) */
   }
+  const store = libraryStore();
+  const hasDriveSession = !!(loadDriveSession()?.folderId && isGoogleClientConfigured());
+  const plan = planShelfRestore({
+    savedShell: readLibraryShell(store),
+    currentShell: APP_VERSION,
+    hasDriveSession,
+  });
+  if (plan.invalidateSnapshot) applyShelfRestorePlan(store, plan);
   savedDirHandle = await loadSavedDirectory();
   if (savedDirHandle) {
     await loadLibrary("auto");
     if (state.books.length) return;
   }
-  if (loadDriveSession()?.folderId && isGoogleClientConfigured()) {
+  if (hasDriveSession) {
     await loadLibrary("drive-auto");
-    if (state.books.length) return;
+    if (state.books.length || plan.forceDriveRescan) return;
   }
+  if (!plan.useSnapshot) return;
   const restored = restoreLibrarySnapshot();
   if (showRestoredBooks(restored)) return;
   if (restored.length && els.capabilityHint) {
