@@ -44,39 +44,86 @@ export function filePositionFromDisplay(chapter, displaySeconds) {
   return chapterStart(chapter) + shown;
 }
 
+/** Finite media length. Infinity and NaN (typical of a Drive range stream) are not. */
+export function finiteMediaDuration(reported) {
+  const value = Number(reported);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/**
+ * Drive `videoMediaMetadata.durationMillis` for this part.
+ * A container-level value is the whole file, so a marker chapter with its
+ * own start does not inherit it.
+ */
+export function chapterMetadataSeconds(chapter, durationMillis = null) {
+  const own = Number(durationMillis ?? chapter?.durationMillis);
+  if (Number.isFinite(own) && own > 0) {
+    return Math.max(0, own / 1000 - chapterStart(chapter));
+  }
+  if (chapterStart(chapter) > 0) return null;
+  if (Number.isFinite(chapter?.end) && chapter.end > chapterStart(chapter)) return null;
+  const fileMs = Number(chapter?.file?.durationMillis);
+  if (Number.isFinite(fileMs) && fileMs > 0) return fileMs / 1000;
+  return null;
+}
+
 export function liveChapterDuration(chapter, fileDuration) {
   const marked = resolvedChapterDuration(chapter, null);
   if (marked) return marked;
-  if (Number.isFinite(fileDuration) && fileDuration > 0) {
-    return Math.max(0, fileDuration - chapterStart(chapter));
+  const element = finiteMediaDuration(fileDuration);
+  if (element) return Math.max(0, element - chapterStart(chapter));
+  const meta = chapterMetadataSeconds(chapter);
+  return meta > 0 ? meta : null;
+}
+
+/**
+ * Track-list length for one part. Markers, then a finite element duration,
+ * then Drive durationMillis. `currentTime` is never the duration.
+ */
+export function partDurationSeconds(chapter, { elementDuration = null, currentTime = null } = {}) {
+  const marked = resolvedChapterDuration(chapter, null);
+  if (marked) return marked;
+  const element = finiteMediaDuration(elementDuration);
+  if (element) {
+    const span = element - chapterStart(chapter);
+    if (span > 0) return span;
   }
+  const meta = chapterMetadataSeconds(chapter);
+  if (meta > 0) return meta;
+  void currentTime;
   return null;
 }
 
 /**
  * On-screen clock. `pos` follows `currentTime` (chapter-relative when the
- * chapter has a start). A real media duration replaces 0:00, and a later
- * 0/NaN report does not wipe a duration we already saw.
+ * chapter has a start). A finite element duration wins. Infinity/NaN falls
+ * back to Drive `durationMillis`, and a later 0/NaN report does not wipe a
+ * duration we already saw. `durationchange` that reports a finite length
+ * replaces the fallback.
  */
 export function playbackDisplayClock({
   currentTime = 0,
   mediaDuration = 0,
   heldDuration = 0,
   chapter = null,
+  durationMillis = null,
 } = {}) {
   const live = Number.isFinite(currentTime) ? Math.max(0, currentTime) : 0;
   const pos = chapter ? chapterRelativePosition(chapter, live) : live;
-  const reported = Number.isFinite(mediaDuration) && mediaDuration > 0 ? mediaDuration : 0;
-  const held = Number.isFinite(heldDuration) && heldDuration > 0 ? heldDuration : 0;
-  const fileDur = reported > 0 ? reported : held;
+  const reported = finiteMediaDuration(mediaDuration) || 0;
+  const held = finiteMediaDuration(heldDuration) || 0;
+  const meta = chapterMetadataSeconds(chapter, durationMillis) || 0;
+  const element = reported || held;
   let dur = 0;
   if (chapter) {
-    const liveDur = liveChapterDuration(chapter, fileDur > 0 ? fileDur : null);
+    const liveDur = liveChapterDuration(chapter, element > 0 ? element : null);
     if (liveDur > 0) dur = liveDur;
-  } else if (fileDur > 0) {
-    dur = fileDur;
+    else if (meta > 0) dur = meta;
+  } else {
+    dur = element || meta;
   }
-  return { pos, dur, heldDuration: fileDur > 0 ? fileDur : 0 };
+  const hold = element || meta;
+  return { pos, dur, heldDuration: hold > 0 ? hold : 0 };
 }
 
 export function chapterIndexAtTime(chapters, time) {
@@ -166,14 +213,20 @@ export function snapshotChapter(ch) {
     start: Number.isFinite(ch.start) ? ch.start : undefined,
     end: Number.isFinite(ch.end) ? ch.end : undefined,
     duration: Number.isFinite(ch.duration) ? ch.duration : undefined,
+    durationMillis:
+      Number.isFinite(Number(ch.durationMillis)) && Number(ch.durationMillis) > 0
+        ? Number(ch.durationMillis)
+        : undefined,
   };
 }
 
 export function restoreChapterFields(ch, index) {
+  const durationMillis = Number(ch.durationMillis);
   return {
     start: Number.isFinite(ch.start) ? ch.start : 0,
     end: Number.isFinite(ch.end) ? ch.end : null,
     duration: Number.isFinite(ch.duration) ? ch.duration : null,
+    durationMillis: Number.isFinite(durationMillis) && durationMillis > 0 ? durationMillis : null,
     index,
   };
 }

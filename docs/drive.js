@@ -452,6 +452,17 @@ export function isPopupWindowFailure(input) {
 }
 
 /**
+ * GIS emits `popup_failed_to_open` when COOP blocks `window.closed`, including
+ * a click that did open the Google prompt. Do not paint that string, and do
+ * not leave it up after sign-in succeeds.
+ */
+export function shouldSurfacePopupFailure(err, { promptOpened = false, signedIn = false } = {}) {
+  if (!isPopupWindowFailure(err)) return true;
+  if (signedIn || promptOpened) return false;
+  return false;
+}
+
+/**
  * Successful sign-in drops that stale popup line from the status line and the
  * player bar. Other Drive errors stay until they are cleared on their own.
  */
@@ -473,8 +484,19 @@ export function driveChromeAfterSignIn(chrome, { signedIn = false } = {}) {
   };
 }
 
-/** How long a spurious popup_failed_to_open may wait for the token callback. */
-const POPUP_FAILURE_GRACE_MS = 1000;
+/**
+ * How long a click that opened the Google prompt may wait for the token.
+ * One second is shorter than signing in, and rejecting then paints
+ * "Failed to open popup window" while the prompt is still open.
+ */
+const POPUP_OPEN_GRACE_MS = 180_000;
+let popupOpenGraceMs = POPUP_OPEN_GRACE_MS;
+
+export function setPopupOpenGraceMs(ms) {
+  const n = Number(ms);
+  popupOpenGraceMs = Number.isFinite(n) && n >= 0 ? n : POPUP_OPEN_GRACE_MS;
+  return popupOpenGraceMs;
+}
 
 export function planDriveMediaProxy({ fileId, range, token } = {}) {
   if (!fileId) return { ok: false, status: 400, body: "Missing Drive file" };
@@ -789,10 +811,19 @@ async function rangeBytes(fileId, start, end) {
   return res.arrayBuffer();
 }
 
+/** Drive Files resource `videoMediaMetadata.durationMillis` (ms), when present. */
+export function driveDurationMillis(item) {
+  if (!item) return null;
+  const raw = item.videoMediaMetadata?.durationMillis ?? item.durationMillis;
+  const ms = Number(raw);
+  return Number.isFinite(ms) && ms > 0 ? ms : null;
+}
+
 export function makeDriveFile(item) {
   const id = item?.id || item?.driveId;
   const name = item?.name || "file";
   const size = Number(item?.size) || 0;
+  const durationMillis = driveDurationMillis(item);
   const ext = extOf(name);
   const forcedAudio = ext === "m4a" || ext === "m4b" || ext === "aac" ? "audio/mp4" : "";
   const type =
@@ -807,6 +838,7 @@ export function makeDriveFile(item) {
     type,
     driveId: id,
     lastModified: Date.now(),
+    ...(durationMillis ? { durationMillis } : {}),
     slice(start = 0, end = size) {
       const from = Math.max(0, Number(start) || 0);
       const to = Math.min(size, end == null ? size : Number(end));
@@ -900,7 +932,7 @@ function driveListUrl({ q, pageToken, fields, pageSize = DRIVE_LIST_PAGE_SIZE, c
   url.searchParams.set(
     "fields",
     fields ||
-      "nextPageToken,files(id,name,mimeType,size,parents,ownedByMe,shared,owners(displayName,emailAddress),shortcutDetails)"
+      "nextPageToken,files(id,name,mimeType,size,parents,ownedByMe,shared,owners(displayName,emailAddress),shortcutDetails,videoMediaMetadata(durationMillis))"
   );
   if (pageToken) url.searchParams.set("pageToken", pageToken);
   return url.toString();
@@ -1156,7 +1188,14 @@ export async function hydrateDriveCovers(books, token = getAccessToken(), fetchI
 
 export function snapshotDriveFields(file) {
   if (!isDriveFile(file)) return null;
-  return { driveId: file.driveId, name: file.name, size: file.size, type: file.type };
+  const durationMillis = driveDurationMillis(file);
+  return {
+    driveId: file.driveId,
+    name: file.name,
+    size: file.size,
+    type: file.type,
+    ...(durationMillis ? { durationMillis } : {}),
+  };
 }
 
 export function restoreDriveFile(fields) {
@@ -1166,6 +1205,7 @@ export function restoreDriveFile(fields) {
     name: fields.name || "file",
     size: fields.size,
     mimeType: fields.type,
+    durationMillis: fields.durationMillis,
   });
 }
 
@@ -1237,9 +1277,12 @@ function requestGisToken(prompt) {
   gisInflight = new Promise((resolve, reject) => {
     let settled = false;
     let attemptGotToken = false;
+    let popupTimer = null;
     const finish = (fn, value) => {
       if (settled) return;
       settled = true;
+      if (popupTimer) clearTimeout(popupTimer);
+      popupTimer = null;
       fn(value);
     };
     const client = gis.initTokenClient(
@@ -1250,20 +1293,27 @@ function requestGisToken(prompt) {
             return;
           }
           attemptGotToken = true;
-          finish(resolve, applyGisToken(resp));
+          // Apply even if this attempt already gave up, so a slow prompt still
+          // stores the token and the page can clear a leftover popup line.
+          const token = applyGisToken(resp);
+          finish(resolve, token);
         },
         (err) => {
           // COOP can make GIS log window.closed; ignore that and keep waiting
           // for the token callback so we do not break the popup flow.
           const failure = gisAuthFailure(err);
           if (!failure) return;
-          // popup_failed_to_open can arrive just before the token. Wait briefly
-          // so a successful sign-in is not reported as a failed popup.
+          // popup_failed_to_open also fires when the prompt did open. Do not
+          // fail the click or surface that message. Wait for the token.
           if (isPopupWindowFailure(err)) {
-            setTimeout(() => {
-              if (attemptGotToken) return;
-              finish(reject, failure);
-            }, POPUP_FAILURE_GRACE_MS);
+            if (popupTimer) clearTimeout(popupTimer);
+            popupTimer = setTimeout(() => {
+              popupTimer = null;
+              if (attemptGotToken || settled) return;
+              const quiet = driveErrorFrom({ name: "AbortError", type: "popup_closed" });
+              quiet.silent = true;
+              finish(reject, quiet);
+            }, popupOpenGraceMs);
             return;
           }
           finish(reject, failure);

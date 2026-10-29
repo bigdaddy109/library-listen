@@ -10,6 +10,7 @@ import {
   planDrivePlaybackAuthRetry,
   setAccessToken,
   setDriveTokenAppliedListener,
+  setPopupOpenGraceMs,
   signInWithGoogle,
   tokenForChapterFetch,
   tokenForRead,
@@ -70,6 +71,7 @@ describe("Drive token expiry during listen", { concurrency: false }, () => {
 
   afterEach(() => {
     clearAccessToken();
+    setPopupOpenGraceMs(180_000);
     delete globalThis.google;
   });
 
@@ -213,8 +215,36 @@ describe("Drive token expiry during listen", { concurrency: false }, () => {
     }
   });
 
-  it("rejects popup_failed_to_open when no token follows", async () => {
+  it("does not fail a click whose prompt stays open past one second", async () => {
     clearAccessToken();
+    setPopupOpenGraceMs(5_000);
+    globalThis.google = {
+      accounts: {
+        oauth2: {
+          initTokenClient(opts) {
+            return {
+              requestAccessToken() {
+                opts.error_callback?.({
+                  type: "popup_failed_to_open",
+                  message: "Failed to open popup window",
+                });
+                setTimeout(() => {
+                  opts.callback?.({ access_token: "after-prompt", expires_in: 3600 });
+                }, 1100);
+              },
+            };
+          },
+        },
+      },
+    };
+    const token = await signInWithGoogle();
+    assert.equal(token, "after-prompt");
+    assert.equal(freshAccessToken(), "after-prompt");
+  });
+
+  it("abandons a popup attempt without the popup error when no token follows", async () => {
+    clearAccessToken();
+    setPopupOpenGraceMs(30);
     globalThis.google = {
       accounts: {
         oauth2: {
@@ -232,9 +262,47 @@ describe("Drive token expiry during listen", { concurrency: false }, () => {
       },
     };
     await assert.rejects(signInWithGoogle(), (err) => {
-      assert.match(String(err?.message || ""), /Failed to open popup window/);
+      assert.equal(err?.silent, true);
+      assert.equal(err?.name, "AbortError");
+      assert.doesNotMatch(String(err?.message || ""), /Failed to open popup window/);
       return true;
     });
+  });
+
+  it("keeps a late token after the popup attempt was abandoned", async () => {
+    clearAccessToken();
+    setPopupOpenGraceMs(20);
+    let applied = 0;
+    setDriveTokenAppliedListener(() => {
+      applied += 1;
+    });
+    globalThis.google = {
+      accounts: {
+        oauth2: {
+          initTokenClient(opts) {
+            return {
+              requestAccessToken() {
+                opts.error_callback?.({
+                  type: "popup_failed_to_open",
+                  message: "Failed to open popup window",
+                });
+                setTimeout(() => {
+                  opts.callback?.({ access_token: "late", expires_in: 3600 });
+                }, 60);
+              },
+            };
+          },
+        },
+      },
+    };
+    try {
+      await assert.rejects(signInWithGoogle());
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      assert.equal(freshAccessToken(), "late");
+      assert.equal(applied, 1);
+    } finally {
+      setDriveTokenAppliedListener(null);
+    }
   });
 
   it("shows Drive failures inline and replays a 401 at the saved position", () => {
