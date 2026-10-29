@@ -3,8 +3,8 @@ import {
   isBookPlayable,
   listenShelfBooks,
   shelfBadge,
-} from "../library.js?v=56";
-import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=56";
+} from "../library.js?v=57";
+import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=57";
 import {
   COVER_MORPH,
   bookFlipFrames,
@@ -16,8 +16,8 @@ import {
   coverMorphTransform,
   coverTransitionMode,
   emptyShelfMessage,
-  filterShelf,
   groupBySeries,
+  shelfShownBooks,
   mediaFlags,
   normalizeView,
   openBookPhase,
@@ -30,8 +30,8 @@ import {
   seriesMeta,
   shelfStatusLabel,
   volumeNumber,
-} from "./catalog.js?v=56";
-import { coverSvg, spineMetrics } from "./covers.js?v=56";
+} from "./catalog.js?v=57";
+import { coverSvg, spineMetrics } from "./covers.js?v=57";
 
 /* v2: the cover wall became the default; the old key mostly held the old default. */
 const VIEW_KEY = "librarylisten.shelfView.v2";
@@ -79,7 +79,7 @@ function shelfBooks() {
 }
 
 function visibleBooks() {
-  return filterShelf(shelfBooks(), { query: state.query, seriesId: state.seriesId });
+  return shelfShownBooks(state.books, { query: state.query, seriesId: state.seriesId });
 }
 
 function findBook(id) {
@@ -119,7 +119,7 @@ function updateHint() {
   if (!els.hint) return;
   els.hint.textContent =
     state.source === "library"
-      ? `Loaded ${state.books.length} books. Tap a cover to listen.`
+      ? `Loaded ${visibleBooks().length} books. Tap a cover to listen.`
       : "Demo books show until you sign in. Sign in with Google to listen.";
 }
 

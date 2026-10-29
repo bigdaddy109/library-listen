@@ -53,6 +53,32 @@ export function liveChapterDuration(chapter, fileDuration) {
   return null;
 }
 
+/**
+ * On-screen clock. `pos` follows `currentTime` (chapter-relative when the
+ * chapter has a start). A real media duration replaces 0:00, and a later
+ * 0/NaN report does not wipe a duration we already saw.
+ */
+export function playbackDisplayClock({
+  currentTime = 0,
+  mediaDuration = 0,
+  heldDuration = 0,
+  chapter = null,
+} = {}) {
+  const live = Number.isFinite(currentTime) ? Math.max(0, currentTime) : 0;
+  const pos = chapter ? chapterRelativePosition(chapter, live) : live;
+  const reported = Number.isFinite(mediaDuration) && mediaDuration > 0 ? mediaDuration : 0;
+  const held = Number.isFinite(heldDuration) && heldDuration > 0 ? heldDuration : 0;
+  const fileDur = reported > 0 ? reported : held;
+  let dur = 0;
+  if (chapter) {
+    const liveDur = liveChapterDuration(chapter, fileDur > 0 ? fileDur : null);
+    if (liveDur > 0) dur = liveDur;
+  } else if (fileDur > 0) {
+    dur = fileDur;
+  }
+  return { pos, dur, heldDuration: fileDur > 0 ? fileDur : 0 };
+}
+
 export function chapterIndexAtTime(chapters, time) {
   if (!chapters?.length) return -1;
   const t = Number.isFinite(time) ? time : 0;

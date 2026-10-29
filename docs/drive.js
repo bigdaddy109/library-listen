@@ -126,11 +126,24 @@ export function freshAccessToken(now = Date.now()) {
   return accessToken;
 }
 
+/** @type {((token: string) => void) | null} */
+let tokenAppliedListener = null;
+
+/** Page hook: a GIS token just landed. Used to drop a stale popup error. */
+export function setDriveTokenAppliedListener(fn) {
+  tokenAppliedListener = typeof fn === "function" ? fn : null;
+}
+
 function applyGisToken(resp, now = Date.now()) {
   const seconds = Number(resp?.expires_in);
   const ttlSec = Number.isFinite(seconds) && seconds > 0 ? seconds : DEFAULT_TOKEN_TTL_SEC;
   accessToken = resp.access_token;
   tokenExpiresAt = now + ttlSec * 1000;
+  try {
+    tokenAppliedListener?.(accessToken);
+  } catch {
+    /* status UI must not break sign-in */
+  }
   return accessToken;
 }
 
@@ -429,6 +442,39 @@ export function gisAuthFailure(respOrErr) {
   if (isGisCoopWindowClosedWarning(respOrErr.message || respOrErr)) return null;
   return driveErrorFrom(respOrErr);
 }
+
+/** GIS `popup_failed_to_open` — the status line text is "Failed to open popup window". */
+export function isPopupWindowFailure(input) {
+  if (!input) return false;
+  const type = String(input.type || input.error || "");
+  const message = String(input.message || "");
+  return type === "popup_failed_to_open" || /failed to open popup window/i.test(`${type} ${message}`);
+}
+
+/**
+ * Successful sign-in drops that stale popup line from the status line and the
+ * player bar. Other Drive errors stay until they are cleared on their own.
+ */
+export function driveChromeAfterSignIn(chrome, { signedIn = false } = {}) {
+  const statusText = String(chrome?.statusText || "");
+  const playerText = String(chrome?.playerText || "");
+  const statusIsError = !!chrome?.statusIsError && !!statusText;
+  const playerIsError = !!chrome?.playerIsError && !!playerText;
+  if (!signedIn) {
+    return { statusText, statusIsError, playerText, playerIsError };
+  }
+  const statusPopup = isPopupWindowFailure({ message: statusText });
+  const playerPopup = isPopupWindowFailure({ message: playerText });
+  return {
+    statusText: statusPopup ? "" : statusText,
+    statusIsError: statusPopup ? false : statusIsError,
+    playerText: playerPopup ? "" : playerText,
+    playerIsError: playerPopup ? false : playerIsError,
+  };
+}
+
+/** How long a spurious popup_failed_to_open may wait for the token callback. */
+const POPUP_FAILURE_GRACE_MS = 1000;
 
 export function planDriveMediaProxy({ fileId, range, token } = {}) {
   if (!fileId) return { ok: false, status: 400, body: "Missing Drive file" };
@@ -1190,6 +1236,7 @@ function requestGisToken(prompt) {
   const promptValue = prompt == null ? "consent" : String(prompt);
   gisInflight = new Promise((resolve, reject) => {
     let settled = false;
+    let attemptGotToken = false;
     const finish = (fn, value) => {
       if (settled) return;
       settled = true;
@@ -1202,6 +1249,7 @@ function requestGisToken(prompt) {
             finish(reject, gisAuthFailure(resp) || driveErrorFrom(resp));
             return;
           }
+          attemptGotToken = true;
           finish(resolve, applyGisToken(resp));
         },
         (err) => {
@@ -1209,6 +1257,15 @@ function requestGisToken(prompt) {
           // for the token callback so we do not break the popup flow.
           const failure = gisAuthFailure(err);
           if (!failure) return;
+          // popup_failed_to_open can arrive just before the token. Wait briefly
+          // so a successful sign-in is not reported as a failed popup.
+          if (isPopupWindowFailure(err)) {
+            setTimeout(() => {
+              if (attemptGotToken) return;
+              finish(reject, failure);
+            }, POPUP_FAILURE_GRACE_MS);
+            return;
+          }
           finish(reject, failure);
         }
       )

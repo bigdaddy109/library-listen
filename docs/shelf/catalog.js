@@ -3,6 +3,7 @@
 import {
   bookHasAudio,
   latestProgressKind,
+  listenShelfBooks,
   loadProgress,
   shelfBadge,
 } from "../library.js";
@@ -420,6 +421,20 @@ export function filterShelf(books, { query = "", seriesId = "all" } = {}) {
       ? list.filter((book) => seriesIdForBook(book) === seriesId)
       : list;
   return filterBooks(narrowed, query);
+}
+
+/**
+ * Books the cover wall and bookshelf actually draw.
+ * Audio books only: an EPUB with no audio is not a shelf book, and chapters
+ * inside a book are not extra books.
+ */
+export function shelfShownBooks(books, { query = "", seriesId = "all" } = {}) {
+  return filterShelf(listenShelfBooks(books), { query, seriesId });
+}
+
+/** Same number the shelf paints. Not files, not chapters, not silent EPUBs. */
+export function loadedShelfCount(books, filter) {
+  return shelfShownBooks(books, filter).length;
 }
 
 export function groupBySeries(books) {
