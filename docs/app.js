@@ -1,5 +1,5 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=63";
-import { SLEEP_CHAPTER, nearestSleepMinute, nextSleepChoice } from "./sleep.js?v=63";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=64";
+import { SLEEP_CHAPTER, nearestSleepMinute, nextSleepChoice } from "./sleep.js?v=64";
 import {
   bookHasAudio,
   bookScreenTabs,
@@ -22,7 +22,7 @@ import {
   chapterProgress,
   saveProgress,
   shelfBadge,
-} from "./library.js?v=63";
+} from "./library.js?v=64";
 import {
   DRIVE_MEDIA_ERROR_MESSAGE,
   DRIVE_UNAUTHORIZED_MESSAGE,
@@ -57,10 +57,12 @@ import {
   signInWithGoogle,
   resumeLocalGisRedirect,
   isLocalGisHost,
+  isIosLikeClient,
+  gisUsesRedirect,
   signOutGoogle,
   sourceDialogActions,
   tokenForChapterFetch,
-} from "./drive.js?v=63";
+} from "./drive.js?v=64";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -68,7 +70,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=63";
+} from "./search.js?v=64";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -85,17 +87,17 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=63";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=63";
-import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=63";
-import { coverSvg } from "./shelf/covers.js?v=63";
-import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=63";
+} from "./markers.js?v=64";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=64";
+import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=64";
+import { coverSvg } from "./shelf/covers.js?v=64";
+import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=64";
 import {
   closeRiceBook,
   initRiceShelf,
   isRiceShelfPage,
   setRiceShelfLibrary,
-} from "./shelf/shelf.js?v=63";
+} from "./shelf/shelf.js?v=64";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -1327,6 +1329,8 @@ function render() {
   const hasBooks = state.books.length > 0;
   const rice = isRiceShelfPage();
   els.onboarding?.classList.toggle("hidden", hasBooks || !!state.activeBookId);
+  const loadHint = document.getElementById("load-hint");
+  if (loadHint) loadHint.hidden = hasBooks;
   if (hasBooks) els.onboarding?.classList.add("hidden");
   if (rice) {
     document.getElementById("app")?.classList.toggle("is-reading", !!state.activeBookId);
@@ -2292,7 +2296,9 @@ function registerSW() {
       .catch(() => {});
   };
   const swUrl = new URL("./sw.js", import.meta.url).href;
-  const swOptions = isLocalGisHost(location.hostname) ? { updateViaCache: "none" } : undefined;
+  /* Localhost and iOS must not keep a cached popup client. Desktop Pages
+     stays cache-first aside from the shell version bump. */
+  const swOptions = gisUsesRedirect(location.hostname, navigator) ? { updateViaCache: "none" } : undefined;
   navigator.serviceWorker
     .register(swUrl, swOptions)
     .then((reg) => {
@@ -2477,8 +2483,12 @@ setDriveTokenAppliedListener(() => {
 
 setupCapabilityHint();
 const versionEl = document.getElementById("app-version");
-const shellWhere = isLocalGisHost(location.hostname) ? "localhost" : "live";
-const shellLabel = `v${APP_VERSION || "63"} · ${shellWhere}`;
+const shellWhere = isIosLikeClient(navigator)
+  ? "mobile"
+  : isLocalGisHost(location.hostname)
+    ? "localhost"
+    : "live";
+const shellLabel = `v${APP_VERSION || "64"} · ${shellWhere}`;
 if (versionEl && APP_VERSION) versionEl.textContent = `v${APP_VERSION}`;
 const shellBuild = document.getElementById("shell-build");
 if (shellBuild) shellBuild.textContent = shellLabel;

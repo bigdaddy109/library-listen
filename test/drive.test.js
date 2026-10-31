@@ -65,8 +65,14 @@ import {
   shouldSkipDriveName,
   tokenClientOptions,
   gisUsesRedirect,
+  isIosLikeClient,
+  shouldImplicitRedirect,
   localImplicitAuthUrl,
+  implicitRedirectUri,
+  LIVE_IMPLICIT_REDIRECT_URI,
   parseImplicitHash,
+  takeLocalImplicitToken,
+  clearAccessToken,
   uniqueDriveFolders,
   walkDriveFolder,
   walkPrefixForFolder,
@@ -722,28 +728,137 @@ describe("Drive user-visible errors", () => {
     assert.equal(opts.scope, DRIVE_READONLY_SCOPE);
     const live = tokenClientOptions(() => {}, () => {});
     assert.equal("ux_mode" in live, false);
-    const localUrl = new URL(localImplicitAuthUrl({ origin: "http://127.0.0.1:8080" }));
+    const desktopNav = {
+      userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+      maxTouchPoints: 0,
+    };
+    const desktopMacNav = {
+      userAgent:
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      maxTouchPoints: 0,
+    };
+    const iphoneNav = {
+      userAgent:
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+      maxTouchPoints: 5,
+    };
+    const ipadMacNav = {
+      userAgent:
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+      maxTouchPoints: 5,
+    };
+    const localUrl = new URL(localImplicitAuthUrl({ origin: "http://127.0.0.1:8080", hostname: "127.0.0.1" }));
     assert.equal(localUrl.origin, "https://accounts.google.com");
     assert.equal(localUrl.searchParams.get("response_type"), "token");
     assert.equal(localUrl.searchParams.get("redirect_uri"), "http://127.0.0.1:8080/");
     assert.equal(localUrl.searchParams.get("scope"), DRIVE_READONLY_SCOPE);
     assert.equal(localUrl.searchParams.get("client_id"), GOOGLE_OAUTH_CLIENT_ID);
     assert.equal(
-      new URL(localImplicitAuthUrl({ origin: "http://localhost:8080" })).searchParams.get("redirect_uri"),
+      new URL(localImplicitAuthUrl({ origin: "http://localhost:8080", hostname: "localhost" })).searchParams.get(
+        "redirect_uri"
+      ),
       "http://localhost:8080/"
     );
-    assert.equal(gisUsesRedirect("bigdaddy109.github.io"), false);
-    assert.equal(gisUsesRedirect("127.0.0.1"), true);
-    assert.equal(gisUsesRedirect("localhost"), true);
+    assert.equal(implicitRedirectUri({ hostname: "bigdaddy109.github.io", origin: "https://bigdaddy109.github.io" }), LIVE_IMPLICIT_REDIRECT_URI);
+    assert.equal(
+      new URL(
+        localImplicitAuthUrl({ origin: "https://bigdaddy109.github.io", hostname: "bigdaddy109.github.io" })
+      ).searchParams.get("redirect_uri"),
+      "https://bigdaddy109.github.io/library-listen/"
+    );
+    assert.notEqual(
+      implicitRedirectUri({ hostname: "bigdaddy109.github.io", origin: "https://bigdaddy109.github.io" }),
+      "https://bigdaddy109.github.io/"
+    );
+    assert.equal(gisUsesRedirect("bigdaddy109.github.io", desktopNav), false);
+    assert.equal(gisUsesRedirect("bigdaddy109.github.io", desktopMacNav), false);
+    assert.equal(isIosLikeClient(desktopMacNav), false);
+    assert.equal(gisUsesRedirect("bigdaddy109.github.io", iphoneNav), true);
+    assert.equal(gisUsesRedirect("bigdaddy109.github.io", ipadMacNav), true);
+    assert.equal(isIosLikeClient(iphoneNav), true);
+    assert.equal(isIosLikeClient(ipadMacNav), true);
+    assert.equal(shouldImplicitRedirect({ userClick: false, hostname: "bigdaddy109.github.io", nav: desktopNav }), false);
+    assert.equal(shouldImplicitRedirect({ userClick: true, hostname: "bigdaddy109.github.io", nav: iphoneNav }), true);
+    assert.equal(
+      shouldImplicitRedirect({
+        userClick: false,
+        hostname: "bigdaddy109.github.io",
+        nav: iphoneNav,
+        hasFreshToken: true,
+      }),
+      false
+    );
+    assert.equal(gisUsesRedirect("127.0.0.1", desktopNav), true);
+    assert.equal(gisUsesRedirect("localhost", desktopNav), true);
+    assert.equal(takeLocalImplicitToken({ hostname: "bigdaddy109.github.io", hash: "#access_token=ya29.desktop&expires_in=60" }, desktopNav), null);
+    assert.equal(
+      takeLocalImplicitToken(
+        { hostname: "bigdaddy109.github.io", hash: "#access_token=ya29.ios&expires_in=1200", pathname: "/library-listen/", search: "" },
+        iphoneNav
+      ),
+      "ya29.ios"
+    );
+    clearAccessToken();
+    const previousSession = globalThis.sessionStorage;
+    globalThis.sessionStorage = {
+      data: new Map(),
+      getItem(key) {
+        return this.data.has(key) ? this.data.get(key) : null;
+      },
+      setItem(key, value) {
+        this.data.set(key, String(value));
+      },
+      removeItem(key) {
+        this.data.delete(key);
+      },
+    };
+    try {
+      assert.throws(() =>
+        takeLocalImplicitToken(
+          {
+            hostname: "bigdaddy109.github.io",
+            hash: "#error=access_denied&error_description=no",
+            pathname: "/library-listen/",
+            search: "",
+          },
+          iphoneNav
+        )
+      );
+      assert.equal(
+        shouldImplicitRedirect({ userClick: false, hostname: "bigdaddy109.github.io", nav: iphoneNav }),
+        false
+      );
+      assert.equal(
+        shouldImplicitRedirect({ userClick: true, hostname: "bigdaddy109.github.io", nav: iphoneNav }),
+        true
+      );
+    } finally {
+      if (previousSession === undefined) delete globalThis.sessionStorage;
+      else globalThis.sessionStorage = previousSession;
+    }
     const parsed = parseImplicitHash("#access_token=ya29.local&expires_in=3600&token_type=Bearer");
     assert.equal(parsed.access_token, "ya29.local");
     assert.equal(parsed.expires_in, 3600);
     assert.equal(parseImplicitHash(""), null);
-    const appJs = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../docs/app.js"), "utf8");
+    const docsDir = join(dirname(fileURLToPath(import.meta.url)), "../docs");
+    const appJs = readFileSync(join(docsDir, "app.js"), "utf8");
+    const driveJs = readFileSync(join(docsDir, "drive.js"), "utf8");
+    const sw = readFileSync(join(docsDir, "sw.js"), "utf8");
     assert.match(appJs, /resumeLocalGisRedirect\(/);
     assert.match(appJs, /id="shell-build"|shell-build/);
-    const indexHtml = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../docs/index.html"), "utf8");
+    assert.match(appJs, /"mobile"/);
+    assert.match(appJs, /"live"/);
+    assert.match(appJs, /gisUsesRedirect\(location\.hostname, navigator\)/);
+    assert.match(appJs, /updateViaCache: "none"/);
+    assert.match(driveJs, /if \(gisUsesRedirect\(\)\) return requestGisToken/);
+    assert.match(sw, /function shellBypassesCache/);
+    assert.match(sw, /iPhone\|iPad\|iPod/);
+    assert.match(sw, /Macintosh/);
+    assert.match(sw, /maxTouchPoints/);
+    assert.match(sw, /cache: "no-store"/);
+    const indexHtml = readFileSync(join(docsDir, "index.html"), "utf8");
     assert.match(indexHtml, /id="shell-build"/);
+    assert.match(indexHtml, /v64/);
   });
 
   it("explains Testing-mode test-user denial, missing Library, and expired tokens", () => {
