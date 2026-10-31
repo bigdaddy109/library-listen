@@ -2489,7 +2489,7 @@ const shellWhere = isIosLikeClient(navigator)
     ? "localhost"
     : "live";
 const shellLabel = `v${APP_VERSION || "64"} · ${shellWhere}`;
-if (versionEl) versionEl.textContent = shellLabel;
+if (versionEl && APP_VERSION) versionEl.textContent = `v${APP_VERSION}`;
 const shellBuild = document.getElementById("shell-build");
 if (shellBuild) shellBuild.textContent = shellLabel;
 const sortBtn = document.getElementById("btn-sort");

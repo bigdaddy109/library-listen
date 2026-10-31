@@ -110,7 +110,7 @@ test.describe("iPhone implicit sign-in", () => {
 
     await page.goto(`${ORIGIN}/`);
     await expect(page.locator("#shell-build")).toHaveText(`v${SHELL_VERSION} · mobile`);
-    await expect(page.locator("#app-version")).toHaveText(`v${SHELL_VERSION} · mobile`);
+    await expect(page.locator("#app-version")).toHaveText(`v${SHELL_VERSION}`);
     await expect(page.getByRole("button", { name: "All 6" })).toBeVisible();
     await expect
       .poll(async () => (await page.locator(".cover-card h3").allTextContents()).slice().sort())
