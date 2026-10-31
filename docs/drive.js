@@ -1339,9 +1339,62 @@ export function isLocalGisHost(hostname) {
   return host === "localhost" || host === "127.0.0.1";
 }
 
-/** Popup on the live origin. Local hosts never call initTokenClient. */
-export function gisUsesRedirect(hostname = globalThis.location?.hostname) {
-  return isLocalGisHost(hostname);
+/**
+ * iPhone, iPod, iPad, and iPadOS Safari. iPadOS 13+ often sends a Macintosh
+ * user agent; multitouch is what separates that from a desktop Mac.
+ */
+export function isIosLikeClient(nav = globalThis.navigator) {
+  const ua = String(nav?.userAgent || "");
+  if (/iPhone|iPad|iPod/i.test(ua)) return true;
+  return /Macintosh/i.test(ua) && Number(nav?.maxTouchPoints) > 1;
+}
+
+/**
+ * Full-page implicit redirect. Desktop https://bigdaddy109.github.io stays
+ * on the GIS popup. Localhost and iPhone/iPad never call initTokenClient.
+ */
+export function gisUsesRedirect(hostname = globalThis.location?.hostname, nav = globalThis.navigator) {
+  return isLocalGisHost(hostname) || isIosLikeClient(nav);
+}
+
+/** Live Pages is not the origin root. Jeff registers this exact URI. */
+export const LIVE_IMPLICIT_REDIRECT_URI = "https://bigdaddy109.github.io/library-listen/";
+
+const IMPLICIT_HOLD_KEY = "librarylisten.implicit-hold";
+
+function readImplicitHold() {
+  try {
+    return globalThis.sessionStorage?.getItem(IMPLICIT_HOLD_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeImplicitHold(on) {
+  try {
+    if (!globalThis.sessionStorage) return;
+    if (on) globalThis.sessionStorage.setItem(IMPLICIT_HOLD_KEY, "1");
+    else globalThis.sessionStorage.removeItem(IMPLICIT_HOLD_KEY);
+  } catch {
+    /* private mode */
+  }
+}
+
+/**
+ * True when this client must leave the page for Google. A silent refresh
+ * with a still-fresh token stays put. A silent refresh after Google returned
+ * an error stays put so the page does not redirect in a loop.
+ */
+export function shouldImplicitRedirect({
+  userClick = false,
+  hostname = globalThis.location?.hostname,
+  nav = globalThis.navigator,
+  hasFreshToken = false,
+} = {}) {
+  if (!gisUsesRedirect(hostname, nav)) return false;
+  if (userClick) return true;
+  if (hasFreshToken || readImplicitHold()) return false;
+  return true;
 }
 
 export function tokenClientOptions(callback, errorCallback) {
@@ -1353,12 +1406,22 @@ export function tokenClientOptions(callback, errorCallback) {
   };
 }
 
+/** Where Google should send the implicit token. */
+export function implicitRedirectUri(loc = globalThis.location) {
+  const host = String(loc?.hostname || "")
+    .trim()
+    .replace(/\.+$/, "")
+    .toLowerCase();
+  if (host === "bigdaddy109.github.io") return LIVE_IMPLICIT_REDIRECT_URI;
+  const origin = String(loc?.origin || "http://127.0.0.1:8080").replace(/\/$/, "");
+  return `${origin}/`;
+}
+
 /** Implicit token redirect. initTokenClient has no ux_mode and always opens a popup. */
 export function localImplicitAuthUrl(loc = globalThis.location) {
-  const origin = String(loc?.origin || "http://127.0.0.1:8080").replace(/\/$/, "");
   const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   url.searchParams.set("client_id", GOOGLE_OAUTH_CLIENT_ID);
-  url.searchParams.set("redirect_uri", `${origin}/`);
+  url.searchParams.set("redirect_uri", implicitRedirectUri(loc));
   url.searchParams.set("response_type", "token");
   url.searchParams.set("scope", DRIVE_READONLY_SCOPE);
   url.searchParams.set("include_granted_scopes", "true");
@@ -1382,23 +1445,26 @@ export function parseImplicitHash(hash) {
 }
 
 /**
- * Read `#access_token` after a localhost implicit redirect and store it the
- * same way a GIS popup token is stored. No-op on the live origin.
+ * Read `#access_token` after an implicit redirect and store it the same way
+ * a GIS popup token is stored. No-op on desktop Pages (that origin uses the
+ * popup). An error hash is remembered so a silent refresh does not loop.
  */
-export function takeLocalImplicitToken(loc = globalThis.location) {
-  if (!loc || !gisUsesRedirect(loc.hostname)) return null;
+export function takeLocalImplicitToken(loc = globalThis.location, nav = globalThis.navigator) {
+  if (!loc || !gisUsesRedirect(loc.hostname, nav)) return null;
   const parsed = parseImplicitHash(loc.hash);
   if (!parsed) return null;
   if (typeof history !== "undefined" && history.replaceState && loc === globalThis.location) {
     history.replaceState({}, "", `${loc.pathname || "/"}${loc.search || ""}`);
   }
   if (parsed.error) {
+    writeImplicitHold(true);
     throw driveErrorFrom({
       error: parsed.error,
       error_description: parsed.error_description,
       message: parsed.error_description || parsed.error,
     });
   }
+  writeImplicitHold(false);
   return applyGisToken({ access_token: parsed.access_token, expires_in: parsed.expires_in });
 }
 
@@ -1423,11 +1489,17 @@ function requestGisToken(prompt) {
   requireClientId();
   const promptValue = prompt == null ? "consent" : String(prompt);
   const userClick = promptValue !== "";
-  /* initTokenClient always uses a popup (it ignores ux_mode). Local hosts
-     leave the page instead, then takeLocalImplicitToken reads #access_token. */
+  /* initTokenClient always uses a popup (it ignores ux_mode). Localhost and
+     iPhone/iPad leave the page instead. takeLocalImplicitToken reads #access_token. */
   if (gisUsesRedirect()) {
-    if (!userClick && getAccessToken()) return Promise.resolve(getAccessToken());
-    return redirectLocalSignIn();
+    if (shouldImplicitRedirect({ userClick, hasFreshToken: !!freshAccessToken() })) {
+      if (userClick) writeImplicitHold(false);
+      return redirectLocalSignIn();
+    }
+    if (!userClick && freshAccessToken()) return Promise.resolve(freshAccessToken());
+    const quiet = driveErrorFrom({ name: "AbortError", type: "popup_closed" });
+    quiet.silent = true;
+    return Promise.reject(quiet);
   }
   const gis = gisOauth();
   if (!gis?.initTokenClient) {
@@ -1523,13 +1595,14 @@ function requestGisToken(prompt) {
 
 export async function signInWithGoogle({ prompt = "consent" } = {}) {
   requireClientId();
+  if (gisUsesRedirect()) return requestGisToken(prompt);
   if (!gisOauth()?.initTokenClient) await loadScript(GIS_SRC);
   return requestGisToken(prompt);
 }
 
 /**
- * After a localhost implicit redirect, `#access_token` is on this page.
- * Do not call initTokenClient here. The live origin never uses this path.
+ * After an implicit redirect, `#access_token` is on this page.
+ * Do not call initTokenClient here. Desktop Pages never uses this path.
  */
 export function resumeLocalGisRedirect() {
   return takeLocalImplicitToken();
@@ -1537,6 +1610,7 @@ export function resumeLocalGisRedirect() {
 
 export async function refreshGoogleToken() {
   requireClientId();
+  if (gisUsesRedirect()) return requestGisToken("");
   if (!gisOauth()?.initTokenClient) await loadScript(GIS_SRC);
   return requestGisToken("");
 }
@@ -1555,6 +1629,7 @@ export function tokenForRead({ now = Date.now() } = {}) {
       return Promise.reject(err);
     }
   };
+  if (gisUsesRedirect()) return silent();
   if (gisOauth()?.initTokenClient) return silent();
   return loadScript(GIS_SRC).then(() => requestGisToken(""));
 }

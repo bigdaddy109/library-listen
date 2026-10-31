@@ -3,8 +3,8 @@ import {
   isBookPlayable,
   listenShelfBooks,
   shelfBadge,
-} from "../library.js?v=63";
-import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=63";
+} from "../library.js?v=64";
+import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=64";
 import {
   COVER_MORPH,
   bookFlipFrames,
@@ -30,8 +30,8 @@ import {
   seriesMeta,
   shelfStatusLabel,
   volumeNumber,
-} from "./catalog.js?v=63";
-import { coverSvg, spineMetrics } from "./covers.js?v=63";
+} from "./catalog.js?v=64";
+import { coverSvg, spineMetrics } from "./covers.js?v=64";
 
 /* v2: the cover wall became the default; the old key mostly held the old default. */
 const VIEW_KEY = "librarylisten.shelfView.v2";

@@ -1,5 +1,5 @@
 /* Shell-only cache. Audiobook files are never cached here. */
-const CACHE = "library-listen-shell-v63";
+const CACHE = "library-listen-shell-v64";
 const CACHE_CONCEPTS_MESSAGE = "librarylisten.cache-concepts";
 const DRIVE_MEDIA_PREFIX = "/drive-media/";
 const DRIVE_TOKEN_MESSAGE = "librarylisten.drive-token";
@@ -33,26 +33,26 @@ self.addEventListener("message", (event) => {
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=63",
-  "./app.js?v=63",
-  "./library.js?v=63",
-  "./drive.js?v=63",
-  "./search.js?v=63",
-  "./markers.js?v=63",
-  "./save-prompt.js?v=63",
-  "./media-session.js?v=63",
-  "./sleep.js?v=63",
-  "./immune-cards.js?v=63",
+  "./styles.css?v=64",
+  "./app.js?v=64",
+  "./library.js?v=64",
+  "./drive.js?v=64",
+  "./search.js?v=64",
+  "./markers.js?v=64",
+  "./save-prompt.js?v=64",
+  "./media-session.js?v=64",
+  "./sleep.js?v=64",
+  "./immune-cards.js?v=64",
   "./manifest.webmanifest",
-  "./icon.svg?v=63",
-  "./apple-touch-icon.png?v=63",
+  "./icon.svg?v=64",
+  "./apple-touch-icon.png?v=64",
   "./og-image.png",
   "./classic/index.html",
   "./shelf/index.html",
-  "./shelf/shelf.css?v=63",
-  "./shelf/shelf.js?v=63",
-  "./shelf/catalog.js?v=63",
-  "./shelf/covers.js?v=63",
+  "./shelf/shelf.css?v=64",
+  "./shelf/shelf.js?v=64",
+  "./shelf/catalog.js?v=64",
+  "./shelf/covers.js?v=64",
 ];
 
 self.addEventListener("install", (event) => {
@@ -261,6 +261,15 @@ function withSignInCoop(response) {
   });
 }
 
+/** Same rule as isIosLikeClient in drive.js. This worker cannot import it. */
+function shellBypassesCache() {
+  const host = self.location.hostname;
+  if (host === "localhost" || host === "127.0.0.1") return true;
+  const ua = String(self.navigator?.userAgent || "");
+  if (/iPhone|iPad|iPod/i.test(ua)) return true;
+  return /Macintosh/i.test(ua) && Number(self.navigator?.maxTouchPoints) > 1;
+}
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
@@ -271,12 +280,11 @@ self.addEventListener("fetch", (event) => {
   }
   if (url.origin !== self.location.origin) return;
 
-  /* Local preview must not keep a cache-first shell. An old v62 client
-     would still call initTokenClient. Network-only here, after this worker
-     activates, so a reload fetches the current app.js / drive.js. */
-  const localShell =
-    self.location.hostname === "localhost" || self.location.hostname === "127.0.0.1";
-  if (localShell) {
+  /* Local preview and iPhone/iPad must not keep a cache-first shell.
+     An old client would still call initTokenClient. Network-only here,
+     after this worker activates, so a reload fetches the current app.js / drive.js.
+     Desktop Pages stays cache-first. iPadOS may send a Macintosh UA with touch. */
+  if (shellBypassesCache()) {
     event.respondWith(fetch(request, { cache: "no-store" }));
     return;
   }
