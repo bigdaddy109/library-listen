@@ -1,5 +1,5 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=62";
-import { SLEEP_CHAPTER, nearestSleepMinute, nextSleepChoice } from "./sleep.js?v=62";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=63";
+import { SLEEP_CHAPTER, nearestSleepMinute, nextSleepChoice } from "./sleep.js?v=63";
 import {
   bookHasAudio,
   bookScreenTabs,
@@ -22,7 +22,7 @@ import {
   chapterProgress,
   saveProgress,
   shelfBadge,
-} from "./library.js?v=62";
+} from "./library.js?v=63";
 import {
   DRIVE_MEDIA_ERROR_MESSAGE,
   DRIVE_UNAUTHORIZED_MESSAGE,
@@ -56,10 +56,11 @@ import {
   setDriveTokenAppliedListener,
   signInWithGoogle,
   resumeLocalGisRedirect,
+  isLocalGisHost,
   signOutGoogle,
   sourceDialogActions,
   tokenForChapterFetch,
-} from "./drive.js?v=62";
+} from "./drive.js?v=63";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -67,7 +68,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=62";
+} from "./search.js?v=63";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -84,17 +85,17 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=62";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=62";
-import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=62";
-import { coverSvg } from "./shelf/covers.js?v=62";
-import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=62";
+} from "./markers.js?v=63";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=63";
+import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=63";
+import { coverSvg } from "./shelf/covers.js?v=63";
+import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=63";
 import {
   closeRiceBook,
   initRiceShelf,
   isRiceShelfPage,
   setRiceShelfLibrary,
-} from "./shelf/shelf.js?v=62";
+} from "./shelf/shelf.js?v=63";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -2290,8 +2291,10 @@ function registerSW() {
       .then((reg) => reg?.update())
       .catch(() => {});
   };
+  const swUrl = new URL("./sw.js", import.meta.url).href;
+  const swOptions = isLocalGisHost(location.hostname) ? { updateViaCache: "none" } : undefined;
   navigator.serviceWorker
-    .register(new URL("./sw.js", import.meta.url).href)
+    .register(swUrl, swOptions)
     .then((reg) => {
       lastCheck = Date.now();
       return reg.update();
@@ -2474,7 +2477,11 @@ setDriveTokenAppliedListener(() => {
 
 setupCapabilityHint();
 const versionEl = document.getElementById("app-version");
+const shellWhere = isLocalGisHost(location.hostname) ? "localhost" : "live";
+const shellLabel = `v${APP_VERSION || "63"} · ${shellWhere}`;
 if (versionEl && APP_VERSION) versionEl.textContent = `v${APP_VERSION}`;
+const shellBuild = document.getElementById("shell-build");
+if (shellBuild) shellBuild.textContent = shellLabel;
 const sortBtn = document.getElementById("btn-sort");
 if (sortBtn) sortBtn.textContent = `Sort: ${state.sort}`;
 if (isRiceShelfPage()) {
@@ -2497,6 +2504,11 @@ if (isRiceShelfPage()) {
 bind();
 render();
 registerSW();
-resumeLocalGisRedirect()
+Promise.resolve()
+  .then(() => resumeLocalGisRedirect())
   .then((token) => (token ? loadLibrary("drive") : restoreSession()))
+  .catch((err) => {
+    showDriveError(err);
+    return restoreSession();
+  })
   .then(() => consumeOpenIntent());

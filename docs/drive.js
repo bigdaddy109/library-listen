@@ -1339,20 +1339,75 @@ export function isLocalGisHost(hostname) {
   return host === "localhost" || host === "127.0.0.1";
 }
 
-/** Popup on the live origin. Redirect on localhost so COOP cannot drop the token. */
+/** Popup on the live origin. Local hosts never call initTokenClient. */
 export function gisUsesRedirect(hostname = globalThis.location?.hostname) {
   return isLocalGisHost(hostname);
 }
 
-export function tokenClientOptions(callback, errorCallback, { interactive = false, hostname } = {}) {
-  const opts = {
+export function tokenClientOptions(callback, errorCallback) {
+  return {
     client_id: GOOGLE_OAUTH_CLIENT_ID,
     scope: DRIVE_READONLY_SCOPE,
     callback,
     error_callback: errorCallback,
   };
-  if (interactive && gisUsesRedirect(hostname)) opts.ux_mode = "redirect";
-  return opts;
+}
+
+/** Implicit token redirect. initTokenClient has no ux_mode and always opens a popup. */
+export function localImplicitAuthUrl(loc = globalThis.location) {
+  const origin = String(loc?.origin || "http://127.0.0.1:8080").replace(/\/$/, "");
+  const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+  url.searchParams.set("client_id", GOOGLE_OAUTH_CLIENT_ID);
+  url.searchParams.set("redirect_uri", `${origin}/`);
+  url.searchParams.set("response_type", "token");
+  url.searchParams.set("scope", DRIVE_READONLY_SCOPE);
+  url.searchParams.set("include_granted_scopes", "true");
+  url.searchParams.set("prompt", "select_account");
+  return url.href;
+}
+
+export function parseImplicitHash(hash) {
+  const params = new URLSearchParams(String(hash || "").replace(/^#/, ""));
+  const access_token = params.get("access_token");
+  if (access_token) {
+    const expires_in = Number(params.get("expires_in"));
+    return {
+      access_token,
+      expires_in: Number.isFinite(expires_in) && expires_in > 0 ? expires_in : 3600,
+    };
+  }
+  const error = params.get("error");
+  if (!error) return null;
+  return { error, error_description: params.get("error_description") || "" };
+}
+
+/**
+ * Read `#access_token` after a localhost implicit redirect and store it the
+ * same way a GIS popup token is stored. No-op on the live origin.
+ */
+export function takeLocalImplicitToken(loc = globalThis.location) {
+  if (!loc || !gisUsesRedirect(loc.hostname)) return null;
+  const parsed = parseImplicitHash(loc.hash);
+  if (!parsed) return null;
+  if (typeof history !== "undefined" && history.replaceState && loc === globalThis.location) {
+    history.replaceState({}, "", `${loc.pathname || "/"}${loc.search || ""}`);
+  }
+  if (parsed.error) {
+    throw driveErrorFrom({
+      error: parsed.error,
+      error_description: parsed.error_description,
+      message: parsed.error_description || parsed.error,
+    });
+  }
+  return applyGisToken({ access_token: parsed.access_token, expires_in: parsed.expires_in });
+}
+
+function redirectLocalSignIn() {
+  const url = localImplicitAuthUrl();
+  if (typeof location !== "undefined" && typeof location.assign === "function") {
+    location.assign(url);
+  }
+  return new Promise(() => {});
 }
 
 function gisOauth() {
@@ -1366,14 +1421,20 @@ function gisOauth() {
  */
 function requestGisToken(prompt) {
   requireClientId();
+  const promptValue = prompt == null ? "consent" : String(prompt);
+  const userClick = promptValue !== "";
+  /* initTokenClient always uses a popup (it ignores ux_mode). Local hosts
+     leave the page instead, then takeLocalImplicitToken reads #access_token. */
+  if (gisUsesRedirect()) {
+    if (!userClick && getAccessToken()) return Promise.resolve(getAccessToken());
+    return redirectLocalSignIn();
+  }
   const gis = gisOauth();
   if (!gis?.initTokenClient) {
     const err = new Error("Google Identity Services did not load.");
     err.name = "DriveConfigError";
     throw err;
   }
-  const promptValue = prompt == null ? "consent" : String(prompt);
-  const userClick = promptValue !== "";
   if (gisAttempt && !gisAttempt.settled && userClick && (gisAttempt.silent || gisAttempt.stuck)) {
     gisAttempt.abandon();
   } else if (gisInflight) {
@@ -1452,8 +1513,7 @@ function requestGisToken(prompt) {
           return;
         }
         finish(rejectAttempt, failure);
-      },
-      { interactive: userClick }
+      }
     )
   );
   // Silent refresh stays `prompt: ""`. Only a click passes consent.
@@ -1468,43 +1528,11 @@ export async function signInWithGoogle({ prompt = "consent" } = {}) {
 }
 
 /**
- * After a localhost redirect, GIS delivers the token when the client is
- * created again. Do not call requestAccessToken here — that would leave
- * the page again. The live origin never uses this path.
+ * After a localhost implicit redirect, `#access_token` is on this page.
+ * Do not call initTokenClient here. The live origin never uses this path.
  */
-export async function resumeLocalGisRedirect() {
-  if (!gisUsesRedirect() || !isGoogleClientConfigured()) return null;
-  if (getAccessToken()) return getAccessToken();
-  try {
-    if (!gisOauth()?.initTokenClient) await loadScript(GIS_SRC);
-  } catch {
-    return null;
-  }
-  const gis = gisOauth();
-  if (!gis?.initTokenClient) return null;
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = (token) => {
-      if (settled) return;
-      settled = true;
-      resolve(token || null);
-    };
-    try {
-      gis.initTokenClient(
-        tokenClientOptions(
-          (resp) => {
-            if (!resp?.error && resp?.access_token) applyGisToken(resp);
-          },
-          () => {},
-          { interactive: true }
-        )
-      );
-    } catch {
-      finish(null);
-      return;
-    }
-    setTimeout(() => finish(getAccessToken()), 0);
-  });
+export function resumeLocalGisRedirect() {
+  return takeLocalImplicitToken();
 }
 
 export async function refreshGoogleToken() {

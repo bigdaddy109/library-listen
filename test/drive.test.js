@@ -64,6 +64,9 @@ import {
   shouldNotifyDriveUnauthorized,
   shouldSkipDriveName,
   tokenClientOptions,
+  gisUsesRedirect,
+  localImplicitAuthUrl,
+  parseImplicitHash,
   uniqueDriveFolders,
   walkDriveFolder,
   walkPrefixForFolder,
@@ -717,25 +720,30 @@ describe("Drive user-visible errors", () => {
     const opts = tokenClientOptions(() => {}, () => {});
     assert.equal("ux_mode" in opts, false);
     assert.equal(opts.scope, DRIVE_READONLY_SCOPE);
-    const live = tokenClientOptions(() => {}, () => {}, {
-      interactive: true,
-      hostname: "bigdaddy109.github.io",
-    });
+    const live = tokenClientOptions(() => {}, () => {});
     assert.equal("ux_mode" in live, false);
+    const localUrl = new URL(localImplicitAuthUrl({ origin: "http://127.0.0.1:8080" }));
+    assert.equal(localUrl.origin, "https://accounts.google.com");
+    assert.equal(localUrl.searchParams.get("response_type"), "token");
+    assert.equal(localUrl.searchParams.get("redirect_uri"), "http://127.0.0.1:8080/");
+    assert.equal(localUrl.searchParams.get("scope"), DRIVE_READONLY_SCOPE);
+    assert.equal(localUrl.searchParams.get("client_id"), GOOGLE_OAUTH_CLIENT_ID);
     assert.equal(
-      tokenClientOptions(() => {}, () => {}, { interactive: true, hostname: "127.0.0.1" }).ux_mode,
-      "redirect"
+      new URL(localImplicitAuthUrl({ origin: "http://localhost:8080" })).searchParams.get("redirect_uri"),
+      "http://localhost:8080/"
     );
-    assert.equal(
-      tokenClientOptions(() => {}, () => {}, { interactive: true, hostname: "localhost" }).ux_mode,
-      "redirect"
-    );
-    assert.equal(
-      "ux_mode" in tokenClientOptions(() => {}, () => {}, { interactive: false, hostname: "127.0.0.1" }),
-      false
-    );
+    assert.equal(gisUsesRedirect("bigdaddy109.github.io"), false);
+    assert.equal(gisUsesRedirect("127.0.0.1"), true);
+    assert.equal(gisUsesRedirect("localhost"), true);
+    const parsed = parseImplicitHash("#access_token=ya29.local&expires_in=3600&token_type=Bearer");
+    assert.equal(parsed.access_token, "ya29.local");
+    assert.equal(parsed.expires_in, 3600);
+    assert.equal(parseImplicitHash(""), null);
     const appJs = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../docs/app.js"), "utf8");
     assert.match(appJs, /resumeLocalGisRedirect\(/);
+    assert.match(appJs, /id="shell-build"|shell-build/);
+    const indexHtml = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../docs/index.html"), "utf8");
+    assert.match(indexHtml, /id="shell-build"/);
   });
 
   it("explains Testing-mode test-user denial, missing Library, and expired tokens", () => {

@@ -78,9 +78,9 @@ Then open either authorized origin:
 - `http://127.0.0.1:8080/`
 - `http://localhost:8080/`
 
-The script serves `docs/` on port 8080 and sends that COOP header on every response. On `localhost` and `127.0.0.1` the sign-in button uses GIS redirect mode instead of a popup, so Chrome’s `window.closed` check cannot drop the token. `https://bigdaddy109.github.io` stays on the popup.
+The script serves `docs/` on port 8080 and sends that COOP header on every response. On `localhost` and `127.0.0.1` the sign-in button does not open the GIS popup. It redirects to Google (`response_type=token`) and reads `#access_token` when the browser returns. `https://bigdaddy109.github.io` stays on the popup. The sign-in button shows `vN · localhost` or `vN · live`.
 
-This repo’s setup says redirect URIs are not required for `initTokenClient`; the JavaScript origins above are what Google is given. I cannot see the Cloud console. If a redirect is rejected anyway, add these Authorized redirect URIs:
+This repo’s setup says redirect URIs are not required for `initTokenClient`. Local sign-in no longer uses that client. It redirects to Google with `response_type=token` and `redirect_uri` set to the current origin plus `/`. I cannot see the Cloud console. Those redirect URIs are not the same as JavaScript origins. Add these Authorized redirect URIs or the return is rejected:
 
 - `http://127.0.0.1:8080/`
 - `http://localhost:8080/`

@@ -1,5 +1,5 @@
 /* Shell-only cache. Audiobook files are never cached here. */
-const CACHE = "library-listen-shell-v62";
+const CACHE = "library-listen-shell-v63";
 const CACHE_CONCEPTS_MESSAGE = "librarylisten.cache-concepts";
 const DRIVE_MEDIA_PREFIX = "/drive-media/";
 const DRIVE_TOKEN_MESSAGE = "librarylisten.drive-token";
@@ -33,26 +33,26 @@ self.addEventListener("message", (event) => {
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=62",
-  "./app.js?v=62",
-  "./library.js?v=62",
-  "./drive.js?v=62",
-  "./search.js?v=62",
-  "./markers.js?v=62",
-  "./save-prompt.js?v=62",
-  "./media-session.js?v=62",
-  "./sleep.js?v=62",
-  "./immune-cards.js?v=62",
+  "./styles.css?v=63",
+  "./app.js?v=63",
+  "./library.js?v=63",
+  "./drive.js?v=63",
+  "./search.js?v=63",
+  "./markers.js?v=63",
+  "./save-prompt.js?v=63",
+  "./media-session.js?v=63",
+  "./sleep.js?v=63",
+  "./immune-cards.js?v=63",
   "./manifest.webmanifest",
-  "./icon.svg?v=62",
-  "./apple-touch-icon.png?v=62",
+  "./icon.svg?v=63",
+  "./apple-touch-icon.png?v=63",
   "./og-image.png",
   "./classic/index.html",
   "./shelf/index.html",
-  "./shelf/shelf.css?v=62",
-  "./shelf/shelf.js?v=62",
-  "./shelf/catalog.js?v=62",
-  "./shelf/covers.js?v=62",
+  "./shelf/shelf.css?v=63",
+  "./shelf/shelf.js?v=63",
+  "./shelf/catalog.js?v=63",
+  "./shelf/covers.js?v=63",
 ];
 
 self.addEventListener("install", (event) => {
@@ -270,6 +270,16 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (url.origin !== self.location.origin) return;
+
+  /* Local preview must not keep a cache-first shell. An old v62 client
+     would still call initTokenClient. Network-only here, after this worker
+     activates, so a reload fetches the current app.js / drive.js. */
+  const localShell =
+    self.location.hostname === "localhost" || self.location.hostname === "127.0.0.1";
+  if (localShell) {
+    event.respondWith(fetch(request, { cache: "no-store" }));
+    return;
+  }
 
   // Network-first for HTML, revalidated past the HTTP cache (Pages sends
   // max-age=600), so a new release is picked up on the next launch.
