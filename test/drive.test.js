@@ -896,6 +896,7 @@ describe("Drive audio proxy and EPUB reader", () => {
     assert.match(sw, /function rewriteDriveAudioContentType/);
     assert.match(sw, /DRIVE_AUDIO_MIME_BY_EXT/);
     assert.match(sw, /base === "video\/mp4"/);
+    assert.match(sw, /same-origin-allow-popups/);
     assert.match(sw, /searchParams\.get\("size"\)/);
     assert.match(sw, /bytes=-/);
     assert.match(sw, /withKnownMediaTotal/);

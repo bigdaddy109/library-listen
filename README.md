@@ -59,6 +59,27 @@ Do this once in [Google Cloud Console](https://console.cloud.google.com/):
 
 After you paste a real Client ID, bump the PWA cache version once (see AGENTS.md) so phones pick up `drive.js`.
 
+## Local preview
+
+Sign-in uses the GIS popup. Chrome blocks `window.closed` on that popup unless the player page is served with:
+
+`Cross-Origin-Opener-Policy: same-origin-allow-popups`
+
+`python3 -m http.server` does not send that header. The Google window can open, consent can be granted, and the page still never receives a token (status stays “Scanning the Drive Library…”).
+
+From the repo root:
+
+```bash
+node scripts/preview.mjs
+```
+
+Then open either authorized origin:
+
+- `http://127.0.0.1:8080/`
+- `http://localhost:8080/`
+
+The script serves `docs/` on port 8080 and sends that COOP header on every response. I cannot see the Google Cloud console from here; the origins above are the ones this repo documents.
+
 ## Library folder layout
 
 On the Mac (example Hub path):

@@ -114,7 +114,7 @@ function servePlaybackMedia(req, res) {
     range,
     totalSize: url.searchParams.get("size"),
   });
-  res.writeHead(part.status, headers);
+  res.writeHead(part.status, { ...headers, "Cross-Origin-Opener-Policy": "same-origin-allow-popups" });
   res.end(req.method === "HEAD" ? undefined : part.slice);
   return true;
 }
@@ -124,14 +124,21 @@ createServer((req, res) => {
   const control = (req.url || "").match(/^\/__test\/shell\/(old|current)$/);
   if (control) {
     mode = control[1];
-    res.writeHead(200, { "Content-Type": "text/plain", "Cache-Control": "no-store" });
+    res.writeHead(200, {
+      "Content-Type": "text/plain",
+      "Cache-Control": "no-store",
+      "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+    });
     res.end(mode);
     return;
   }
   if (servePlaybackMedia(req, res)) return;
   const file = resolveFile(req.url || "/");
   if (!file) {
-    res.writeHead(404, { "Content-Type": "text/plain" });
+    res.writeHead(404, {
+      "Content-Type": "text/plain",
+      "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+    });
     res.end("Not found");
     return;
   }
@@ -142,6 +149,7 @@ createServer((req, res) => {
   res.writeHead(200, {
     "Content-Type": TYPES[ext] || "application/octet-stream",
     "Cache-Control": "no-cache",
+    "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
     "X-Shell": old ? `v${version - 1}` : `v${version}`,
   });
   res.end(req.method === "HEAD" ? undefined : body);
