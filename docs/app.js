@@ -1,5 +1,5 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=61";
-import { SLEEP_CHAPTER, nearestSleepMinute, nextSleepChoice } from "./sleep.js?v=61";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=62";
+import { SLEEP_CHAPTER, nearestSleepMinute, nextSleepChoice } from "./sleep.js?v=62";
 import {
   bookHasAudio,
   bookScreenTabs,
@@ -22,7 +22,7 @@ import {
   chapterProgress,
   saveProgress,
   shelfBadge,
-} from "./library.js?v=61";
+} from "./library.js?v=62";
 import {
   DRIVE_MEDIA_ERROR_MESSAGE,
   DRIVE_UNAUTHORIZED_MESSAGE,
@@ -55,10 +55,11 @@ import {
   saveDriveSession,
   setDriveTokenAppliedListener,
   signInWithGoogle,
+  resumeLocalGisRedirect,
   signOutGoogle,
   sourceDialogActions,
   tokenForChapterFetch,
-} from "./drive.js?v=61";
+} from "./drive.js?v=62";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -66,7 +67,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=61";
+} from "./search.js?v=62";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -83,17 +84,17 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=61";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=61";
-import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=61";
-import { coverSvg } from "./shelf/covers.js?v=61";
-import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=61";
+} from "./markers.js?v=62";
+import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=62";
+import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=62";
+import { coverSvg } from "./shelf/covers.js?v=62";
+import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=62";
 import {
   closeRiceBook,
   initRiceShelf,
   isRiceShelfPage,
   setRiceShelfLibrary,
-} from "./shelf/shelf.js?v=61";
+} from "./shelf/shelf.js?v=62";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -2496,4 +2497,6 @@ if (isRiceShelfPage()) {
 bind();
 render();
 registerSW();
-restoreSession().then(() => consumeOpenIntent());
+resumeLocalGisRedirect()
+  .then((token) => (token ? loadLibrary("drive") : restoreSession()))
+  .then(() => consumeOpenIntent());

@@ -78,7 +78,12 @@ Then open either authorized origin:
 - `http://127.0.0.1:8080/`
 - `http://localhost:8080/`
 
-The script serves `docs/` on port 8080 and sends that COOP header on every response. I cannot see the Google Cloud console from here; the origins above are the ones this repo documents.
+The script serves `docs/` on port 8080 and sends that COOP header on every response. On `localhost` and `127.0.0.1` the sign-in button uses GIS redirect mode instead of a popup, so Chrome’s `window.closed` check cannot drop the token. `https://bigdaddy109.github.io` stays on the popup.
+
+This repo’s setup says redirect URIs are not required for `initTokenClient`; the JavaScript origins above are what Google is given. I cannot see the Cloud console. If a redirect is rejected anyway, add these Authorized redirect URIs:
+
+- `http://127.0.0.1:8080/`
+- `http://localhost:8080/`
 
 ## Library folder layout
 

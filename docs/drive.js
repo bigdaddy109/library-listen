@@ -1331,13 +1331,28 @@ function requireClientId() {
   }
 }
 
-export function tokenClientOptions(callback, errorCallback) {
-  return {
+export function isLocalGisHost(hostname) {
+  const host = String(hostname || "")
+    .trim()
+    .replace(/\.+$/, "")
+    .toLowerCase();
+  return host === "localhost" || host === "127.0.0.1";
+}
+
+/** Popup on the live origin. Redirect on localhost so COOP cannot drop the token. */
+export function gisUsesRedirect(hostname = globalThis.location?.hostname) {
+  return isLocalGisHost(hostname);
+}
+
+export function tokenClientOptions(callback, errorCallback, { interactive = false, hostname } = {}) {
+  const opts = {
     client_id: GOOGLE_OAUTH_CLIENT_ID,
     scope: DRIVE_READONLY_SCOPE,
     callback,
     error_callback: errorCallback,
   };
+  if (interactive && gisUsesRedirect(hostname)) opts.ux_mode = "redirect";
+  return opts;
 }
 
 function gisOauth() {
@@ -1437,7 +1452,8 @@ function requestGisToken(prompt) {
           return;
         }
         finish(rejectAttempt, failure);
-      }
+      },
+      { interactive: userClick }
     )
   );
   // Silent refresh stays `prompt: ""`. Only a click passes consent.
@@ -1449,6 +1465,46 @@ export async function signInWithGoogle({ prompt = "consent" } = {}) {
   requireClientId();
   if (!gisOauth()?.initTokenClient) await loadScript(GIS_SRC);
   return requestGisToken(prompt);
+}
+
+/**
+ * After a localhost redirect, GIS delivers the token when the client is
+ * created again. Do not call requestAccessToken here — that would leave
+ * the page again. The live origin never uses this path.
+ */
+export async function resumeLocalGisRedirect() {
+  if (!gisUsesRedirect() || !isGoogleClientConfigured()) return null;
+  if (getAccessToken()) return getAccessToken();
+  try {
+    if (!gisOauth()?.initTokenClient) await loadScript(GIS_SRC);
+  } catch {
+    return null;
+  }
+  const gis = gisOauth();
+  if (!gis?.initTokenClient) return null;
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (token) => {
+      if (settled) return;
+      settled = true;
+      resolve(token || null);
+    };
+    try {
+      gis.initTokenClient(
+        tokenClientOptions(
+          (resp) => {
+            if (!resp?.error && resp?.access_token) applyGisToken(resp);
+          },
+          () => {},
+          { interactive: true }
+        )
+      );
+    } catch {
+      finish(null);
+      return;
+    }
+    setTimeout(() => finish(getAccessToken()), 0);
+  });
 }
 
 export async function refreshGoogleToken() {

@@ -717,6 +717,25 @@ describe("Drive user-visible errors", () => {
     const opts = tokenClientOptions(() => {}, () => {});
     assert.equal("ux_mode" in opts, false);
     assert.equal(opts.scope, DRIVE_READONLY_SCOPE);
+    const live = tokenClientOptions(() => {}, () => {}, {
+      interactive: true,
+      hostname: "bigdaddy109.github.io",
+    });
+    assert.equal("ux_mode" in live, false);
+    assert.equal(
+      tokenClientOptions(() => {}, () => {}, { interactive: true, hostname: "127.0.0.1" }).ux_mode,
+      "redirect"
+    );
+    assert.equal(
+      tokenClientOptions(() => {}, () => {}, { interactive: true, hostname: "localhost" }).ux_mode,
+      "redirect"
+    );
+    assert.equal(
+      "ux_mode" in tokenClientOptions(() => {}, () => {}, { interactive: false, hostname: "127.0.0.1" }),
+      false
+    );
+    const appJs = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../docs/app.js"), "utf8");
+    assert.match(appJs, /resumeLocalGisRedirect\(/);
   });
 
   it("explains Testing-mode test-user denial, missing Library, and expired tokens", () => {
