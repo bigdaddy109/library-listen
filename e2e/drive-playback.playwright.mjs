@@ -177,25 +177,30 @@ async function playBook(page, book, label) {
       expect(hit.range, book.title).toMatch(/\/\d+$/);
     }
   }
-  mkdirSync(OUT, { recursive: true });
-  const shot = join(OUT, `${label}-${book.slug}.png`);
-  await page.screenshot({ path: shot });
-  appendFileSync(
-    join(OUT, "runs.jsonl"),
-    `${JSON.stringify({
-      at: new Date().toISOString(),
-      label,
-      book: book.title,
-      id: book.id,
-      currentTime: sample.t,
-      duration: sample.d,
-      pos: sample.pos,
-      dur: sample.dur,
-      seek: sample.seek,
-      advanced: sample.t > 1 && sample.dur !== "0:00",
-      shot,
-    })}\n`
-  );
+  /* Evidence dir exists on the agent VM. GitHub Actions cannot create it. */
+  try {
+    mkdirSync(OUT, { recursive: true });
+    const shot = join(OUT, `${label}-${book.slug}.png`);
+    await page.screenshot({ path: shot });
+    appendFileSync(
+      join(OUT, "runs.jsonl"),
+      `${JSON.stringify({
+        at: new Date().toISOString(),
+        label,
+        book: book.title,
+        id: book.id,
+        currentTime: sample.t,
+        duration: sample.d,
+        pos: sample.pos,
+        dur: sample.dur,
+        seek: sample.seek,
+        advanced: sample.t > 1 && sample.dur !== "0:00",
+        shot,
+      })}\n`
+    );
+  } catch (err) {
+    if (err?.code !== "EACCES" && err?.code !== "EPERM" && err?.code !== "ENOENT") throw err;
+  }
   await page.evaluate(() => document.getElementById("audio").pause());
   await page.locator("#btn-back").click();
   await expect.poll(() => page.locator(".cover-card[data-id]").count()).toBe(BOOKS.length);
