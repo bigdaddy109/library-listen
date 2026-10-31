@@ -25,11 +25,14 @@ import {
   driveFilesToEntries,
   DRIVE_LIST_PAGE_SIZE,
   driveListUrl,
+  DRIVE_AUDIO_MIME_BY_EXT,
   driveMediaPath,
   driveMediaNameFromPath,
   driveMediaNameFromUrl,
+  driveMediaSizeFromUrl,
   driveMediaUrl,
   contentRangeForPartial,
+  withKnownMediaTotal,
   playbackFailureLine,
   driveMediaProxyOutHeaders,
   formatDriveWalkErrors,
@@ -855,7 +858,21 @@ describe("Drive audio proxy and EPUB reader", () => {
     }
     assert.equal(rewriteDriveAudioContentType("", "video/mp4"), "audio/mp4");
     assert.equal(rewriteDriveAudioContentType("part.mp3", "audio/mpeg"), "audio/mpeg");
-    /* v55 returned Drive's type unchanged for any named file that was not m4a/m4b/aac. */
+    /* v56 stopped at mp3/m4a/m4b/aac and passed every other extension through. */
+    for (const [name, driveType, playable] of [
+      ["01.mp3", "application/octet-stream", "audio/mpeg"],
+      ["01.mp3", "video/mp4", "audio/mpeg"],
+      ["Middle School 02.mp3", "application/octet-stream", "audio/mpeg"],
+      ["What If 2.m4b", "video/mp4", "audio/mp4"],
+      ["chapter.m4a", "application/octet-stream", "audio/mp4"],
+      ["Book.mp4", "video/mp4", "audio/mp4"],
+      ["track.aac", "video/quicktime", "audio/mp4"],
+      ["notes.wav", "application/octet-stream", "audio/wav"],
+      ["voice.ogg", "application/octet-stream", "audio/ogg"],
+      ["cd.flac", "application/octet-stream", "audio/flac"],
+    ]) {
+      assert.equal(rewriteDriveAudioContentType(name, driveType), playable, `${name} ${driveType}`);
+    }
     assert.equal(rewriteDriveAudioContentType("Immune-Part01.mp3", "video/mp4"), "audio/mpeg");
     assert.equal(rewriteDriveAudioContentType("Immune-Part01.mp3", "application/octet-stream"), "audio/mpeg");
     assert.equal(makeDriveFile({ id: "mp3", name: "part.mp3", size: 12, mimeType: "audio/mpeg" }).type, "audio/mpeg");
@@ -877,11 +894,14 @@ describe("Drive audio proxy and EPUB reader", () => {
     assert.match(sw, /alt=media/);
     assert.match(sw, /library-listen-shell-v\d+/);
     assert.match(sw, /function rewriteDriveAudioContentType/);
-    assert.match(sw, /ext === "mp3"/);
-    assert.match(sw, /return "audio\/mpeg"/);
-    assert.match(sw, /ext === "m4a" \|\| ext === "m4b" \|\| ext === "aac"/);
-    assert.match(sw, /return "audio\/mp4"/);
+    assert.match(sw, /DRIVE_AUDIO_MIME_BY_EXT/);
     assert.match(sw, /base === "video\/mp4"/);
+    assert.match(sw, /searchParams\.get\("size"\)/);
+    assert.match(sw, /bytes=-/);
+    assert.match(sw, /withKnownMediaTotal/);
+    for (const [ext, type] of Object.entries(DRIVE_AUDIO_MIME_BY_EXT)) {
+      assert.match(sw, new RegExp(`${ext}: "${type.replaceAll("/", "\\/")}"`), ext);
+    }
     assert.match(sw, /mode: "cors"/);
     assert.match(sw, /res\.type === "opaque"/);
     assert.match(sw, /res\.body/);
@@ -901,6 +921,66 @@ describe("Drive audio proxy and EPUB reader", () => {
     const m4b = new URL(driveMediaUrl("w2", "https://bigdaddy109.github.io/library-listen/", "What If 2.m4b"));
     assert.equal(m4b.pathname.endsWith(".m4b"), false);
     assert.equal(m4b.searchParams.get("name"), "What If 2.m4b");
+  });
+
+  it("puts the file byte length on every listen URL, not only Immune or How To", () => {
+    const books = attachDriveMedia(
+      buildLibrary([
+        { path: "Library/Immune/listen/Immune-Part01.mp3", file: { name: "Immune-Part01.mp3", size: 111, driveId: "p1" } },
+        { path: "Library/門羅-WhatIf/listen/what-if-1/01.mp3", file: { name: "01.mp3", size: 222, driveId: "w1" } },
+        { path: "Library/門羅-WhatIf/listen/what-if-2/What If 2.m4b", file: { name: "What If 2.m4b", size: 333, driveId: "w2" } },
+        { path: "Library/上學不容易/listen/Middle School 01/Book.m4a", file: { name: "Book.m4a", size: 444, driveId: "ms" } },
+        { path: "Library/上學不容易/listen/Middle School 02/02.mp3", file: { name: "02.mp3", size: 555, driveId: "ms2" } },
+      ]),
+      { base: "https://bigdaddy109.github.io/library-listen/" }
+    );
+    for (const [id, size, name] of [
+      ["immune/immune", "111", "Immune-Part01.mp3"],
+      ["munroe/what-if-1", "222", "01.mp3"],
+      ["munroe/what-if-2", "333", "What If 2.m4b"],
+      ["school/middle-school-01", "444", "Book.m4a"],
+      ["school/middle-school-02", "555", "02.mp3"],
+    ]) {
+      const url = new URL(books.find((book) => book.id === id).chapters[0].url);
+      assert.equal(url.searchParams.get("size"), size, id);
+      assert.equal(url.searchParams.get("name"), name, id);
+      assert.equal(url.pathname.endsWith(name), false, id);
+    }
+    assert.equal(driveMediaSizeFromUrl(books.find((book) => book.id === "munroe/what-if-2").chapters[0].url), 333);
+    const mp4 = new URL(driveMediaUrl("ms-mp4", "https://bigdaddy109.github.io/library-listen/", "Book.mp4", 147473));
+    assert.equal(mp4.searchParams.get("name"), "Book.mp4");
+    assert.equal(mp4.searchParams.get("size"), "147473");
+    assert.equal(mp4.pathname.endsWith(".mp4"), false);
+    assert.equal(
+      contentRangeForPartial("bytes=0-", "16384", 480698),
+      "bytes 0-16383/480698"
+    );
+    assert.equal(contentRangeForPartial("bytes=0-1", "2", 480698), "bytes 0-1/480698");
+    assert.equal(contentRangeForPartial("bytes=0-999999", "16384", 480698), "bytes 0-16383/480698");
+    assert.equal(contentRangeForPartial("bytes=-8192", "8192", 480698), "bytes 472506-480697/480698");
+    assert.equal(contentRangeForPartial("bytes=0-2", "3"), "bytes 0-2/*");
+    assert.equal(withKnownMediaTotal("bytes 0-1/*", 480698), "bytes 0-1/480698");
+    const ranged = driveMediaProxyOutHeaders(
+      { get: (header) => (header === "content-type" ? "video/mp4" : header === "content-length" ? "16384" : null) },
+      "Book.mp4",
+      { status: 206, range: "bytes=0-", totalSize: 147473 }
+    );
+    assert.equal(ranged["Content-Type"], "audio/mp4");
+    assert.equal(ranged["Content-Range"], "bytes 0-16383/147473");
+    const starred = driveMediaProxyOutHeaders(
+      {
+        get: (header) =>
+          header === "content-type"
+            ? "application/octet-stream"
+            : header === "content-range"
+              ? "bytes 0-16383/*"
+              : null,
+      },
+      "Middle School 02.mp3",
+      { status: 206, range: "bytes=0-", totalSize: 96384 }
+    );
+    assert.equal(starred["Content-Type"], "audio/mpeg");
+    assert.equal(starred["Content-Range"], "bytes 0-16383/96384");
   });
 
   it("streams a ranged 206, keeps the token, and does not buffer the file", async () => {
@@ -956,6 +1036,20 @@ describe("Drive audio proxy and EPUB reader", () => {
     assert.equal(m4b.headers["Content-Type"], "audio/mp4");
     assert.equal(m4b.headers["Content-Range"], "bytes 0-7/90");
     assert.equal(contentRangeForPartial("bytes=0-2", "3"), "bytes 0-2/*");
+    const sized = await proxyDriveMediaRequest(
+      { fileId: "ms", range: "bytes=0-", token: "tok", name: "Book.mp4", totalSize: 147473 },
+      async () => ({
+        status: 206,
+        type: "cors",
+        headers: {
+          get: (name) =>
+            name === "content-type" ? "video/mp4" : name === "content-length" ? "16384" : null,
+        },
+        body: new Uint8Array(16),
+      })
+    );
+    assert.equal(sized.headers["Content-Type"], "audio/mp4");
+    assert.equal(sized.headers["Content-Range"], "bytes 0-16383/147473");
   });
 
   it("turns an opaque Drive response into HTTP 502 instead of a thrown status 0", async () => {
