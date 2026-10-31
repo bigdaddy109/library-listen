@@ -173,13 +173,27 @@ export function driveFileIdFromPath(pathname) {
   }
 }
 
-export function driveMediaPath(fileId, name) {
+/** Whole-file byte length from Drive `size`, or 0 when it is missing. */
+export function positiveMediaBytes(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.round(n);
+}
+
+export function driveMediaPath(fileId, name, size) {
   const id = `.${DRIVE_MEDIA_PREFIX}${encodeURIComponent(fileId)}`;
-  if (!name) return id;
-  /* v54 played Immune from an id-only path. v55 appended /<filename>, so
-     <audio> treated the URL as a strict .mp3/.m4b resource and refused
-     Drive's Content-Type. Keep the name in the query for the proxy only. */
-  return `${id}?name=${encodeURIComponent(name)}`;
+  const params = [];
+  if (name) params.push(`name=${encodeURIComponent(name)}`);
+  const total = positiveMediaBytes(size);
+  if (total) params.push(`size=${total}`);
+  /* v54 played from an id-only path. v55 appended /<filename>, so <audio>
+     treated the URL as a strict .mp3/.m4b resource and refused Drive's
+     Content-Type. Keep the name and byte length in the query. The length
+     lets the proxy write Content-Range `bytes start-end/total` when CORS
+     hides Drive's own range. Without that total, a moov-at-end m4b/mp4
+     never starts and an mp3 with no Xing header plays at duration 0:00. */
+  if (!params.length) return id;
+  return `${id}?${params.join("&")}`;
 }
 
 export function driveMediaNameFromPath(pathname) {
@@ -196,30 +210,50 @@ export function driveMediaNameFromPath(pathname) {
   }
 }
 
-export function driveMediaUrl(fileId, base = globalThis.location?.href, name) {
-  const path = driveMediaPath(fileId, name);
+export function driveMediaUrl(fileId, base = globalThis.location?.href, name, size) {
+  const path = driveMediaPath(fileId, name, size);
   if (!base) return path;
   return new URL(path, base).href;
 }
 
 /**
- * Drive labels some .m4b audiobooks as video/mp4. `<audio>` will not play that.
- * m4a / m4b / aac are always audio/mp4. mp3 stays audio (audio/mpeg), even when
- * Drive says video/mp4 or application/octet-stream. A nameless video/mp4
- * response is the same mislabel — this proxy only streams listen audio.
+ * Playable Content-Type for a listen file. v56 only rewrote mp3/m4a/m4b/aac
+ * and `if (ext) return raw` left `.mp4` (and anything else) as Drive's
+ * `video/mp4` or `application/octet-stream`, which `<audio>` will not play.
+ * This proxy only streams listen audio, so every audio container is rewritten.
+ * Keep in lockstep with the copy in docs/sw.js.
  */
+export const DRIVE_AUDIO_MIME_BY_EXT = Object.freeze({
+  mp3: "audio/mpeg",
+  mpeg: "audio/mpeg",
+  mp2: "audio/mpeg",
+  m4a: "audio/mp4",
+  m4b: "audio/mp4",
+  m4p: "audio/mp4",
+  mp4: "audio/mp4",
+  aac: "audio/mp4",
+  wav: "audio/wav",
+  wave: "audio/wav",
+  ogg: "audio/ogg",
+  oga: "audio/ogg",
+  opus: "audio/ogg",
+  flac: "audio/flac",
+  caf: "audio/x-caf",
+  aif: "audio/aiff",
+  aiff: "audio/aiff",
+});
+
 export function rewriteDriveAudioContentType(name, contentType) {
   const leaf = String(name || "").split("?")[0].split("/").pop();
   const ext = extOf(leaf || "");
   const raw = String(contentType || "");
   const base = raw.split(";")[0].trim().toLowerCase();
-  if (ext === "mp3") {
-    if (base === "audio/mpeg" || base === "audio/mp3") return raw || "audio/mpeg";
-    return "audio/mpeg";
+  const mapped = DRIVE_AUDIO_MIME_BY_EXT[ext];
+  if (mapped) {
+    if (base === mapped || (mapped === "audio/mpeg" && base === "audio/mp3")) return raw || mapped;
+    return mapped;
   }
-  if (ext === "m4a" || ext === "m4b" || ext === "aac") return "audio/mp4";
-  if (ext) return raw;
-  if (base === "video/mp4" || base === "application/mp4") return "audio/mp4";
+  if (base === "video/mp4" || base === "application/mp4" || base === "video/quicktime") return "audio/mp4";
   return raw;
 }
 
@@ -239,24 +273,64 @@ export function driveMediaNameFromUrl(url) {
   }
 }
 
+export function driveMediaSizeFromUrl(url) {
+  const fromParams = (params) => positiveMediaBytes(params?.get?.("size"));
+  if (url && typeof url === "object" && url.searchParams?.get) return fromParams(url.searchParams);
+  try {
+    return fromParams(new URL(String(url || ""), "https://library-listen.local").searchParams);
+  } catch {
+    return 0;
+  }
+}
+
 /**
  * A 206 with no Content-Range (CORS hid it) is not playable. Build one from
- * the request Range and the partial Content-Length. Do not read the body.
+ * the request Range and the partial Content-Length. `totalSize` is the
+ * Drive file's byte length; `*` is only used when that length is unknown.
+ * Suffix ranges (`bytes=-N`) are how Safari reads a moov atom at the end.
+ * Do not read the body.
  */
-export function contentRangeForPartial(range, contentLength) {
-  const match = /^bytes=(\d+)-(\d*)$/i.exec(String(range || "").trim());
+export function contentRangeForPartial(range, contentLength, totalSize) {
+  const total = positiveMediaBytes(totalSize);
+  const headerTotal = total ? String(total) : "*";
+  const raw = String(range || "").trim();
+  const suffix = /^bytes=-(\d+)$/i.exec(raw);
+  if (suffix) {
+    const n = Number(suffix[1]);
+    if (!total || !Number.isFinite(n) || n < 1) return "";
+    const len = Number(contentLength);
+    const count = Number.isFinite(len) && len > 0 ? Math.min(len, total) : Math.min(n, total);
+    const start = Math.max(0, total - count);
+    const end = total - 1;
+    if (end < start) return "";
+    return `bytes ${start}-${end}/${total}`;
+  }
+  const match = /^bytes=(\d+)-(\d*)$/i.exec(raw);
   if (!match) return "";
   const start = Number(match[1]);
-  if (!Number.isFinite(start)) return "";
-  const explicitEnd = match[2] === "" ? NaN : Number(match[2]);
-  let end = explicitEnd;
+  if (!Number.isFinite(start) || start < 0) return "";
+  let end = match[2] === "" ? NaN : Number(match[2]);
+  const len = Number(contentLength);
   if (!Number.isFinite(end)) {
-    const len = Number(contentLength);
-    if (!Number.isFinite(len) || len < 1) return "";
+    if (Number.isFinite(len) && len >= 1) end = start + len - 1;
+    else if (total) end = total - 1;
+    else return "";
+  } else if (Number.isFinite(len) && len >= 1 && start + len - 1 < end) {
+    // The body is shorter than the requested end. Advertise only the bytes sent.
     end = start + len - 1;
   }
+  if (total && end >= total) end = total - 1;
   if (end < start) return "";
-  return `bytes ${start}-${end}/*`;
+  return `bytes ${start}-${end}/${headerTotal}`;
+}
+
+/** Replace a CORS `star` total with the Drive file's byte length. */
+export function withKnownMediaTotal(contentRange, totalSize) {
+  const total = positiveMediaBytes(totalSize);
+  const header = String(contentRange || "");
+  if (!header || !total) return header;
+  if (/\/\*$/.test(header)) return header.replace(/\/\*$/, `/${total}`);
+  return header;
 }
 
 /** Status line when a chapter will not play. No alert(). */
@@ -514,7 +588,7 @@ export function planDriveMediaProxy({ fileId, range, token } = {}) {
   };
 }
 
-export function driveMediaProxyOutHeaders(upstreamHeaders, fileName, { status, range } = {}) {
+export function driveMediaProxyOutHeaders(upstreamHeaders, fileName, { status, range, totalSize } = {}) {
   const out = { "Cache-Control": "no-store" };
   for (const name of DRIVE_MEDIA_PASSTHROUGH_HEADERS) {
     const value =
@@ -523,12 +597,13 @@ export function driveMediaProxyOutHeaders(upstreamHeaders, fileName, { status, r
       upstreamHeaders?.[name];
     if (value) {
       const pretty = name.replace(/(^|-)([a-z])/g, (_, sep, ch) => sep + ch.toUpperCase());
-      out[pretty] =
-        name === "content-type" ? rewriteDriveAudioContentType(fileName, value) || value : value;
+      if (name === "content-type") out[pretty] = rewriteDriveAudioContentType(fileName, value) || value;
+      else if (name === "content-range") out[pretty] = withKnownMediaTotal(value, totalSize) || value;
+      else out[pretty] = value;
     }
   }
   if (Number(status) === 206 && !out["Content-Range"]) {
-    const synthesized = contentRangeForPartial(range, out["Content-Length"]);
+    const synthesized = contentRangeForPartial(range, out["Content-Length"], totalSize);
     if (synthesized) out["Content-Range"] = synthesized;
   }
   return out;
@@ -576,7 +651,7 @@ export function finishDrivePlaybackAuthRetry(state, { ok = false } = {}) {
   return { ...state, pending: false };
 }
 
-export async function proxyDriveMediaRequest({ fileId, range, token, name } = {}, fetchImpl = fetch) {
+export async function proxyDriveMediaRequest({ fileId, range, token, name, totalSize } = {}, fetchImpl = fetch) {
   const plan = planDriveMediaProxy({ fileId, range, token });
   if (!plan.ok) {
     return {
@@ -607,7 +682,11 @@ export async function proxyDriveMediaRequest({ fileId, range, token, name } = {}
   return {
     status: res.status,
     statusText: res.statusText || "",
-    headers: driveMediaProxyOutHeaders(res.headers || {}, name, { status: res.status, range }),
+    headers: driveMediaProxyOutHeaders(res.headers || {}, name, {
+      status: res.status,
+      range,
+      totalSize,
+    }),
     body,
     notifyUnauthorized: shouldNotifyDriveUnauthorized(res.status),
   };
@@ -706,8 +785,7 @@ export function libraryFolderLabel(folder) {
 
 export function mimeForDriveName(name) {
   const ext = extOf(name);
-  if (ext === "mp3") return "audio/mpeg";
-  if (ext === "m4a" || ext === "m4b" || ext === "aac") return "audio/mp4";
+  if (DRIVE_AUDIO_MIME_BY_EXT[ext]) return DRIVE_AUDIO_MIME_BY_EXT[ext];
   if (ext === "epub") return "application/epub+zip";
   if (ext === "png") return "image/png";
   if (ext === "webp") return "image/webp";
@@ -831,9 +909,9 @@ export function makeDriveFile(item) {
   const size = Number(item?.size) || 0;
   const durationMillis = driveDurationMillis(item);
   const ext = extOf(name);
-  const forcedAudio = ext === "m4a" || ext === "m4b" || ext === "aac" ? "audio/mp4" : "";
+  const mappedAudio = DRIVE_AUDIO_MIME_BY_EXT[ext] || "";
   const type =
-    forcedAudio ||
+    mappedAudio ||
     (item?.mimeType && !String(item.mimeType).startsWith("application/vnd.google-apps.")
       ? item.mimeType
       : mimeForDriveName(name));
@@ -1163,7 +1241,7 @@ export function attachDriveMedia(books, { base } = {}) {
   for (const book of books || []) {
     for (const ch of book.chapters || []) {
       if (isDriveFile(ch.file)) {
-        ch.url = driveMediaUrl(ch.file.driveId, base, ch.file.name);
+        ch.url = driveMediaUrl(ch.file.driveId, base, ch.file.name, ch.file.size || ch.size);
         ch.driveId = ch.file.driveId;
       }
     }
@@ -1253,6 +1331,19 @@ function requireClientId() {
   }
 }
 
+export function isLocalGisHost(hostname) {
+  const host = String(hostname || "")
+    .trim()
+    .replace(/\.+$/, "")
+    .toLowerCase();
+  return host === "localhost" || host === "127.0.0.1";
+}
+
+/** Popup on the live origin. Local hosts never call initTokenClient. */
+export function gisUsesRedirect(hostname = globalThis.location?.hostname) {
+  return isLocalGisHost(hostname);
+}
+
 export function tokenClientOptions(callback, errorCallback) {
   return {
     client_id: GOOGLE_OAUTH_CLIENT_ID,
@@ -1260,6 +1351,63 @@ export function tokenClientOptions(callback, errorCallback) {
     callback,
     error_callback: errorCallback,
   };
+}
+
+/** Implicit token redirect. initTokenClient has no ux_mode and always opens a popup. */
+export function localImplicitAuthUrl(loc = globalThis.location) {
+  const origin = String(loc?.origin || "http://127.0.0.1:8080").replace(/\/$/, "");
+  const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+  url.searchParams.set("client_id", GOOGLE_OAUTH_CLIENT_ID);
+  url.searchParams.set("redirect_uri", `${origin}/`);
+  url.searchParams.set("response_type", "token");
+  url.searchParams.set("scope", DRIVE_READONLY_SCOPE);
+  url.searchParams.set("include_granted_scopes", "true");
+  url.searchParams.set("prompt", "select_account");
+  return url.href;
+}
+
+export function parseImplicitHash(hash) {
+  const params = new URLSearchParams(String(hash || "").replace(/^#/, ""));
+  const access_token = params.get("access_token");
+  if (access_token) {
+    const expires_in = Number(params.get("expires_in"));
+    return {
+      access_token,
+      expires_in: Number.isFinite(expires_in) && expires_in > 0 ? expires_in : 3600,
+    };
+  }
+  const error = params.get("error");
+  if (!error) return null;
+  return { error, error_description: params.get("error_description") || "" };
+}
+
+/**
+ * Read `#access_token` after a localhost implicit redirect and store it the
+ * same way a GIS popup token is stored. No-op on the live origin.
+ */
+export function takeLocalImplicitToken(loc = globalThis.location) {
+  if (!loc || !gisUsesRedirect(loc.hostname)) return null;
+  const parsed = parseImplicitHash(loc.hash);
+  if (!parsed) return null;
+  if (typeof history !== "undefined" && history.replaceState && loc === globalThis.location) {
+    history.replaceState({}, "", `${loc.pathname || "/"}${loc.search || ""}`);
+  }
+  if (parsed.error) {
+    throw driveErrorFrom({
+      error: parsed.error,
+      error_description: parsed.error_description,
+      message: parsed.error_description || parsed.error,
+    });
+  }
+  return applyGisToken({ access_token: parsed.access_token, expires_in: parsed.expires_in });
+}
+
+function redirectLocalSignIn() {
+  const url = localImplicitAuthUrl();
+  if (typeof location !== "undefined" && typeof location.assign === "function") {
+    location.assign(url);
+  }
+  return new Promise(() => {});
 }
 
 function gisOauth() {
@@ -1273,14 +1421,20 @@ function gisOauth() {
  */
 function requestGisToken(prompt) {
   requireClientId();
+  const promptValue = prompt == null ? "consent" : String(prompt);
+  const userClick = promptValue !== "";
+  /* initTokenClient always uses a popup (it ignores ux_mode). Local hosts
+     leave the page instead, then takeLocalImplicitToken reads #access_token. */
+  if (gisUsesRedirect()) {
+    if (!userClick && getAccessToken()) return Promise.resolve(getAccessToken());
+    return redirectLocalSignIn();
+  }
   const gis = gisOauth();
   if (!gis?.initTokenClient) {
     const err = new Error("Google Identity Services did not load.");
     err.name = "DriveConfigError";
     throw err;
   }
-  const promptValue = prompt == null ? "consent" : String(prompt);
-  const userClick = promptValue !== "";
   if (gisAttempt && !gisAttempt.settled && userClick && (gisAttempt.silent || gisAttempt.stuck)) {
     gisAttempt.abandon();
   } else if (gisInflight) {
@@ -1371,6 +1525,14 @@ export async function signInWithGoogle({ prompt = "consent" } = {}) {
   requireClientId();
   if (!gisOauth()?.initTokenClient) await loadScript(GIS_SRC);
   return requestGisToken(prompt);
+}
+
+/**
+ * After a localhost implicit redirect, `#access_token` is on this page.
+ * Do not call initTokenClient here. The live origin never uses this path.
+ */
+export function resumeLocalGisRedirect() {
+  return takeLocalImplicitToken();
 }
 
 export async function refreshGoogleToken() {

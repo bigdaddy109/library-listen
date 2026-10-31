@@ -9,6 +9,7 @@ import { createServer } from "node:http";
 import { readFileSync, statSync } from "node:fs";
 import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { driveMediaProxyOutHeaders } from "../docs/drive.js";
 
 const ROOT = resolve(fileURLToPath(new URL("../docs/", import.meta.url)));
 const PORT = Number(process.env.PORT || 8080);
@@ -52,18 +53,92 @@ function resolveFile(urlPath) {
   }
 }
 
+/**
+ * Generated sine tones (not audiobook bytes). The first open Range is only a
+ * prefix, and the upstream omits Content-Range / uses a type <audio> refuses,
+ * the way Drive's CORS response does. The proxy helper must repair both.
+ */
+const PLAYBACK_FIXTURE_DIR = resolve(fileURLToPath(new URL("../test/fixtures/playback/", import.meta.url)));
+const PLAYBACK_OPEN_CAP = 16 * 1024;
+const PLAYBACK_MEDIA = {
+  "fx-what-if": { body: readFileSync(join(PLAYBACK_FIXTURE_DIR, "noxing.mp3")), driveType: "application/octet-stream" },
+  "fx-what-if-2": { body: readFileSync(join(PLAYBACK_FIXTURE_DIR, "moov-end.m4a")), driveType: "video/mp4" },
+  "fx-school": { body: readFileSync(join(PLAYBACK_FIXTURE_DIR, "moov-end.mp4")), driveType: "video/mp4" },
+};
+
+function playbackSlice(body, range) {
+  const total = body.length;
+  if (!range) return { status: 200, slice: body };
+  const suffix = /^bytes=-(\d+)$/i.exec(range);
+  let start = 0;
+  let end = total - 1;
+  if (suffix) {
+    const count = Math.min(total, Number(suffix[1]) || 0);
+    start = total - count;
+  } else {
+    const match = /^bytes=(\d+)-(\d*)$/i.exec(range);
+    if (!match) return { status: 200, slice: body };
+    start = Number(match[1]);
+    end = match[2] === "" ? total - 1 : Number(match[2]);
+    if (match[2] === "" && start === 0) end = Math.min(end, PLAYBACK_OPEN_CAP - 1);
+  }
+  end = Math.min(total - 1, Math.max(start, end));
+  return { status: 206, slice: body.subarray(start, end + 1) };
+}
+
+function servePlaybackMedia(req, res) {
+  const url = new URL(req.url || "/", "http://127.0.0.1");
+  const match = url.pathname.match(/\/drive-media\/([^/]+)/);
+  if (!match) return false;
+  let id = match[1];
+  try {
+    id = decodeURIComponent(id);
+  } catch {
+    /* keep the raw segment */
+  }
+  const fixture = PLAYBACK_MEDIA[id];
+  if (!fixture) return false;
+  const range = req.headers.range || "";
+  const part = playbackSlice(fixture.body, range);
+  const upstream = {
+    get(name) {
+      const key = String(name || "").toLowerCase();
+      if (key === "content-type") return fixture.driveType;
+      if (key === "content-length") return String(part.slice.length);
+      if (key === "accept-ranges") return "bytes";
+      return null;
+    },
+  };
+  const headers = driveMediaProxyOutHeaders(upstream, url.searchParams.get("name") || "", {
+    status: part.status,
+    range,
+    totalSize: url.searchParams.get("size"),
+  });
+  res.writeHead(part.status, { ...headers, "Cross-Origin-Opener-Policy": "same-origin-allow-popups" });
+  res.end(req.method === "HEAD" ? undefined : part.slice);
+  return true;
+}
+
 const version = shellVersion();
 createServer((req, res) => {
   const control = (req.url || "").match(/^\/__test\/shell\/(old|current)$/);
   if (control) {
     mode = control[1];
-    res.writeHead(200, { "Content-Type": "text/plain", "Cache-Control": "no-store" });
+    res.writeHead(200, {
+      "Content-Type": "text/plain",
+      "Cache-Control": "no-store",
+      "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+    });
     res.end(mode);
     return;
   }
+  if (servePlaybackMedia(req, res)) return;
   const file = resolveFile(req.url || "/");
   if (!file) {
-    res.writeHead(404, { "Content-Type": "text/plain" });
+    res.writeHead(404, {
+      "Content-Type": "text/plain",
+      "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+    });
     res.end("Not found");
     return;
   }
@@ -74,6 +149,7 @@ createServer((req, res) => {
   res.writeHead(200, {
     "Content-Type": TYPES[ext] || "application/octet-stream",
     "Cache-Control": "no-cache",
+    "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
     "X-Shell": old ? `v${version - 1}` : `v${version}`,
   });
   res.end(req.method === "HEAD" ? undefined : body);

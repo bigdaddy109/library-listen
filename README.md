@@ -59,6 +59,32 @@ Do this once in [Google Cloud Console](https://console.cloud.google.com/):
 
 After you paste a real Client ID, bump the PWA cache version once (see AGENTS.md) so phones pick up `drive.js`.
 
+## Local preview
+
+Sign-in uses the GIS popup. Chrome blocks `window.closed` on that popup unless the player page is served with:
+
+`Cross-Origin-Opener-Policy: same-origin-allow-popups`
+
+`python3 -m http.server` does not send that header. The Google window can open, consent can be granted, and the page still never receives a token (status stays “Scanning the Drive Library…”).
+
+From the repo root:
+
+```bash
+node scripts/preview.mjs
+```
+
+Then open either authorized origin:
+
+- `http://127.0.0.1:8080/`
+- `http://localhost:8080/`
+
+The script serves `docs/` on port 8080 and sends that COOP header on every response. On `localhost` and `127.0.0.1` the sign-in button does not open the GIS popup. It redirects to Google (`response_type=token`) and reads `#access_token` when the browser returns. `https://bigdaddy109.github.io` stays on the popup. The sign-in button shows `vN · localhost` or `vN · live`.
+
+This repo’s setup says redirect URIs are not required for `initTokenClient`. Local sign-in no longer uses that client. It redirects to Google with `response_type=token` and `redirect_uri` set to the current origin plus `/`. I cannot see the Cloud console. Those redirect URIs are not the same as JavaScript origins. Add these Authorized redirect URIs or the return is rejected:
+
+- `http://127.0.0.1:8080/`
+- `http://localhost:8080/`
+
 ## Library folder layout
 
 On the Mac (example Hub path):
