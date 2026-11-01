@@ -39,6 +39,9 @@ describe("homepage is the rice-paper shelf", () => {
     assert.doesNotMatch(home, /id="source-sheet-advanced"/);
     assert.match(home, /id="btn-sheet-signout"/);
     assert.match(home, /id="player-bar"/);
+    assert.match(home, /id="btn-player-collapse"/);
+    assert.match(home, /Minimize player/);
+    assert.match(classic, /id="btn-player-collapse"/);
     assert.doesNotMatch(home, /id="tab-read"/);
     assert.doesNotMatch(home, /id="reader-frame"/);
     assert.doesNotMatch(home, /主題卡片/);
@@ -105,6 +108,15 @@ describe("homepage is the rice-paper shelf", () => {
     assert.match(home, /id="btn-google"/);
     assert.match(home, /id="source-sheet"/);
     assert.match(home, /href="\.\/classic\/index\.html"/);
+    const narrow = css.slice(css.indexOf("@media (max-width: 400px)"));
+    assert.match(narrow, /\.search\s*\{[^}]*flex:\s*0\s+1\s+auto/);
+    assert.doesNotMatch(narrow, /flex:\s*1\s+1\s+14rem/);
+    assert.match(css, /#capability-hint:empty/);
+    assert.doesNotMatch(css, /\.search\s*\{[^}]*flex:\s*1\s+1\s+14rem/);
+    const player = readFileSync(join(ROOT, "docs/styles.css"), "utf8");
+    assert.match(player, /\.player-bar\.is-min/);
+    assert.match(player, /\.save-notice/);
+    assert.match(home, /id="shell-build">v65</);
   });
 
   it("defaults to the cover wall and zooms covers in 2D before the hinge", () => {

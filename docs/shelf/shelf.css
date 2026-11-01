@@ -193,7 +193,8 @@ h1 {
 
 .search {
   position: relative;
-  flex: 1 1 14rem;
+  flex: 1 1 auto;
+  min-width: min(14rem, 100%);
   max-width: 22rem;
 }
 
@@ -1156,8 +1157,13 @@ h1 {
     font-size: 0.8rem;
   }
 
+  /* Column flex: a 14rem basis is height, which left a hole under search. */
   .search {
+    flex: 0 1 auto;
+    width: 100%;
     max-width: none;
+    height: auto;
+    min-height: 0;
   }
 
   .chip {
@@ -1381,6 +1387,25 @@ body.shell-shelf .sheet {
 
 body.shell-shelf .library-status {
   color: var(--ink);
+}
+
+/* Status copy is one line. An empty or finished scan must not keep a hole. */
+body.shell-shelf #capability-hint,
+body.shell-shelf #library-status,
+body.shell-shelf #load-hint,
+body.shell-shelf #drive-status {
+  min-height: 0;
+  flex: none;
+}
+
+body.shell-shelf #capability-hint:empty,
+body.shell-shelf #library-status:empty,
+body.shell-shelf #load-hint:empty,
+body.shell-shelf #drive-status:empty {
+  display: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
 @media (max-width: 400px) {

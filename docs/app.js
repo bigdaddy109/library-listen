@@ -1,5 +1,5 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=64";
-import { SLEEP_CHAPTER, nearestSleepMinute, nextSleepChoice } from "./sleep.js?v=64";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=65";
+import { SLEEP_CHAPTER, nearestSleepMinute, nextSleepChoice } from "./sleep.js?v=65";
 import {
   bookHasAudio,
   bookScreenTabs,
@@ -22,7 +22,7 @@ import {
   chapterProgress,
   saveProgress,
   shelfBadge,
-} from "./library.js?v=64";
+} from "./library.js?v=65";
 import {
   DRIVE_MEDIA_ERROR_MESSAGE,
   DRIVE_UNAUTHORIZED_MESSAGE,
@@ -62,7 +62,7 @@ import {
   signOutGoogle,
   sourceDialogActions,
   tokenForChapterFetch,
-} from "./drive.js?v=64";
+} from "./drive.js?v=65";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -70,7 +70,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=64";
+} from "./search.js?v=65";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -87,17 +87,21 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=64";
-import { shouldOfferSaveWhileListening } from "./save-prompt.js?v=64";
-import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=64";
-import { coverSvg } from "./shelf/covers.js?v=64";
-import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=64";
+} from "./markers.js?v=65";
+import {
+  declineSaveOffer,
+  isSaveOfferDeclined,
+  shouldOfferSaveWhileListening,
+} from "./save-prompt.js?v=65";
+import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=65";
+import { coverSvg } from "./shelf/covers.js?v=65";
+import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=65";
 import {
   closeRiceBook,
   initRiceShelf,
   isRiceShelfPage,
   setRiceShelfLibrary,
-} from "./shelf/shelf.js?v=64";
+} from "./shelf/shelf.js?v=65";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -172,6 +176,7 @@ let sleepAtChapterEnd = false;
 let offerSaveBanner = false;
 /** bookIds already asked to save this session */
 const savePrompted = new Set();
+let saveNoticeBookId = null;
 let toastTimer = null;
 let swReloading = false;
 /** Last file position heard, so a 401 can replay the same spot after currentTime drops. */
@@ -1651,6 +1656,8 @@ async function playChapter(
 
   if (playback) persistCurrent();
 
+  if (saveNoticeBookId && saveNoticeBookId !== bookId) hideSaveNotice();
+
   const token = ++playToken;
   playback = { bookId, chapterIndex };
   detachChapterMeta?.();
@@ -1735,35 +1742,63 @@ async function playChapter(
   maybeOfferSaveWhileListening(book);
 }
 
+function hideSaveNotice() {
+  document.getElementById("save-notice")?.remove();
+  saveNoticeBookId = null;
+}
+
+function showSaveNotice(book) {
+  if (!book) return;
+  hideSaveNotice();
+  const el = document.createElement("div");
+  el.id = "save-notice";
+  el.className = "save-notice";
+  el.setAttribute("role", "region");
+  el.setAttribute("aria-label", "Save on this phone");
+  const text = document.createElement("p");
+  text.textContent = `Save “${book.title}” on this phone so it still plays after a restart?`;
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "button";
+  saveBtn.className = "primary";
+  saveBtn.textContent = "Save";
+  saveBtn.addEventListener("click", () => {
+    hideSaveNotice();
+    saveBookOffline(book).then(() => {
+      if (isBookOffline(book)) showToast(`Saved “${book.title}” on this device`);
+    });
+  });
+  const later = document.createElement("button");
+  later.type = "button";
+  later.className = "ghost";
+  later.textContent = "Not now";
+  later.addEventListener("click", () => {
+    declineSaveOffer(book.id, libraryStore());
+    savePrompted.add(book.id);
+    hideSaveNotice();
+  });
+  el.append(text, saveBtn, later);
+  document.body.appendChild(el);
+  saveNoticeBookId = book.id;
+}
+
+function saveOfferState(book) {
+  return {
+    book,
+    isPlayable: !!book && isBookPlayable(book),
+    isOffline: !!book && isBookOffline(book),
+    phone: isIOSDevice(navigator),
+    declined: isSaveOfferDeclined(book?.id, libraryStore()),
+  };
+}
+
 function maybeOfferSaveWhileListening(book) {
-  if (
-    !shouldOfferSaveWhileListening({
-      book,
-      isPlayable: !!book && isBookPlayable(book),
-      isOffline: !!book && isBookOffline(book),
-      phone: isIOSDevice(navigator),
-    })
-  ) {
-    return;
-  }
-  if (savePrompted.has(book.id) || savingBookId) return;
+  if (!shouldOfferSaveWhileListening(saveOfferState(book))) return;
+  if (savePrompted.has(book.id) || savingBookId || saveNoticeBookId === book.id) return;
   savePrompted.add(book.id);
   window.setTimeout(() => {
     if (playback?.bookId !== book.id || savingBookId) return;
-    if (
-      !shouldOfferSaveWhileListening({
-        book,
-        isPlayable: isBookPlayable(book),
-        isOffline: isBookOffline(book),
-        phone: isIOSDevice(navigator),
-      })
-    ) {
-      return;
-    }
-    if (!confirm(`Save “${book.title}” on this phone so it still plays after a restart?`)) return;
-    saveBookOffline(book).then(() => {
-      showToast(`Saved “${book.title}” on this device`);
-    });
+    if (!shouldOfferSaveWhileListening(saveOfferState(book))) return;
+    showSaveNotice(book);
   }, 12000);
 }
 
@@ -1923,6 +1958,17 @@ function writeSeekBar(pos, dur) {
   seek.max = max;
   seek.value = value;
   ignoreSeekInput -= 1;
+}
+
+function setPlayerMinimized(minimized) {
+  const bar = els.playerBar;
+  if (!bar) return;
+  bar.classList.toggle("is-min", !!minimized);
+  const btn = document.getElementById("btn-player-collapse");
+  if (!btn) return;
+  const open = !minimized;
+  btn.setAttribute("aria-expanded", open ? "true" : "false");
+  btn.setAttribute("aria-label", open ? "Minimize player" : "Expand player");
 }
 
 function updatePlayerBar() {
@@ -2137,6 +2183,11 @@ function bind() {
       if (!state.activeBookId) renderShelf();
     });
   }
+  document.getElementById("btn-player-collapse")?.addEventListener("click", () => {
+    const bar = els.playerBar;
+    if (!bar) return;
+    setPlayerMinimized(!bar.classList.contains("is-min"));
+  });
   document.getElementById("btn-play").addEventListener("click", async () => {
     if (!playback) {
       const first = state.books[0];
@@ -2488,7 +2539,7 @@ const shellWhere = isIosLikeClient(navigator)
   : isLocalGisHost(location.hostname)
     ? "localhost"
     : "live";
-const shellLabel = `v${APP_VERSION || "64"} · ${shellWhere}`;
+const shellLabel = `v${APP_VERSION || "65"} · ${shellWhere}`;
 if (versionEl && APP_VERSION) versionEl.textContent = `v${APP_VERSION}`;
 const shellBuild = document.getElementById("shell-build");
 if (shellBuild) shellBuild.textContent = shellLabel;
