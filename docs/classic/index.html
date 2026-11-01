@@ -23,9 +23,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Library Listen" />
     <link rel="manifest" href="../manifest.webmanifest" />
-    <link rel="icon" href="../icon.svg?v=64" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="../apple-touch-icon.png?v=64" />
-    <link rel="stylesheet" href="../styles.css?v=64" />
+    <link rel="icon" href="../icon.svg?v=65" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="../apple-touch-icon.png?v=65" />
+    <link rel="stylesheet" href="../styles.css?v=65" />
     <title>Library Listen · Classic</title>
   </head>
   <body data-shell="classic">
@@ -34,7 +34,7 @@
         <div class="brand">
           <img
             class="brand-mark"
-            src="../icon.svg?v=64"
+            src="../icon.svg?v=65"
             width="36"
             height="36"
             alt="Library Listen"
@@ -93,7 +93,7 @@
             <button type="button" id="btn-google" class="primary large" title="Sign in with Google">
               Sign in with Google
             </button>
-            <p class="hint" id="shell-build">v64</p>
+            <p class="hint" id="shell-build">v65</p>
           </div>
           <p class="hint" id="capability-hint"></p>
           <p
@@ -138,6 +138,19 @@
         <div class="player-text">
           <div class="player-title-row">
             <div id="player-title" class="player-title">—</div>
+            <button
+              type="button"
+              id="btn-player-collapse"
+              class="player-collapse"
+              aria-expanded="true"
+              aria-label="Minimize player"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M6.2 9.2a1 1 0 0 1 1.4 0L12 13.6l4.4-4.4a1 1 0 1 1 1.4 1.4l-5.1 5.1a1 1 0 0 1-1.4 0l-5.1-5.1a1 1 0 0 1 0-1.4z"
+                />
+              </svg>
+            </button>
           </div>
           <div class="player-sub">
             <div id="player-chapter" class="player-chapter">—</div>
@@ -222,6 +235,6 @@
         </div>
       </div>
     </div>
-    <script type="module" src="../app.js?v=64"></script>
+    <script type="module" src="../app.js?v=65"></script>
   </body>
 </html>

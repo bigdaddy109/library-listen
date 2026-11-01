@@ -47,7 +47,7 @@ Vanilla ES modules. No bundler, no framework. Root `package.json` is only `"type
 - Sort / rate: `librarylisten.shelfSort`, `librarylisten.rate`.
 - IndexedDB `library-listen`: `offline` (copied chapter/cover blobs). Not a second library, and not a directory handle.
 - Library source: **Sign in with Google** only (GIS token, Drive API v3 `drive.readonly`). No local folder picker and no link to Library Read. Shelf keys stay `librarylisten.*` (Library Read uses `libraryread.*` on its own site).
-- Playback extras on the web player: sleep timer (15/30/45/60), −30/+30, next-chapter toast, save-to-device, Immune Concepts tab, shelf search (`docs/search.js`), m4b chapter markers (`docs/markers.js`). Listen-only: shelf tap opens the book then starts audio. The mid-listen save `confirm()` is gated to phones.
+- Playback extras on the web player: sleep timer (15/30/45/60), −30/+30, next-chapter toast, save-to-device, Immune Concepts tab, shelf search (`docs/search.js`), m4b chapter markers (`docs/markers.js`). Listen-only: shelf tap opens the book then starts audio. The mid-listen save notice is gated to phones.
 - A chaptered `m4b` is split with in-file markers when present (`applyAudiobookMarkers`). Unmarked files stay one chapter.
 
 ### Native app (`LibraryListen/`) — paused
@@ -107,7 +107,7 @@ Do not invent a paid CI service. Keep the workflow free and fixture-only.
 
 ## Cache-bust (web)
 
-The PWA cache version is a hand-maintained integer. Today it is **47**. When you change `docs/index.html`, `docs/app.js`, `docs/styles.css`, `docs/drive.js`, `docs/immune-cards.js`, icons, or concept images, bump **all** of:
+The PWA cache version is a hand-maintained integer. Today it is **65**. When you change `docs/index.html`, `docs/app.js`, `docs/styles.css`, `docs/drive.js`, `docs/immune-cards.js`, icons, or concept images, bump **all** of:
 
 1. `?v=N` on every asset link in [`docs/index.html`](docs/index.html)
 2. `import … from "./….js?v=N"` in [`docs/app.js`](docs/app.js) (including `drive.js`)
@@ -117,7 +117,7 @@ Miss one and phones keep a stale shell. HTML navigations are network-first; othe
 
 ## Pitfalls
 
-- **Save-to-device is chapter bytes, not a library source.** The mid-listen `confirm()` is phones only. Don’t add more blocking dialogs without a reason.
+- **Save-to-device is chapter bytes, not a library source.** The mid-listen save notice is phones only. Don’t add more blocking dialogs without a reason.
 - **Drive is the only library source.** Do not put back `showDirectoryPicker`, a `webkitdirectory` input, or a Library Read URL.
 - **Resume is fragile on iOS Safari.** `playChapter` must not `await` before `audio.play()` or the user-gesture is dropped. There is a resume-guard against post-play snap-back. Touch it with a real iPhone, not only desktop.
 - **Native is paused.** Do not “fix” `HubPaths` personal paths, `ProgressStore`, `generate-fixtures.sh` / `AppIcon.png`, or Xcode signing as part of web work. Those stay dropped in [fix_plan.md](fix_plan.md).
