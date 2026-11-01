@@ -1,5 +1,5 @@
-import { IMMUNE_CARDS } from "./immune-cards.js?v=65";
-import { SLEEP_CHAPTER, nearestSleepMinute, nextSleepChoice } from "./sleep.js?v=65";
+import { IMMUNE_CARDS } from "./immune-cards.js?v=66";
+import { SLEEP_CHAPTER, nearestSleepMinute, nextSleepChoice } from "./sleep.js?v=66";
 import {
   bookHasAudio,
   bookScreenTabs,
@@ -22,7 +22,7 @@ import {
   chapterProgress,
   saveProgress,
   shelfBadge,
-} from "./library.js?v=65";
+} from "./library.js?v=66";
 import {
   DRIVE_MEDIA_ERROR_MESSAGE,
   DRIVE_UNAUTHORIZED_MESSAGE,
@@ -62,7 +62,7 @@ import {
   signOutGoogle,
   sourceDialogActions,
   tokenForChapterFetch,
-} from "./drive.js?v=65";
+} from "./drive.js?v=66";
 import {
   chapterHitLine,
   emptySearchMessage,
@@ -70,7 +70,7 @@ import {
   matchingChapterTitles,
   shelfCountLabel,
   trimQuery,
-} from "./search.js?v=65";
+} from "./search.js?v=66";
 import {
   applyAudiobookMarkers,
   chapterIndexAtTime,
@@ -87,21 +87,22 @@ import {
   resumeFileSeconds,
   snapshotChapter,
   uniqueChapterFiles,
-} from "./markers.js?v=65";
+} from "./markers.js?v=66";
 import {
   declineSaveOffer,
   isSaveOfferDeclined,
   shouldOfferSaveWhileListening,
-} from "./save-prompt.js?v=65";
-import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=65";
-import { coverSvg } from "./shelf/covers.js?v=65";
-import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=65";
+} from "./save-prompt.js?v=66";
+import { demoCatalog, seriesMeta } from "./shelf/catalog.js?v=66";
+import { coverSvg } from "./shelf/covers.js?v=66";
+import { isIOSDevice, lockScreenActions, svgCoverToPngUrl, ARTWORK_SIZE } from "./media-session.js?v=66";
 import {
   closeRiceBook,
   initRiceShelf,
   isRiceShelfPage,
   setRiceShelfLibrary,
-} from "./shelf/shelf.js?v=65";
+} from "./shelf/shelf.js?v=66";
+import { allowProgressWrite, planPausedOpen } from "./open-paused.js?v=66";
 
 const SORT_KEY = "librarylisten.shelfSort";
 const RATE_KEY = "librarylisten.rate";
@@ -156,6 +157,12 @@ let clockFrame = 0;
 let detachChapterMeta = null;
 /** @type {{ token: number, resumeAt: number, until: number } | null} */
 let resumeGuard = null;
+/**
+ * Newly opened book whose saved position must survive the src switch.
+ * Cleared once playback is actually at that spot.
+ * @type {{ token: number, bookId: string, seekSeconds: number, placed: boolean } | null}
+ */
+let progressHold = null;
 const SKIP_SECONDS = 30;
 let playbackRate = loadRate();
 const objectUrls = new Set();
@@ -1064,7 +1071,7 @@ function continueCard(resume) {
     (resume.updatedAt ? ` · ${relativeTime(resume.updatedAt)}` : "");
   btn.append(cover, body);
   btn.addEventListener("click", () => {
-    openBook(resume.book.id, { pane: "audio" });
+    openBook(resume.book.id, { pane: "audio", cue: false });
     playChapter(resume.book.id, resume.chapterIndex, { resumeIfSame: true });
   });
   return btn;
@@ -1245,7 +1252,26 @@ function cacheImmuneConcepts() {
   navigator.serviceWorker.ready.then((reg) => post(reg.active)).catch(() => {});
 }
 
-function openBook(bookId, { pane } = {}) {
+function mediaHasChapter(chapter) {
+  if (!chapter?.url) return false;
+  const src = audio.currentSrc || audio.src || "";
+  if (!src) return false;
+  if (src === chapter.url) return true;
+  try {
+    return new URL(chapter.url, location.href).href === src;
+  } catch {
+    return false;
+  }
+}
+
+/** Stop the book already in the element before the opened book's identity is installed. */
+function pauseOtherBook(nextBookId) {
+  if (!playback || playback.bookId === nextBookId) return;
+  if (audio.paused) persistCurrent();
+  else audio.pause();
+}
+
+function openBook(bookId, { pane, cue = true } = {}) {
   const book = findBook(bookId);
   if (state.activeBookId !== bookId) {
     state.bookPane = resolvedBookPane(book, pane || "audio");
@@ -1255,6 +1281,17 @@ function openBook(bookId, { pane } = {}) {
   state.activeBookId = bookId;
   if (isImmuneBook(book)) cacheImmuneConcepts();
   render();
+  if (!cue || playback?.bookId === bookId) return;
+  // Pause the previous book before any token await inside playChapter.
+  pauseOtherBook(bookId);
+  if (!book || !isBookPlayable(book)) return;
+  const plan = planPausedOpen({
+    book,
+    loadedBookId: playback?.bookId || null,
+    progress: loadProgress(),
+  });
+  if (!plan.cue) return;
+  void playChapter(book.id, plan.chapterIndex, { autoplay: false });
 }
 
 function renderConceptCards() {
@@ -1614,7 +1651,7 @@ function updateMediaSession() {
 async function playChapter(
   bookId,
   chapterIndex,
-  { resumeIfSame = false, forceStart = false, startAt = null, authRetry = false } = {}
+  { resumeIfSame = false, forceStart = false, startAt = null, authRetry = false, autoplay = true } = {}
 ) {
   const book = findBook(bookId);
   if (!book) return;
@@ -1648,7 +1685,7 @@ async function playChapter(
   const same =
     playback?.bookId === bookId && playback.chapterIndex === chapterIndex;
   if (same && resumeIfSame && !forceStart && !authRetry && !hasStartAt) {
-    if (audio.paused) await audio.play().catch(() => {});
+    if (autoplay && audio.paused) await audio.play().catch(() => {});
     updatePlayerBar();
     updateMediaSession();
     return;
@@ -1659,17 +1696,27 @@ async function playChapter(
   if (saveNoticeBookId && saveNoticeBookId !== bookId) hideSaveNotice();
 
   const token = ++playToken;
-  playback = { bookId, chapterIndex };
-  detachChapterMeta?.();
-
   const saved = chapterProgress(bookId, chapter.id);
   const start = chapterStart(chapter);
   const seekTo = hasStartAt ? Math.max(0, startAt) : forceStart ? start : resumeFileSeconds(saved, chapter);
   const shouldResume = seekTo > 0.5;
+  // Hold before the identity switch so a pause/src change cannot write the old playhead onto this book.
+  if (!autoplay) {
+    progressHold = { token, bookId, seekSeconds: seekTo, placed: false };
+  } else {
+    progressHold = null;
+  }
+  playback = { bookId, chapterIndex };
+  detachChapterMeta?.();
 
   const applyPosition = () => {
     if (token !== playToken) return;
-    applyPlaybackPosition(shouldResume ? resumeTarget(seekTo) : start);
+    const next = shouldResume ? resumeTarget(seekTo) : start;
+    applyPlaybackPosition(next);
+    if (progressHold?.token === token) {
+      progressHold.placed = true;
+      progressHold.seekSeconds = next;
+    }
   };
 
   if (shouldResume) beginResumeGuard(token, seekTo);
@@ -1713,6 +1760,19 @@ async function playChapter(
     maybeFixResumeSnap();
   };
   audio.addEventListener("playing", onPlaying);
+
+  if (!autoplay) {
+    try {
+      audio.pause();
+    } catch {
+      /* element not ready */
+    }
+    els.playerBar.classList.remove("hidden");
+    updatePlayerBar();
+    updateMediaSession();
+    if (state.activeBookId === bookId) renderBook();
+    return;
+  }
 
   try {
     // No await before play(): iOS drops the user-gesture if we wait.
@@ -1897,14 +1957,30 @@ function cycleSleepTimer() {
 
 function persistCurrent() {
   if (!playback) return;
+  const book = findBook(playback.bookId);
+  const chapter = book?.chapters[playback.chapterIndex];
+  if (!chapter) return;
+  if (progressHold && progressHold.token === playToken && progressHold.bookId === playback.bookId) {
+    if (
+      !allowProgressWrite({
+        holdBookId: progressHold.bookId,
+        writingBookId: playback.bookId,
+        paused: audio.paused,
+        seekPlaced: progressHold.placed,
+        currentTime: audio.currentTime,
+        seekSeconds: progressHold.seekSeconds,
+        srcReady: mediaHasChapter(chapter),
+      })
+    ) {
+      return;
+    }
+    progressHold = null;
+  }
   // While correcting a resume snap, do not overwrite the good saved position.
   if (resumeGuard && resumeGuard.token === playToken) {
     const t = audio.currentTime || 0;
     if (t + 1.0 < resumeGuard.resumeAt) return;
   }
-  const book = findBook(playback.bookId);
-  const chapter = book?.chapters[playback.chapterIndex];
-  if (!chapter) return;
   const reported =
     Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : heldFileDuration;
   saveProgress(
@@ -2448,6 +2524,7 @@ function recoverDrivePlaybackAuth() {
       await playChapter(plan.bookId, plan.chapterIndex, {
         startAt: plan.position,
         authRetry: true,
+        autoplay: !(audio.paused && progressHold),
       });
       driveAuthRetryState = finishDrivePlaybackAuthRetry(driveAuthRetryState, { ok: false });
       if (audio.error && isDriveMediaPath(audio.currentSrc || audio.src || "")) {
@@ -2539,7 +2616,7 @@ const shellWhere = isIosLikeClient(navigator)
   : isLocalGisHost(location.hostname)
     ? "localhost"
     : "live";
-const shellLabel = `v${APP_VERSION || "65"} · ${shellWhere}`;
+const shellLabel = `v${APP_VERSION || "66"} · ${shellWhere}`;
 if (versionEl && APP_VERSION) versionEl.textContent = `v${APP_VERSION}`;
 const shellBuild = document.getElementById("shell-build");
 if (shellBuild) shellBuild.textContent = shellLabel;
@@ -2549,13 +2626,6 @@ if (isRiceShelfPage()) {
   initRiceShelf({
     onOpenBook(book) {
       openBook(book.id, { pane: "audio" });
-      if (!isBookPlayable(book)) return;
-      const p = loadProgress()[book.id];
-      const idx = Math.max(
-        0,
-        book.chapters.findIndex((c) => c.id === p?.chapterId)
-      );
-      playChapter(book.id, idx === -1 ? 0 : idx, { resumeIfSame: true });
     },
     onNeedLibrary() {
       showChangeSourceSheet();
