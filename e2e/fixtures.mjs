@@ -128,14 +128,20 @@ export async function waitBookSettled(page) {
 }
 
 /**
- * Real tap: cover → zoom + hinge → auto-listen (no 聽/讀 chooser).
+ * Real tap: cover → zoom + hinge → book screen, paused (no 聽/讀 chooser).
  */
-export async function openFromCoverAndListen(page, bookId) {
+export async function openFromCover(page, bookId) {
   const card = page.locator(`.cover-card[data-id="${bookId}"]`);
   await card.scrollIntoViewIfNeeded();
   await card.click();
   await expect(page.locator("#book:not(.hidden)")).toBeVisible({ timeout: 20_000 });
   await expect(page.locator("#player-bar:not(.hidden)")).toBeVisible();
+}
+
+/** Cover tap leaves playback paused; the play control starts audio. */
+export async function openFromCoverAndListen(page, bookId) {
+  await openFromCover(page, bookId);
+  await page.locator("#btn-play").click();
 }
 
 export async function audioAdvances(page) {

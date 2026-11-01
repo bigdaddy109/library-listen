@@ -116,7 +116,7 @@ describe("homepage is the rice-paper shelf", () => {
     const player = readFileSync(join(ROOT, "docs/styles.css"), "utf8");
     assert.match(player, /\.player-bar\.is-min/);
     assert.match(player, /\.save-notice/);
-    assert.match(home, /id="shell-build">v65</);
+    assert.match(home, /id="shell-build">v66</);
   });
 
   it("defaults to the cover wall and zooms covers in 2D before the hinge", () => {

@@ -858,7 +858,7 @@ describe("Drive user-visible errors", () => {
     assert.match(sw, /cache: "no-store"/);
     const indexHtml = readFileSync(join(docsDir, "index.html"), "utf8");
     assert.match(indexHtml, /id="shell-build"/);
-    assert.match(indexHtml, /v65/);
+    assert.match(indexHtml, /v66/);
   });
 
   it("explains Testing-mode test-user denial, missing Library, and expired tokens", () => {

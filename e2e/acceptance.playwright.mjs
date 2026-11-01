@@ -6,6 +6,7 @@ import {
   audioAdvances,
   expect,
   openFixtureShelf,
+  openFromCover,
   openFromCoverAndListen,
   test,
 } from "./fixtures.mjs";
@@ -52,7 +53,7 @@ test.describe("Jeff Drive fixture: every series listens (listen-only)", () => {
   });
 
   for (const book of SERIES_BOOKS) {
-    test(`${book.series}: tap cover → auto-listens (no Read chooser)`, async ({ page }) => {
+    test(`${book.series}: tap cover opens paused; play starts audio (no Read chooser)`, async ({ page }) => {
       await openFromCoverAndListen(page, book.id);
       await audioAdvances(page);
       await expect(page.locator("#player-bar:not(.hidden)")).toBeVisible();
@@ -71,7 +72,7 @@ test.describe("Jeff Drive fixture: every series listens (listen-only)", () => {
     await audioAdvances(page);
   });
 
-  test("cover wall zooms then hinges, then auto-listens", async ({ page }) => {
+  test("cover wall zooms then hinges, then waits for play", async ({ page }) => {
     await expect(page.locator('.view-toggle [data-view="covers"]')).toHaveAttribute("aria-pressed", "true");
     const id = "munroe/what-if-1";
     const card = page.locator(`.cover-card[data-id="${id}"]`);
@@ -107,20 +108,25 @@ test.describe("Jeff Drive fixture: every series listens (listen-only)", () => {
     expect(observed.props.every((p) => p === "transform" || p === "opacity")).toBe(true);
     expect(observed.sawClosed).toBe(true);
     expect(observed.sawHinge).toBe(true);
+    await expect(page.locator("#player-bar:not(.hidden)")).toBeVisible();
+    await expect(page.locator("#btn-play")).toHaveAttribute("aria-label", "Play");
+    await page.locator("#btn-play").click();
     await audioAdvances(page);
     await expect(page.locator("#book-layer")).toBeHidden();
     await expect(page.locator('[data-open="audio"], [data-open="read"]')).toHaveCount(0);
   });
 
-  test("reduced motion still auto-listens", async ({ page }) => {
+  test("reduced motion still opens paused until play", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.reload();
     await page.locator('.cover-card[data-id="immune/immune"]').click();
     await expect(page.locator("#book:not(.hidden)")).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator("#btn-play")).toHaveAttribute("aria-label", "Play");
+    await page.locator("#btn-play").click();
     await audioAdvances(page);
   });
 
-  test("書架 spine tap uses cover zoom → hinge then auto-listens (no 3D pull-out)", async ({ page }) => {
+  test("書架 spine tap uses cover zoom → hinge, then play starts audio (no 3D pull-out)", async ({ page }) => {
     await page.locator('.view-toggle [data-view="spines"]').click();
     await expect(page.locator('.view-toggle [data-view="spines"]')).toHaveAttribute("aria-pressed", "true");
     const id = "school/middle-school-02-get-me";
@@ -162,7 +168,98 @@ test.describe("Jeff Drive fixture: every series listens (listen-only)", () => {
     expect(observed.sawClosed).toBe(true);
     expect(observed.sawHinge).toBe(true);
     expect(observed.props.every((p) => p === "transform" || p === "opacity")).toBe(true);
+    await expect(page.locator("#btn-play")).toHaveAttribute("aria-label", "Play");
+    await page.locator("#btn-play").click();
     await audioAdvances(page);
+  });
+
+  test("opening a second book stays paused and keeps that book's saved position", async ({ page }) => {
+    const whatIf = SNAPSHOT.find((book) => book.id === "munroe/what-if-1");
+    const immune = SNAPSHOT.find((book) => book.id === "immune/immune");
+    const immuneChapter = immune.chapters[1];
+    const savedAt = 90;
+    const progressKey = "librarylisten.progress.v1";
+    await page.evaluate(
+      ({ progressKey, whatIf, immune, savedAt }) => {
+        const earlier = new Date(Date.now() - 120_000).toISOString();
+        const later = new Date().toISOString();
+        localStorage.setItem(
+          progressKey,
+          JSON.stringify({
+            [whatIf.id]: {
+              chapterId: whatIf.chapterId,
+              positionSeconds: 45,
+              chapterDurationSeconds: 600,
+              updatedAt: later,
+              lastKind: "audio",
+              chapters: {
+                [whatIf.chapterId]: {
+                  positionSeconds: 45,
+                  chapterDurationSeconds: 600,
+                  updatedAt: later,
+                },
+              },
+            },
+            [immune.id]: {
+              chapterId: immune.chapterId,
+              positionSeconds: savedAt,
+              chapterDurationSeconds: 600,
+              updatedAt: earlier,
+              lastKind: "audio",
+              chapters: {
+                [immune.chapterId]: {
+                  positionSeconds: savedAt,
+                  chapterDurationSeconds: 600,
+                  updatedAt: earlier,
+                },
+              },
+            },
+          })
+        );
+      },
+      {
+        progressKey,
+        whatIf: { id: whatIf.id, chapterId: whatIf.chapters[0].id },
+        immune: { id: immune.id, chapterId: immuneChapter.id },
+        savedAt,
+      }
+    );
+
+    await openFromCoverAndListen(page, whatIf.id);
+    await audioAdvances(page);
+    await expect(page.locator("#player-title")).toHaveText(whatIf.title);
+    await expect(page.locator("#btn-play")).toHaveAttribute("aria-label", "Pause");
+
+    await page.evaluate(() => document.getElementById("audio").pause());
+    await page.locator("#btn-back").click();
+    await openFromCover(page, immune.id);
+
+    await expect(page.locator("#book-title")).toHaveText(immune.title);
+    await expect(page.locator("#player-title")).toHaveText(immune.title);
+    await expect(page.locator("#player-chapter")).toHaveText(immuneChapter.title);
+    await expect(page.locator("#btn-play")).toHaveAttribute("aria-label", "Play");
+    const opened = await page.evaluate(
+      ({ key, bookId, chapterId }) => {
+        const audio = document.getElementById("audio");
+        const progress = JSON.parse(localStorage.getItem(key) || "{}");
+        const saved = progress[bookId] || {};
+        return {
+          paused: audio.paused,
+          ended: audio.ended,
+          chapterId: saved.chapterId,
+          positionSeconds: saved.positionSeconds,
+          chapterPosition: saved.chapters?.[chapterId]?.positionSeconds,
+        };
+      },
+      { key: progressKey, bookId: immune.id, chapterId: immuneChapter.id }
+    );
+    expect(opened.paused).toBe(true);
+    expect(opened.ended).toBe(false);
+    expect(opened.chapterId).toBe(immuneChapter.id);
+    expect(opened.positionSeconds).toBe(savedAt);
+    expect(opened.chapterPosition).toBe(savedAt);
+    await page.waitForTimeout(400);
+    await expect(page.locator("#btn-play")).toHaveAttribute("aria-label", "Play");
   });
 
   test("/classic/ is still the dark player without Read UI", async ({ page }) => {

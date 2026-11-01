@@ -3,8 +3,8 @@ import {
   isBookPlayable,
   listenShelfBooks,
   shelfBadge,
-} from "../library.js?v=65";
-import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=65";
+} from "../library.js?v=66";
+import { matchingChapterTitles, chapterHitLine, trimQuery } from "../search.js?v=66";
 import {
   COVER_MORPH,
   bookFlipFrames,
@@ -30,8 +30,8 @@ import {
   seriesMeta,
   shelfStatusLabel,
   volumeNumber,
-} from "./catalog.js?v=65";
-import { coverSvg, spineMetrics } from "./covers.js?v=65";
+} from "./catalog.js?v=66";
+import { coverSvg, spineMetrics } from "./covers.js?v=66";
 
 /* v2: the cover wall became the default; the old key mostly held the old default. */
 const VIEW_KEY = "librarylisten.shelfView.v2";
@@ -119,7 +119,7 @@ function updateHint() {
   if (!els.hint) return;
   els.hint.textContent =
     state.source === "library"
-      ? `Loaded ${visibleBooks().length} books. Tap a cover to listen.`
+      ? `Loaded ${visibleBooks().length} books. Tap a cover to open.`
       : "Demo books show until you sign in. Sign in with Google to listen.";
 }
 

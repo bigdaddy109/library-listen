@@ -138,6 +138,7 @@ async function playBook(page, book, label) {
   await card.click();
   await expect(page.locator("#book:not(.hidden)")).toBeVisible({ timeout: 20_000 });
   await expect(page.locator("#player-bar:not(.hidden)")).toBeVisible();
+  await page.locator("#btn-play").click();
   await audioAdvances(page);
   await expect
     .poll(() => page.evaluate(() => document.getElementById("audio").currentTime), { timeout: 15_000 })

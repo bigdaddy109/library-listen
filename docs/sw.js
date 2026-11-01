@@ -1,5 +1,5 @@
 /* Shell-only cache. Audiobook files are never cached here. */
-const CACHE = "library-listen-shell-v65";
+const CACHE = "library-listen-shell-v66";
 const CACHE_CONCEPTS_MESSAGE = "librarylisten.cache-concepts";
 const DRIVE_MEDIA_PREFIX = "/drive-media/";
 const DRIVE_TOKEN_MESSAGE = "librarylisten.drive-token";
@@ -33,26 +33,27 @@ self.addEventListener("message", (event) => {
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=65",
-  "./app.js?v=65",
-  "./library.js?v=65",
-  "./drive.js?v=65",
-  "./search.js?v=65",
-  "./markers.js?v=65",
-  "./save-prompt.js?v=65",
-  "./media-session.js?v=65",
-  "./sleep.js?v=65",
-  "./immune-cards.js?v=65",
+  "./styles.css?v=66",
+  "./app.js?v=66",
+  "./library.js?v=66",
+  "./drive.js?v=66",
+  "./search.js?v=66",
+  "./markers.js?v=66",
+  "./save-prompt.js?v=66",
+  "./media-session.js?v=66",
+  "./sleep.js?v=66",
+  "./immune-cards.js?v=66",
+  "./open-paused.js?v=66",
   "./manifest.webmanifest",
-  "./icon.svg?v=65",
-  "./apple-touch-icon.png?v=65",
+  "./icon.svg?v=66",
+  "./apple-touch-icon.png?v=66",
   "./og-image.png",
   "./classic/index.html",
   "./shelf/index.html",
-  "./shelf/shelf.css?v=65",
-  "./shelf/shelf.js?v=65",
-  "./shelf/catalog.js?v=65",
-  "./shelf/covers.js?v=65",
+  "./shelf/shelf.css?v=66",
+  "./shelf/shelf.js?v=66",
+  "./shelf/catalog.js?v=66",
+  "./shelf/covers.js?v=66",
 ];
 
 self.addEventListener("install", (event) => {
